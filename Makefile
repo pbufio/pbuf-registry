@@ -1,4 +1,5 @@
 API_PATH=api/v1
+REGISTRY_VERSION=latest
 
 .PHONY: vendor
 # vendor modules
@@ -59,7 +60,7 @@ build-in-docker:
 .PHONY: docker
 # docker
 docker:
-	docker build -t pbuf-registry:latest .
+	docker build -t registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION} .
 
 # show help
 help:

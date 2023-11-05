@@ -1,0 +1,47 @@
+name: Release Registry
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.21.x
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Docker Login
+        run: doctl registry login
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.54
+
+      - name: Test
+        run: make test
+
+      - name: Docker Build
+        env:
+          REGISTRY_VERSION: ${{ github.ref_name }}
+        run: make docker
+
+      - name: Docker Push
+        run: docker push registry.digitalocean.com/pbuf/registry:${{ github.ref_name }}
