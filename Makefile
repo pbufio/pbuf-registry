@@ -1,5 +1,5 @@
 API_PATH=api/v1
-REGISTRY_VERSION=latest
+REGISTRY_VERSION?=latest
 
 .PHONY: vendor
 # vendor modules
