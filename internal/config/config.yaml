@@ -1,0 +1,10 @@
+server:
+  http:
+    addr: 0.0.0.0:8080
+  grpc:
+    addr: 0.0.0.0:8081
+
+
+data:
+  database:
+    DSN: "psql://pbuf:pbuf@localhost:5432/pbuf_registry?sslmode=disable"

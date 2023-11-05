@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// Registry service definition
+service Registry {
+  // List all registered modules
+  rpc ListModules(ListModulesRequest) returns (ListModulesResponse) {
+    option (google.api.http) = {
+      get: "/v1/modules"
+    };
+  }
+
+  // Get a module by name
+  rpc GetModule(GetModuleRequest) returns (Module) {
+    option (google.api.http) = {
+      get: "/v1/modules/{name}"
+    };
+  }
+
+  // Register a module
+  rpc RegisterModule(RegisterModuleRequest) returns (Module) {
+    option (google.api.http) = {
+      post: "/v1/modules"
+      body: "*"
+    };
+  }
+
+  // Pull a module tag
+  rpc PullModule(PullModuleRequest) returns (Module) {
+    option (google.api.http) = {
+      get: "/v1/modules/{name}/tags/{tag}"
+    };
+  }
+
+  // Push a module
+  rpc PushModule(PushModuleRequest) returns (Module) {
+    option (google.api.http) = {
+      post: "/v1/modules/push"
+      body: "*"
+    };
+  }
+
+  // Delete a module by name
+  rpc DeleteModule(DeleteModuleRequest) returns (DeleteModuleResponse) {
+    option (google.api.http) = {
+      delete: "/v1/modules/{name}"
+    };
+  }
+
+  // Delete a specific module tag
+  rpc DeleteModuleTag(DeleteModuleTagRequest) returns (DeleteModuleTagResponse) {
+    option (google.api.http) = {
+      delete: "/v1/modules/{name}/tags/{tag}"
+    };
+  }
+}
+
+// ListModulesRequest is the request message for ListModules.
+message ListModulesRequest {
+  // The maximum number of modules to return.
+  // The service may return fewer than this value.
+  // If unspecified, at most 50 modules will be returned.
+  // The maximum value is 1000; values above 1000 will be coerced to 1000.
+  int32 page_size = 1;
+
+  // A page token, received from a previous `ListModules` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListModules` must match
+  // the call that provided the page token.
+  string page_token = 2;
+}
+
+// ListModulesResponse is the response message for ListModules.
+message ListModulesResponse {
+  // The modules requested.
+  Module modules = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+// GetModuleRequest is the request message for GetModule.
+message GetModuleRequest {
+  // The name of the module to retrieve.
+  string name = 1;
+}
+
+// PullModuleRequest is the request message for PullModule.
+message PullModuleRequest {
+  // The name of the module to retrieve.
+  string name = 1;
+
+  // The tag of the module to retrieve.
+  string tag = 2;
+}
+
+// RegisterModuleRequest is the request message for RegisterModule.
+message RegisterModuleRequest {
+  // Module name
+  string name = 1;
+}
+
+// PushModuleRequest is the request message for PushModule.
+message PushModuleRequest {
+  // The module to register.
+  Module module = 1;
+}
+
+// DeleteModuleRequest is the request message for DeleteModule.
+message DeleteModuleRequest {
+  // The name of the module to delete.
+  string name = 1;
+}
+
+// DeleteModuleResponse is the response message for DeleteModule.
+message DeleteModuleResponse {
+  // The name of the deleted module.
+  string name = 1;
+}
+
+// DeleteModuleTagRequest is the request message for DeleteModuleTag.
+message DeleteModuleTagRequest {
+  // The name of the module to delete.
+  string name = 1;
+
+  // The tag of the module to delete.
+  string tag = 2;
+}
+
+// DeleteModuleTagResponse is the response message for DeleteModuleTag.
+message DeleteModuleTagResponse {
+  // The name of the deleted module.
+  string name = 1;
+
+  // The tag of the deleted module.
+  string tag = 2;
+}
+
+// Module is a module registered in the registry.
+message Module {
+  // The name of the module.
+  string name = 1;
+
+  // The tags of the module.
+  repeated string tags = 2;
+}
