@@ -35,6 +35,32 @@ mocks:
 test:
 	go test -v -cover ./...
 
+.PHONY: build
+# build
+build:
+	mkdir -p bin/ && go build -o ./bin/pbuf-registry ./cmd/...
+
+.PHONY: build-migrations
+# build migrations
+build-migrations:
+	mkdir -p bin/ && go build -o ./bin/pbuf-migrations ./.
+
+.PHONY: build-in-docker
+# build in docker
+build-in-docker:
+	docker run --rm \
+      -v ".:/app" \
+      -v "./bin:/app/bin" \
+      -v "${HOME}/.netrc:/root/.netrc" \
+      -w /app \
+      golang:1.21 \
+      sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-migrations"
+
+.PHONY: docker
+# docker
+docker:
+	docker build -t pbuf-registry:latest .
+
 # show help
 help:
 	@echo ''

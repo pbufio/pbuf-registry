@@ -30,10 +30,12 @@ func main() {
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	reflection.Register(grpcServer)
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(config.Cfg.Server.HTTP.Addr))
+	listener, err := net.Listen("tcp", fmt.Sprintf(config.Cfg.Server.GRPC.Addr))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	log.Printf("Server listening on %s", config.Cfg.Server.GRPC.Addr)
 
 	err = grpcServer.Serve(listener)
 	if err != nil {
