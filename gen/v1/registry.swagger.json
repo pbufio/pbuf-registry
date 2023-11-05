@@ -1,0 +1,369 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "v1/registry.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Registry"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/modules": {
+      "get": {
+        "summary": "List all registered modules",
+        "operationId": "Registry_ListModules",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListModulesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "pageSize",
+            "description": "The maximum number of modules to return.\nThe service may return fewer than this value.\nIf unspecified, at most 50 modules will be returned.\nThe maximum value is 1000; values above 1000 will be coerced to 1000.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
+            "description": "A page token, received from a previous `ListModules` call.\nProvide this to retrieve the subsequent page.\n\nWhen paginating, all other parameters provided to `ListModules` must match\nthe call that provided the page token.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      },
+      "post": {
+        "summary": "Register a module",
+        "operationId": "Registry_RegisterModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "RegisterModuleRequest is the request message for RegisterModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/push": {
+      "post": {
+        "summary": "Push a module",
+        "operationId": "Registry_PushModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "PushModuleRequest is the request message for PushModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PushModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/{name}": {
+      "get": {
+        "summary": "Get a module by name",
+        "operationId": "Registry_GetModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the module to retrieve.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      },
+      "delete": {
+        "summary": "Delete a module by name",
+        "operationId": "Registry_DeleteModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the module to delete.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/{name}/tags/{tag}": {
+      "get": {
+        "summary": "Pull a module tag",
+        "operationId": "Registry_PullModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the module to retrieve.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "tag",
+            "description": "The tag of the module to retrieve.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      },
+      "delete": {
+        "summary": "Delete a specific module tag",
+        "operationId": "Registry_DeleteModuleTag",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleTagResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the module to delete.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "tag",
+            "description": "The tag of the module to delete.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1DeleteModuleResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the deleted module."
+        }
+      },
+      "description": "DeleteModuleResponse is the response message for DeleteModule."
+    },
+    "v1DeleteModuleTagResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the deleted module."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the deleted module."
+        }
+      },
+      "description": "DeleteModuleTagResponse is the response message for DeleteModuleTag."
+    },
+    "v1ListModulesResponse": {
+      "type": "object",
+      "properties": {
+        "modules": {
+          "$ref": "#/definitions/v1Module",
+          "description": "The modules requested."
+        },
+        "nextPageToken": {
+          "type": "string",
+          "description": "A token, which can be sent as `page_token` to retrieve the next page.\nIf this field is omitted, there are no subsequent pages."
+        }
+      },
+      "description": "ListModulesResponse is the response message for ListModules."
+    },
+    "v1Module": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The tags of the module."
+        }
+      },
+      "description": "Module is a module registered in the registry."
+    },
+    "v1PushModuleRequest": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "$ref": "#/definitions/v1Module",
+          "description": "The module to register."
+        }
+      },
+      "description": "PushModuleRequest is the request message for PushModule."
+    },
+    "v1RegisterModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Module name"
+        }
+      },
+      "description": "RegisterModuleRequest is the request message for RegisterModule."
+    }
+  }
+}

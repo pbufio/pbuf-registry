@@ -1,0 +1,7 @@
+version: v1
+modules:
+  - name: googleapis
+    repository: https://github.com/googleapis/googleapis
+    path: google/api
+    branch: master
+    out: third_party/google/api
