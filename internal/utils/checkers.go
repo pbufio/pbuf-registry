@@ -18,7 +18,7 @@ func ValidateProtoFiles(protoFiles []*v1.ProtoFile) error {
 		}
 
 		if protoFile.Content == "" {
-			return errors.New(fmt.Sprintf("content of %s cannot be empty", protoFile.Filename))
+			return fmt.Errorf("content of %s cannot be empty", protoFile.Filename)
 		}
 
 		// check that file contents is valid
