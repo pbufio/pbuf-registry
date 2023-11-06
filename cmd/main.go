@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
+	"net/http"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/pbufio/pbuf-registry/gen/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
@@ -14,6 +15,28 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+func startGRPCServer(address string, grpcServer *grpc.Server) error {
+	listen, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	return grpcServer.Serve(listen)
+}
+
+func startHTTPServer(address string, grpcServer *server.RegistryServer) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	mux := runtime.NewServeMux()
+	err := v1.RegisterRegistryHandlerServer(ctx, mux, grpcServer)
+	if err != nil {
+		return err
+	}
+
+	return http.ListenAndServe(address, mux)
+}
 
 func main() {
 	config.NewLoader().MustLoad()
@@ -30,15 +53,15 @@ func main() {
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	reflection.Register(grpcServer)
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(config.Cfg.Server.GRPC.Addr))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+	go func() {
+		err := startGRPCServer(config.Cfg.Server.GRPC.Addr, grpcServer)
+		if err != nil {
+			log.Fatalf("failed to start grpc server: %v", err)
+		}
+	}()
 
-	log.Printf("Server listening on %s", config.Cfg.Server.GRPC.Addr)
-
-	err = grpcServer.Serve(listener)
+	err = startHTTPServer(config.Cfg.Server.HTTP.Addr, registryServer)
 	if err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatalf("failed to start http server: %v", err)
 	}
 }

@@ -9,6 +9,8 @@ import (
 )
 
 func main() {
+	config.NewLoader().MustLoad()
+
 	db, err := sql.Open("postgres", config.Cfg.Data.Database.DSN)
 	if err != nil {
 		panic(err)
