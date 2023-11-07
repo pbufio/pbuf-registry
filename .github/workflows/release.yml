@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -27,8 +28,15 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Docker Login
+      - name: Docker Login DO
         run: doctl registry login
+
+      - name: Docker Login GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -43,5 +51,8 @@ jobs:
           REGISTRY_VERSION: ${{ github.ref_name }}
         run: make docker
 
-      - name: Docker Push
+      - name: Docker Push DO
         run: docker push registry.digitalocean.com/pbuf/registry:${{ github.ref_name }}
+
+      - name: Docker Push GHCR
+        run: docker push ghcr.io/pbufio/registry:${{ github.ref_name }}
