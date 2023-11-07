@@ -128,9 +128,27 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 	return module, nil
 }
 
-func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleRequest) (*v1.Module, error) {
-	//TODO implement me
-	panic("implement me")
+func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleRequest) (*v1.PullModuleResponse, error) {
+	name := request.Name
+	if name == "" {
+		return nil, errors.New("name cannot be empty")
+	}
+
+	tag := request.Tag
+	if tag == "" {
+		return nil, errors.New("tag cannot be empty")
+	}
+
+	module, protoFiles, err := r.registryRepository.PullModule(ctx, name, tag)
+	if err != nil {
+		log.Infof("error pulling module: %v", err)
+		return nil, err
+	}
+
+	return &v1.PullModuleResponse{
+		Module:     module,
+		Protofiles: protoFiles,
+	}, nil
 }
 
 func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.DeleteModuleTagRequest) (*v1.DeleteModuleTagResponse, error) {

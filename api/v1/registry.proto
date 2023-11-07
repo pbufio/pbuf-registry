@@ -31,7 +31,7 @@ service Registry {
   }
 
   // Pull a module tag
-  rpc PullModule(PullModuleRequest) returns (Module) {
+  rpc PullModule(PullModuleRequest) returns (PullModuleResponse) {
     option (google.api.http) = {
       get: "/v1/modules/{name}/tags/{tag}"
     };
@@ -99,6 +99,15 @@ message PullModuleRequest {
 
   // The tag of the module to retrieve.
   string tag = 2;
+}
+
+// PullModuleResponse is the response message for PullModule.
+message PullModuleResponse {
+  // The module requested.
+  Module module = 1;
+
+  // The protofiles of the module.
+  repeated ProtoFile protofiles = 2;
 }
 
 // RegisterModuleRequest is the request message for RegisterModule.

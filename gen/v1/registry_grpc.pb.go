@@ -39,7 +39,7 @@ type RegistryClient interface {
 	// Register a module
 	RegisterModule(ctx context.Context, in *RegisterModuleRequest, opts ...grpc.CallOption) (*Module, error)
 	// Pull a module tag
-	PullModule(ctx context.Context, in *PullModuleRequest, opts ...grpc.CallOption) (*Module, error)
+	PullModule(ctx context.Context, in *PullModuleRequest, opts ...grpc.CallOption) (*PullModuleResponse, error)
 	// Push a module
 	PushModule(ctx context.Context, in *PushModuleRequest, opts ...grpc.CallOption) (*Module, error)
 	// Delete a module by name
@@ -83,8 +83,8 @@ func (c *registryClient) RegisterModule(ctx context.Context, in *RegisterModuleR
 	return out, nil
 }
 
-func (c *registryClient) PullModule(ctx context.Context, in *PullModuleRequest, opts ...grpc.CallOption) (*Module, error) {
-	out := new(Module)
+func (c *registryClient) PullModule(ctx context.Context, in *PullModuleRequest, opts ...grpc.CallOption) (*PullModuleResponse, error) {
+	out := new(PullModuleResponse)
 	err := c.cc.Invoke(ctx, Registry_PullModule_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ type RegistryServer interface {
 	// Register a module
 	RegisterModule(context.Context, *RegisterModuleRequest) (*Module, error)
 	// Pull a module tag
-	PullModule(context.Context, *PullModuleRequest) (*Module, error)
+	PullModule(context.Context, *PullModuleRequest) (*PullModuleResponse, error)
 	// Push a module
 	PushModule(context.Context, *PushModuleRequest) (*Module, error)
 	// Delete a module by name
@@ -153,7 +153,7 @@ func (UnimplementedRegistryServer) GetModule(context.Context, *GetModuleRequest)
 func (UnimplementedRegistryServer) RegisterModule(context.Context, *RegisterModuleRequest) (*Module, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterModule not implemented")
 }
-func (UnimplementedRegistryServer) PullModule(context.Context, *PullModuleRequest) (*Module, error) {
+func (UnimplementedRegistryServer) PullModule(context.Context, *PullModuleRequest) (*PullModuleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PullModule not implemented")
 }
 func (UnimplementedRegistryServer) PushModule(context.Context, *PushModuleRequest) (*Module, error) {

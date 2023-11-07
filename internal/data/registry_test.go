@@ -254,6 +254,81 @@ func Test_registryRepository_PushModule(t *testing.T) {
 	}
 }
 
+func Test_registryRepository_PullModule(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+		tag  string
+	}
+	tests := []struct {
+		name       string
+		args       args
+		want       []*v1.ProtoFile
+		wantModule *v1.Module
+		wantErr    bool
+	}{
+		{
+			name: "Pull module",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.0.0",
+			},
+			wantModule: &v1.Module{
+				Id:   fakeUUID,
+				Name: "pbuf.io/pbuf-registry",
+				Tags: []string{"v0.0.0"},
+			},
+			want:    protofiles,
+			wantErr: false,
+		},
+		{
+			name: "Pull module not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry-2",
+				tag:  "v0.0.0",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name: "Pull module - tag not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.1.0",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			module, protoFiles, err := r.PullModule(tt.args.ctx, tt.args.name, tt.args.tag)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PullModule() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if module != nil {
+				module.Id = fakeUUID
+			}
+
+			if !reflect.DeepEqual(module, tt.wantModule) {
+				t.Errorf("PullModule() got = %v, want %v", module, tt.want)
+			}
+			if !reflect.DeepEqual(protoFiles, tt.want) {
+				t.Errorf("PullModule() got1 = %v, want %v", protoFiles, tt.want)
+			}
+		})
+	}
+}
+
 func Test_registryRepository_DeleteModule(t *testing.T) {
 	type args struct {
 		ctx  context.Context

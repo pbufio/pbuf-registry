@@ -88,6 +88,41 @@ func (_m *RegistryRepository) ListModules(ctx context.Context, pageSize int, tok
 	return r0, r1, r2
 }
 
+// PullModule provides a mock function with given fields: ctx, name, tag
+func (_m *RegistryRepository) PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
+	ret := _m.Called(ctx, name, tag)
+
+	var r0 *v1.Module
+	var r1 []*v1.ProtoFile
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*v1.Module, []*v1.ProtoFile, error)); ok {
+		return rf(ctx, name, tag)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *v1.Module); ok {
+		r0 = rf(ctx, name, tag)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v1.Module)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) []*v1.ProtoFile); ok {
+		r1 = rf(ctx, name, tag)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).([]*v1.ProtoFile)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string, string) error); ok {
+		r2 = rf(ctx, name, tag)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // PushModule provides a mock function with given fields: ctx, name, tag, protofiles
 func (_m *RegistryRepository) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error) {
 	ret := _m.Called(ctx, name, tag, protofiles)

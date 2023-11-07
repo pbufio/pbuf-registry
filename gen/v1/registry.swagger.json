@@ -192,7 +192,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Module"
+              "$ref": "#/definitions/v1PullModuleResponse"
             }
           },
           "default": {
@@ -366,6 +366,24 @@
         }
       },
       "description": "ProtoFile is a proto file registered in the registry."
+    },
+    "v1PullModuleResponse": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "$ref": "#/definitions/v1Module",
+          "description": "The module requested."
+        },
+        "protofiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProtoFile"
+          },
+          "description": "The protofiles of the module."
+        }
+      },
+      "description": "PullModuleResponse is the response message for PullModule."
     },
     "v1PushModuleRequest": {
       "type": "object",

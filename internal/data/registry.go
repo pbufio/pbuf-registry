@@ -18,6 +18,7 @@ type RegistryRepository interface {
 	ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error)
 	DeleteModule(ctx context.Context, name string) error
 	PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error)
+	PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
 }
 
 type registryRepository struct {
@@ -201,4 +202,47 @@ func (r *registryRepository) PushModule(ctx context.Context, name string, tag st
 	module.Tags = append(module.Tags, tag)
 
 	return module, nil
+}
+
+func (r *registryRepository) PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
+	// check if module exists
+	module, err := r.GetModule(ctx, name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get module: %w", err)
+	}
+
+	if module == nil {
+		return nil, nil, errors.New("module not found")
+	}
+
+	// check if tag exists
+	var tagId string
+	err = r.pool.QueryRow(ctx,
+		"SELECT id FROM tags WHERE module_id = $1 AND tag = $2",
+		module.Id, tag).Scan(&tagId)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not select tag from database: %w", err)
+	}
+
+	// fetch protofiles
+	protofilesRows, err := r.pool.Query(ctx,
+		"SELECT filename, content FROM protofiles WHERE tag_id = $1",
+		tagId)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not select protofiles from database: %w", err)
+	}
+
+	var protofiles []*v1.ProtoFile
+
+	for protofilesRows.Next() {
+		protofile := &v1.ProtoFile{}
+		err := protofilesRows.Scan(&protofile.Filename, &protofile.Content)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not scan protofile: %w", err)
+		}
+
+		protofiles = append(protofiles, protofile)
+	}
+
+	return module, protofiles, nil
 }
