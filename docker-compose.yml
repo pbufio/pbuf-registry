@@ -1,0 +1,35 @@
+version: '3.1'
+services:
+  db:
+    image: postgres:14.7
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: pbuf
+      POSTGRES_PASSWORD: pbuf
+      POSTGRES_DB: pbuf_registry
+  pbuf-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
+    command:
+      - "/app/pbuf-migrations"
+  pbuf-registry:
+    build:
+      context: .
+    restart: always
+    depends_on:
+      - pbuf-migrations
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
+    command:
+      - "/app/pbuf-registry"

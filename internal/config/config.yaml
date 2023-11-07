@@ -7,4 +7,4 @@ server:
 
 data:
   database:
-    DSN: "psql://pbuf:pbuf@localhost:5432/pbuf_registry?sslmode=disable"
+    dsn: "postgres://pbuf:pbuf@localhost:5432/pbuf_registry?sslmode=disable"

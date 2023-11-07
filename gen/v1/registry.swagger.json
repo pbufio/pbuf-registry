@@ -36,7 +36,7 @@
         },
         "parameters": [
           {
-            "name": "pageSize",
+            "name": "page_size",
             "description": "The maximum number of modules to return.\nThe service may return fewer than this value.\nIf unspecified, at most 50 modules will be returned.\nThe maximum value is 1000; values above 1000 will be coerced to 1000.",
             "in": "query",
             "required": false,
@@ -44,7 +44,7 @@
             "format": "int32"
           },
           {
-            "name": "pageToken",
+            "name": "page_token",
             "description": "A page token, received from a previous `ListModules` call.\nProvide this to retrieve the subsequent page.\n\nWhen paginating, all other parameters provided to `ListModules` must match\nthe call that provided the page token.",
             "in": "query",
             "required": false,
@@ -192,7 +192,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Module"
+              "$ref": "#/definitions/v1PullModuleResponse"
             }
           },
           "default": {
@@ -318,10 +318,14 @@
       "type": "object",
       "properties": {
         "modules": {
-          "$ref": "#/definitions/v1Module",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Module"
+          },
           "description": "The modules requested."
         },
-        "nextPageToken": {
+        "next_page_token": {
           "type": "string",
           "description": "A token, which can be sent as `page_token` to retrieve the next page.\nIf this field is omitted, there are no subsequent pages."
         }
@@ -331,6 +335,10 @@
     "v1Module": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "id is the unique identifier of the module."
+        },
         "name": {
           "type": "string",
           "description": "The name of the module."
@@ -345,12 +353,56 @@
       },
       "description": "Module is a module registered in the registry."
     },
-    "v1PushModuleRequest": {
+    "v1ProtoFile": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "The filename of the proto file."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the proto file."
+        }
+      },
+      "description": "ProtoFile is a proto file registered in the registry."
+    },
+    "v1PullModuleResponse": {
       "type": "object",
       "properties": {
         "module": {
           "$ref": "#/definitions/v1Module",
+          "description": "The module requested."
+        },
+        "protofiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProtoFile"
+          },
+          "description": "The protofiles of the module."
+        }
+      },
+      "description": "PullModuleResponse is the response message for PullModule."
+    },
+    "v1PushModuleRequest": {
+      "type": "object",
+      "properties": {
+        "module_name": {
+          "type": "string",
           "description": "The module to register."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to register."
+        },
+        "protofiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProtoFile"
+          },
+          "title": "Protofiles"
         }
       },
       "description": "PushModuleRequest is the request message for PushModule."

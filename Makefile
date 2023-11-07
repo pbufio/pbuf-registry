@@ -62,6 +62,16 @@ build-in-docker:
 docker:
 	docker build -t registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION} .
 
+.PHONY: run
+# run
+run:
+	docker-compose build --no-cache && docker-compose up --force-recreate -d
+
+.PHONY: stop
+# stop
+stop:
+	docker-compose down
+
 # show help
 help:
 	@echo ''
