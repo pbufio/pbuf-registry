@@ -54,5 +54,8 @@ jobs:
       - name: Docker Push DO
         run: docker push registry.digitalocean.com/pbuf/registry:${{ github.ref_name }}
 
+      - name: Docker Tag GHCR
+        run: docker tag registry.digitalocean.com/pbuf/registry:${{ github.ref_name }} ghcr.io/pbufio/registry:${{ github.ref_name }}
+
       - name: Docker Push GHCR
         run: docker push ghcr.io/pbufio/registry:${{ github.ref_name }}
