@@ -1,4 +1,11 @@
 version: v1
+name: pbufio/pbuf-registry
+registry:
+  addr: pbuf.cloud:8081
+  insecure: true
+export:
+  paths:
+    - api
 modules:
   - name: googleapis
     repository: https://github.com/googleapis/googleapis

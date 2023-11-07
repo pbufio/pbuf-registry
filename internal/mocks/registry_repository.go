@@ -29,6 +29,20 @@ func (_m *RegistryRepository) DeleteModule(ctx context.Context, name string) err
 	return r0
 }
 
+// DeleteModuleTag provides a mock function with given fields: ctx, name, tag
+func (_m *RegistryRepository) DeleteModuleTag(ctx context.Context, name string, tag string) error {
+	ret := _m.Called(ctx, name, tag)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = rf(ctx, name, tag)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetModule provides a mock function with given fields: ctx, name
 func (_m *RegistryRepository) GetModule(ctx context.Context, name string) (*v1.Module, error) {
 	ret := _m.Called(ctx, name)

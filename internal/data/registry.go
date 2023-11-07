@@ -19,6 +19,7 @@ type RegistryRepository interface {
 	DeleteModule(ctx context.Context, name string) error
 	PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error)
 	PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
+	DeleteModuleTag(ctx context.Context, name string, tag string) error
 }
 
 type registryRepository struct {
@@ -245,4 +246,53 @@ func (r *registryRepository) PullModule(ctx context.Context, name string, tag st
 	}
 
 	return module, protofiles, nil
+}
+
+func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, tag string) error {
+	// check if module exists
+	module, err := r.GetModule(ctx, name)
+	if err != nil {
+		return fmt.Errorf("could not get module: %w", err)
+	}
+
+	if module == nil {
+		return errors.New("module not found")
+	}
+
+	// check if tag exists
+	var tagId string
+	err = r.pool.QueryRow(ctx,
+		"SELECT id FROM tags WHERE module_id = $1 AND tag = $2",
+		module.Id, tag).Scan(&tagId)
+	if err != nil {
+		return fmt.Errorf("could not select tag from database: %w", err)
+	}
+
+	// delete protofiles
+	res, err := r.pool.Exec(ctx,
+		"DELETE FROM protofiles WHERE tag_id = $1",
+		tagId)
+	if err != nil {
+		return fmt.Errorf("could not delete protofiles from database: %w", err)
+	}
+
+	if res.RowsAffected() > 0 {
+		log.Infof("deleted %d protofiles for tag %s", res.RowsAffected(), tag)
+	}
+
+	// delete tag
+	res, err = r.pool.Exec(ctx,
+		"DELETE FROM tags WHERE id = $1",
+		tagId)
+	if err != nil {
+		return fmt.Errorf("could not delete tag from database: %w", err)
+	}
+
+	if res.RowsAffected() > 0 {
+		log.Infof("deleted tag %s", tag)
+	} else {
+		return errors.New("tag not found")
+	}
+
+	return nil
 }

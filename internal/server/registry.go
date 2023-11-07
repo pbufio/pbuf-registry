@@ -152,6 +152,24 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 }
 
 func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.DeleteModuleTagRequest) (*v1.DeleteModuleTagResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	name := request.Name
+	if name == "" {
+		return nil, errors.New("name cannot be empty")
+	}
+
+	tag := request.Tag
+	if tag == "" {
+		return nil, errors.New("tag cannot be empty")
+	}
+
+	err := r.registryRepository.DeleteModuleTag(ctx, name, tag)
+	if err != nil {
+		log.Infof("error deleting module tag: %v", err)
+		return nil, err
+	}
+
+	return &v1.DeleteModuleTagResponse{
+		Name: name,
+		Tag:  tag,
+	}, nil
 }

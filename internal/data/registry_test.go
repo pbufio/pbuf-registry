@@ -329,6 +329,47 @@ func Test_registryRepository_PullModule(t *testing.T) {
 	}
 }
 
+func Test_registryRepository_DeleteModuleTag(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+		tag  string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Delete module tag",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.0.0",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Delete module tag not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.0.0",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			if err := r.DeleteModuleTag(tt.args.ctx, tt.args.name, tt.args.tag); (err != nil) != tt.wantErr {
+				t.Errorf("DeleteModuleTag() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func Test_registryRepository_DeleteModule(t *testing.T) {
 	type args struct {
 		ctx  context.Context
