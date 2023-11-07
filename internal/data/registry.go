@@ -127,8 +127,16 @@ func (r *registryRepository) ListModules(ctx context.Context, pageSize int, toke
 }
 
 func (r *registryRepository) DeleteModule(ctx context.Context, name string) error {
-	// delete all module tags
+	// delete all protofiles
 	res, err := r.pool.Exec(ctx,
+		"DELETE FROM protofiles WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
+		name)
+	if err != nil {
+		return fmt.Errorf("could not delete protofiles from database: %w", err)
+	}
+
+	// delete all module tags
+	res, err = r.pool.Exec(ctx,
 		"DELETE FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1)",
 		name)
 	if err != nil {
