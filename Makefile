@@ -65,12 +65,12 @@ docker:
 .PHONY: run
 # run
 run:
-	docker-compose build --no-cache && docker-compose up --force-recreate -d
+	docker-compose -f docker-compose.dev.yml build --no-cache && docker-compose -f docker-compose.dev.yml up --force-recreate -d
 
 .PHONY: stop
 # stop
 stop:
-	docker-compose down
+	docker-compose -f docker-compose.dev.yml down
 
 # show help
 help:

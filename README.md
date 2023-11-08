@@ -14,12 +14,57 @@ The registry solves this problem by providing a central place to store and manag
 
 ## Installation
 
-TBD
+### Docker Compose
+
+#### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+#### Steps
+
+1. Clone the repository
+2. Run `docker-compose up -d`
+
+### Helm Chart
+
+Coming soon...
 
 ## Usage
 
-TBD
+### CLI
+
+We recommend to use the [CLI](https://github.com/pbufio/pbuf-cli) to interact with the registry.
+
+### API
+
+#### HTTP
+
+The registry provides a REST API (`:8080` port by default). You can find the swagger documentation [here](https://github.com/pbufio/pbuf-registry/blob/main/gen/v1/registry.swagger.json).
+
+#### gRPC
+
+The registry provides a gRPC API (`:8081` port by default). You can find the protobuf definition [here](https://github.com/pbufio/pbuf-registry/blob/main/api/v1/registry.proto)
 
 ## Development and Contributing
 
-TBD
+### Prerequisites
+
+- [Go](https://golang.org/doc/install)
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+- [Make](https://www.gnu.org/software/make/)
+
+### Build
+
+- Run `make build` to build the registry
+- Run `make build-in-docker` to build linux binaries in docker
+
+### Test
+
+- Run `make test` to run the tests.
+
+### Test the Registry
+
+- Run `make run` to start the registry and test it.
+- Run `make stop` to stop the running registry.
