@@ -5,20 +5,19 @@ services:
     restart: always
     ports:
       - "5432:5432"
-    volumes:
-      - ./.postgres-data:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: pbuf
       POSTGRES_PASSWORD: pbuf
       POSTGRES_DB: pbuf_registry
   pbuf-registry:
-    image: ghcr.io/pbufio/registry:v0.1.1
+    build:
+      context: .
     restart: always
     depends_on:
       - db
     ports:
-      - "8080:8080"
-      - "8081:8081"
+    - "8080:8080"
+    - "8081:8081"
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
     command: >

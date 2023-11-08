@@ -1,0 +1,10 @@
+.postgres-data
+bin
+.github
+
+docker-compose.dev.yml
+docker-compose.yml
+Dockerfile
+
+README.md
+LICENSE
