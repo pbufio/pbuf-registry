@@ -19,6 +19,9 @@ type Config struct {
 		GRPC struct {
 			Addr string `mapstructure:"addr"`
 		}
+		Debug struct {
+			Addr string `mapstructure:"addr"`
+		}
 	}
 
 	Data struct {
