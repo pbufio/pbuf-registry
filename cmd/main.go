@@ -38,6 +38,21 @@ func startHTTPServer(address string, grpcServer *server.RegistryServer) error {
 	return http.ListenAndServe(address, mux)
 }
 
+func startDebugServer(address string) error {
+	// add /healthz endpoint
+	mux := runtime.NewServeMux()
+
+	err := mux.HandlePath("GET", "/healthz", func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	if err != nil {
+		log.Fatalf("failed to register debug server: %v", err)
+	}
+
+	return http.ListenAndServe(address, mux)
+}
+
 func main() {
 	config.NewLoader().MustLoad()
 
@@ -60,8 +75,15 @@ func main() {
 		}
 	}()
 
-	err = startHTTPServer(config.Cfg.Server.HTTP.Addr, registryServer)
+	go func() {
+		err = startHTTPServer(config.Cfg.Server.HTTP.Addr, registryServer)
+		if err != nil {
+			log.Fatalf("failed to start http server: %v", err)
+		}
+	}()
+
+	err = startDebugServer(config.Cfg.Server.Debug.Addr)
 	if err != nil {
-		log.Fatalf("failed to start http server: %v", err)
+		log.Fatalf("failed to start debug server: %v", err)
 	}
 }
