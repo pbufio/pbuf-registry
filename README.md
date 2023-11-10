@@ -28,10 +28,12 @@ The registry solves this problem by providing a central place to store and manag
 
 ### Helm Chart
 
-### Prerequisites
+#### Prerequisites
 
 - [Helm](https://helm.sh/docs/intro/install/)
 - Postgres database should be provisioned separately
+
+#### Installation
 
 Add repository to Helm:
 
