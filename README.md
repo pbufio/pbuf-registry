@@ -28,7 +28,24 @@ The registry solves this problem by providing a central place to store and manag
 
 ### Helm Chart
 
-Coming soon...
+### Prerequisites
+
+- [Helm](https://helm.sh/docs/intro/install/)
+- Postgres database should be provisioned separately
+
+Add repository to Helm:
+
+```shell
+helm repo add pbuf https://pbufio.github.io/helm-charts
+```
+
+To install the chart with the release name `my-pbuf-registry`:
+
+```shell
+helm install my-pbuf-registry pbuf/pbuf-registry --set secrets.databaseDSN=<databaseDSN>
+```
+
+More information about the chart can be found in [the chart repository](https://github.com/pbufio/helm-charts)
 
 ## Usage
 
