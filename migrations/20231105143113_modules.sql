@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS modules (
 CREATE TABLE IF NOT EXISTS tags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     module_id UUID NOT NULL,
-    tag VARCHAR(255) NOT NULL
+    tag VARCHAR(255) NOT NULL,
+    UNIQUE (module_id, tag)
     );
 
 CREATE TABLE IF NOT EXISTS protofiles (
@@ -26,6 +27,10 @@ CREATE INDEX IF NOT EXISTS idx_protofiles_tag_id ON protofiles (tag_id);
 
 -- +goose Down
 -- +goose StatementBegin
+DROP INDEX IF EXISTS idx_protofiles_tag_id;
+DROP INDEX IF EXISTS idx_tags_module_id_tag;
+DROP INDEX IF EXISTS idx_modules_name;
+
 DROP TABLE IF EXISTS protofiles;
 DROP TABLE IF EXISTS tags;
 DROP TABLE IF EXISTS modules;

@@ -18,7 +18,8 @@ service Registry {
   // Get a module by name
   rpc GetModule(GetModuleRequest) returns (Module) {
     option (google.api.http) = {
-      get: "/v1/modules/{name}"
+      post: "/v1/modules/get"
+      body: "*"
     };
   }
 
@@ -33,7 +34,8 @@ service Registry {
   // Pull a module tag
   rpc PullModule(PullModuleRequest) returns (PullModuleResponse) {
     option (google.api.http) = {
-      get: "/v1/modules/{name}/tags/{tag}"
+      post: "/v1/modules/pull"
+      body: "*"
     };
   }
 
@@ -48,14 +50,24 @@ service Registry {
   // Delete a module by name
   rpc DeleteModule(DeleteModuleRequest) returns (DeleteModuleResponse) {
     option (google.api.http) = {
-      delete: "/v1/modules/{name}"
+      post: "/v1/modules/delete"
+      body: "*"
     };
   }
 
   // Delete a specific module tag
   rpc DeleteModuleTag(DeleteModuleTagRequest) returns (DeleteModuleTagResponse) {
     option (google.api.http) = {
-      delete: "/v1/modules/{name}/tags/{tag}"
+      post: "/v1/modules/tags/delete"
+      body: "*"
+    };
+  }
+
+  // Get Module Dependencies
+  rpc GetModuleDependencies(GetModuleDependenciesRequest) returns (GetModuleDependenciesResponse) {
+    option (google.api.http) = {
+      post: "/v1/modules/dependencies"
+      body: "*"
     };
   }
 }
@@ -126,6 +138,9 @@ message PushModuleRequest {
 
   // Protofiles
   repeated ProtoFile protofiles = 3;
+
+  // Dependencies
+  repeated Dependency dependencies = 4;
 }
 
 // DeleteModuleRequest is the request message for DeleteModule.
@@ -158,6 +173,21 @@ message DeleteModuleTagResponse {
   string tag = 2;
 }
 
+// GetModuleDependenciesRequest is the request message for GetModuleDependencies.
+message GetModuleDependenciesRequest {
+  // The name of the module to retrieve
+  string name = 1;
+
+  // The tag of the module to retrieve
+  string tag = 2;
+}
+
+// GetModuleDependenciesResponse is the response message for GetModuleDependencies.
+message GetModuleDependenciesResponse {
+  // The dependencies of the module.
+  repeated Dependency dependencies = 1;
+}
+
 // Module is a module registered in the registry.
 message Module {
   // id is the unique identifier of the module.
@@ -177,4 +207,13 @@ message ProtoFile {
 
   // The content of the proto file.
   string content = 2;
+}
+
+// Dependency is a dependency registered in the registry.
+message Dependency {
+  // The name of the dependency.
+  string name = 1;
+
+  // The tag of the dependency.
+  string tag = 2;
 }

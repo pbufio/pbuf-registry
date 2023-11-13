@@ -20,6 +20,8 @@ type RegistryRepository interface {
 	PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error)
 	PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
 	DeleteModuleTag(ctx context.Context, name string, tag string) error
+	AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error
+	GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
 }
 
 type registryRepository struct {
@@ -59,7 +61,7 @@ func (r *registryRepository) GetModule(ctx context.Context, name string) (*v1.Mo
 
 	// fetch tags
 	tags, err := r.pool.Query(ctx,
-		"SELECT tag FROM tags WHERE module_id = $1",
+		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC",
 		module.Id)
 	if err != nil {
 		// tags not found
@@ -128,15 +130,31 @@ func (r *registryRepository) ListModules(ctx context.Context, pageSize int, toke
 
 func (r *registryRepository) DeleteModule(ctx context.Context, name string) error {
 	// delete all protofiles
-	_, err := r.pool.Exec(ctx,
+	res, err := r.pool.Exec(ctx,
 		"DELETE FROM protofiles WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
 		name)
 	if err != nil {
 		return fmt.Errorf("could not delete protofiles from database: %w", err)
 	}
 
+	if res.RowsAffected() > 0 {
+		log.Infof("deleted %d protofiles for module %s", res.RowsAffected(), name)
+	}
+
+	// delete all module dependencies
+	res, err = r.pool.Exec(ctx,
+		"DELETE FROM dependencies WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
+		name)
+	if err != nil {
+		return fmt.Errorf("could not delete module dependencies from database: %w", err)
+	}
+
+	if res.RowsAffected() > 0 {
+		log.Infof("deleted %d dependencies for module %s", res.RowsAffected(), name)
+	}
+
 	// delete all module tags
-	res, err := r.pool.Exec(ctx,
+	res, err = r.pool.Exec(ctx,
 		"DELETE FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1)",
 		name)
 	if err != nil {
@@ -288,6 +306,18 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 		log.Infof("deleted %d protofiles for tag %s", res.RowsAffected(), tag)
 	}
 
+	// delete dependencies
+	res, err = r.pool.Exec(ctx,
+		"DELETE FROM dependencies WHERE tag_id = $1 OR dependency_tag_id = $1",
+		tagId)
+	if err != nil {
+		return fmt.Errorf("could not delete dependencies from database: %w", err)
+	}
+
+	if res.RowsAffected() > 0 {
+		log.Infof("deleted %d dependencies for tag %s", res.RowsAffected(), tag)
+	}
+
 	// delete tag
 	res, err = r.pool.Exec(ctx,
 		"DELETE FROM tags WHERE id = $1",
@@ -303,4 +333,95 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 	}
 
 	return nil
+}
+
+func (r *registryRepository) AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error {
+	// find the tag id by name and tag
+	var tagId string
+	err := r.pool.QueryRow(ctx,
+		"SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
+		name, tag).Scan(&tagId)
+	if err != nil {
+		return fmt.Errorf("could not find tag %s for module %s: %w", tag, name, err)
+	}
+
+	// for each dependency find tag id and insert into dependencies table
+	for _, dependency := range dependencies {
+		var dependencyTagId string
+		err := r.pool.QueryRow(ctx,
+			"SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
+			dependency.Name, dependency.Tag).Scan(&dependencyTagId)
+		if err != nil {
+			return fmt.Errorf("could not find tag %s for module %s: %w", dependency.Tag, dependency.Name, err)
+		}
+
+		_, err = r.pool.Exec(ctx,
+			"INSERT INTO dependencies (tag_id, dependency_tag_id) VALUES ($1, $2)",
+			tagId, dependencyTagId)
+		if err != nil {
+			return fmt.Errorf("could not insert dependency into database: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *registryRepository) GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
+	// find the latest tag if tag is empty
+	if tag == "" {
+		err := r.pool.QueryRow(ctx,
+			"SELECT tag FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) ORDER BY updated_at DESC LIMIT 1",
+			name).Scan(&tag)
+		if err != nil {
+			return nil, fmt.Errorf("could not find tag for module %s: %w", name, err)
+		}
+	}
+
+	// find the tag id by name and tag
+	var tagId string
+	err := r.pool.QueryRow(ctx,
+		"SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
+		name, tag).Scan(&tagId)
+	if err != nil {
+		return nil, fmt.Errorf("could not find tag %s for module %s: %w", tag, name, err)
+	}
+
+	// find all dependencies
+	rows, err := r.pool.Query(ctx,
+		"SELECT dependency_tag_id FROM dependencies WHERE tag_id = $1",
+		tagId)
+	if err != nil {
+		// if no dependencies found, return empty slice
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []*v1.Dependency{}, nil
+		}
+		return nil, fmt.Errorf("could not select dependencies from database: %w", err)
+	}
+
+	var dependencies []*v1.Dependency
+
+	for rows.Next() {
+		var dependencyTagId string
+		err := rows.Scan(&dependencyTagId)
+		if err != nil {
+			return nil, fmt.Errorf("could not scan dependency: %w", err)
+		}
+
+		// find the module name and tag by dependency tag id
+		var dependencyName string
+		var dependencyTag string
+		err = r.pool.QueryRow(ctx,
+			"SELECT modules.name, tags.tag FROM modules JOIN tags ON modules.id = tags.module_id WHERE tags.id = $1",
+			dependencyTagId).Scan(&dependencyName, &dependencyTag)
+		if err != nil {
+			return nil, fmt.Errorf("could not find module and tag for dependency: %w", err)
+		}
+
+		dependencies = append(dependencies, &v1.Dependency{
+			Name: dependencyName,
+			Tag:  dependencyTag,
+		})
+	}
+
+	return dependencies, nil
 }
