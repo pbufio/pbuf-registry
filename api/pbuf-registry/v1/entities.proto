@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// Module is a module registered in the registry.
+message Module {
+  // id is the unique identifier of the module.
+  string id = 1;
+
+  // The name of the module.
+  string name = 2;
+
+  // The tags of the module.
+  repeated string tags = 3;
+}
+
+// ProtoFile is a proto file registered in the registry.
+message ProtoFile {
+  // The filename of the proto file.
+  string filename = 1;
+
+  // The content of the proto file.
+  string content = 2;
+}
+
+// Dependency is a dependency registered in the registry.
+message Dependency {
+  // The name of the dependency.
+  string name = 1;
+
+  // The tag of the dependency.
+  string tag = 2;
+}

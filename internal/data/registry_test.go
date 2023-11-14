@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	v1 "github.com/pbufio/pbuf-registry/gen/v1"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 )
 
 const (

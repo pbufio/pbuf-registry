@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "v1/registry.proto",
+    "title": "pbuf-registry/v1/registry.proto",
     "version": "version not set"
   },
   "tags": [

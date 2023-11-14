@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             (unknown)
-// source: v1/registry.proto
+// source: pbuf-registry/v1/registry.proto
 
 package v1
 
@@ -380,5 +380,5 @@ var Registry_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "v1/registry.proto",
+	Metadata: "pbuf-registry/v1/registry.proto",
 }
