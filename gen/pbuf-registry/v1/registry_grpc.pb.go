@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             (unknown)
-// source: v1/registry.proto
+// source: pbuf-registry/v1/registry.proto
 
 package v1
 
@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Registry_ListModules_FullMethodName     = "/pbufregistry.v1.Registry/ListModules"
-	Registry_GetModule_FullMethodName       = "/pbufregistry.v1.Registry/GetModule"
-	Registry_RegisterModule_FullMethodName  = "/pbufregistry.v1.Registry/RegisterModule"
-	Registry_PullModule_FullMethodName      = "/pbufregistry.v1.Registry/PullModule"
-	Registry_PushModule_FullMethodName      = "/pbufregistry.v1.Registry/PushModule"
-	Registry_DeleteModule_FullMethodName    = "/pbufregistry.v1.Registry/DeleteModule"
-	Registry_DeleteModuleTag_FullMethodName = "/pbufregistry.v1.Registry/DeleteModuleTag"
+	Registry_ListModules_FullMethodName           = "/pbufregistry.v1.Registry/ListModules"
+	Registry_GetModule_FullMethodName             = "/pbufregistry.v1.Registry/GetModule"
+	Registry_RegisterModule_FullMethodName        = "/pbufregistry.v1.Registry/RegisterModule"
+	Registry_PullModule_FullMethodName            = "/pbufregistry.v1.Registry/PullModule"
+	Registry_PushModule_FullMethodName            = "/pbufregistry.v1.Registry/PushModule"
+	Registry_DeleteModule_FullMethodName          = "/pbufregistry.v1.Registry/DeleteModule"
+	Registry_DeleteModuleTag_FullMethodName       = "/pbufregistry.v1.Registry/DeleteModuleTag"
+	Registry_GetModuleDependencies_FullMethodName = "/pbufregistry.v1.Registry/GetModuleDependencies"
 )
 
 // RegistryClient is the client API for Registry service.
@@ -46,6 +47,8 @@ type RegistryClient interface {
 	DeleteModule(ctx context.Context, in *DeleteModuleRequest, opts ...grpc.CallOption) (*DeleteModuleResponse, error)
 	// Delete a specific module tag
 	DeleteModuleTag(ctx context.Context, in *DeleteModuleTagRequest, opts ...grpc.CallOption) (*DeleteModuleTagResponse, error)
+	// Get Module Dependencies
+	GetModuleDependencies(ctx context.Context, in *GetModuleDependenciesRequest, opts ...grpc.CallOption) (*GetModuleDependenciesResponse, error)
 }
 
 type registryClient struct {
@@ -119,6 +122,15 @@ func (c *registryClient) DeleteModuleTag(ctx context.Context, in *DeleteModuleTa
 	return out, nil
 }
 
+func (c *registryClient) GetModuleDependencies(ctx context.Context, in *GetModuleDependenciesRequest, opts ...grpc.CallOption) (*GetModuleDependenciesResponse, error) {
+	out := new(GetModuleDependenciesResponse)
+	err := c.cc.Invoke(ctx, Registry_GetModuleDependencies_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RegistryServer is the server API for Registry service.
 // All implementations must embed UnimplementedRegistryServer
 // for forward compatibility
@@ -137,6 +149,8 @@ type RegistryServer interface {
 	DeleteModule(context.Context, *DeleteModuleRequest) (*DeleteModuleResponse, error)
 	// Delete a specific module tag
 	DeleteModuleTag(context.Context, *DeleteModuleTagRequest) (*DeleteModuleTagResponse, error)
+	// Get Module Dependencies
+	GetModuleDependencies(context.Context, *GetModuleDependenciesRequest) (*GetModuleDependenciesResponse, error)
 	mustEmbedUnimplementedRegistryServer()
 }
 
@@ -164,6 +178,9 @@ func (UnimplementedRegistryServer) DeleteModule(context.Context, *DeleteModuleRe
 }
 func (UnimplementedRegistryServer) DeleteModuleTag(context.Context, *DeleteModuleTagRequest) (*DeleteModuleTagResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteModuleTag not implemented")
+}
+func (UnimplementedRegistryServer) GetModuleDependencies(context.Context, *GetModuleDependenciesRequest) (*GetModuleDependenciesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetModuleDependencies not implemented")
 }
 func (UnimplementedRegistryServer) mustEmbedUnimplementedRegistryServer() {}
 
@@ -304,6 +321,24 @@ func _Registry_DeleteModuleTag_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Registry_GetModuleDependencies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModuleDependenciesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).GetModuleDependencies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_GetModuleDependencies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).GetModuleDependencies(ctx, req.(*GetModuleDependenciesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Registry_ServiceDesc is the grpc.ServiceDesc for Registry service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -339,7 +374,11 @@ var Registry_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteModuleTag",
 			Handler:    _Registry_DeleteModuleTag_Handler,
 		},
+		{
+			MethodName: "GetModuleDependencies",
+			Handler:    _Registry_GetModuleDependencies_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "v1/registry.proto",
+	Metadata: "pbuf-registry/v1/registry.proto",
 }

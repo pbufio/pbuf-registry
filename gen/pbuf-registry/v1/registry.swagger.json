@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "v1/registry.proto",
+    "title": "pbuf-registry/v1/registry.proto",
     "version": "version not set"
   },
   "tags": [
@@ -88,6 +88,142 @@
         ]
       }
     },
+    "/v1/modules/delete": {
+      "post": {
+        "summary": "Delete a module by name",
+        "operationId": "Registry_DeleteModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "DeleteModuleRequest is the request message for DeleteModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/dependencies": {
+      "post": {
+        "summary": "Get Module Dependencies",
+        "operationId": "Registry_GetModuleDependencies",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependenciesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetModuleDependenciesRequest is the request message for GetModuleDependencies.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependenciesRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/get": {
+      "post": {
+        "summary": "Get a module by name",
+        "operationId": "Registry_GetModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetModuleRequest is the request message for GetModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/pull": {
+      "post": {
+        "summary": "Pull a module tag",
+        "operationId": "Registry_PullModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PullModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "PullModuleRequest is the request message for PullModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PullModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
     "/v1/modules/push": {
       "post": {
         "summary": "Push a module",
@@ -122,107 +258,8 @@
         ]
       }
     },
-    "/v1/modules/{name}": {
-      "get": {
-        "summary": "Get a module by name",
-        "operationId": "Registry_GetModule",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Module"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "description": "The name of the module to retrieve.",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "Registry"
-        ]
-      },
-      "delete": {
-        "summary": "Delete a module by name",
-        "operationId": "Registry_DeleteModule",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1DeleteModuleResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "description": "The name of the module to delete.",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "Registry"
-        ]
-      }
-    },
-    "/v1/modules/{name}/tags/{tag}": {
-      "get": {
-        "summary": "Pull a module tag",
-        "operationId": "Registry_PullModule",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1PullModuleResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "description": "The name of the module to retrieve.",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "tag",
-            "description": "The tag of the module to retrieve.",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "Registry"
-        ]
-      },
-      "delete": {
+    "/v1/modules/tags/delete": {
+      "post": {
         "summary": "Delete a specific module tag",
         "operationId": "Registry_DeleteModuleTag",
         "responses": {
@@ -241,18 +278,13 @@
         },
         "parameters": [
           {
-            "name": "name",
-            "description": "The name of the module to delete.",
-            "in": "path",
+            "name": "body",
+            "description": "DeleteModuleTagRequest is the request message for DeleteModuleTag.",
+            "in": "body",
             "required": true,
-            "type": "string"
-          },
-          {
-            "name": "tag",
-            "description": "The tag of the module to delete.",
-            "in": "path",
-            "required": true,
-            "type": "string"
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleTagRequest"
+            }
           }
         ],
         "tags": [
@@ -290,6 +322,16 @@
         }
       }
     },
+    "v1DeleteModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to delete."
+        }
+      },
+      "description": "DeleteModuleRequest is the request message for DeleteModule."
+    },
     "v1DeleteModuleResponse": {
       "type": "object",
       "properties": {
@@ -299,6 +341,20 @@
         }
       },
       "description": "DeleteModuleResponse is the response message for DeleteModule."
+    },
+    "v1DeleteModuleTagRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to delete."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to delete."
+        }
+      },
+      "description": "DeleteModuleTagRequest is the request message for DeleteModuleTag."
     },
     "v1DeleteModuleTagResponse": {
       "type": "object",
@@ -313,6 +369,58 @@
         }
       },
       "description": "DeleteModuleTagResponse is the response message for DeleteModuleTag."
+    },
+    "v1Dependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the dependency."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the dependency."
+        }
+      },
+      "description": "Dependency is a dependency registered in the registry."
+    },
+    "v1GetModuleDependenciesRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The name of the module to retrieve"
+        },
+        "tag": {
+          "type": "string",
+          "title": "The tag of the module to retrieve"
+        }
+      },
+      "description": "GetModuleDependenciesRequest is the request message for GetModuleDependencies."
+    },
+    "v1GetModuleDependenciesResponse": {
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Dependency"
+          },
+          "description": "The dependencies of the module."
+        }
+      },
+      "description": "GetModuleDependenciesResponse is the response message for GetModuleDependencies."
+    },
+    "v1GetModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to retrieve."
+        }
+      },
+      "description": "GetModuleRequest is the request message for GetModule."
     },
     "v1ListModulesResponse": {
       "type": "object",
@@ -367,6 +475,20 @@
       },
       "description": "ProtoFile is a proto file registered in the registry."
     },
+    "v1PullModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to retrieve."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to retrieve."
+        }
+      },
+      "description": "PullModuleRequest is the request message for PullModule."
+    },
     "v1PullModuleResponse": {
       "type": "object",
       "properties": {
@@ -403,6 +525,14 @@
             "$ref": "#/definitions/v1ProtoFile"
           },
           "title": "Protofiles"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Dependency"
+          },
+          "title": "Dependencies"
         }
       },
       "description": "PushModuleRequest is the request message for PushModule."

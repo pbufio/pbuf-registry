@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	v1 "github.com/pbufio/pbuf-registry/gen/v1"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 )
 
 const (
@@ -232,6 +232,21 @@ func Test_registryRepository_PushModule(t *testing.T) {
 			want:    nil,
 			wantErr: true,
 		},
+		{
+			name: "Push module",
+			args: args{
+				ctx:        context.Background(),
+				name:       "pbuf.io/pbuf-registry-2",
+				tag:        "v0.0.0",
+				protofiles: protofiles,
+			},
+			want: &v1.Module{
+				Id:   fakeUUID,
+				Name: "pbuf.io/pbuf-registry-2",
+				Tags: []string{"v0.0.0"},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -286,7 +301,7 @@ func Test_registryRepository_PullModule(t *testing.T) {
 			name: "Pull module not found",
 			args: args{
 				ctx:  context.Background(),
-				name: "pbuf.io/pbuf-registry-2",
+				name: "pbuf.io/pbuf-registry-not-found",
 				tag:  "v0.0.0",
 			},
 			wantModule: nil,
@@ -324,6 +339,110 @@ func Test_registryRepository_PullModule(t *testing.T) {
 			}
 			if !reflect.DeepEqual(protoFiles, tt.want) {
 				t.Errorf("PullModule() got1 = %v, want %v", protoFiles, tt.want)
+			}
+		})
+	}
+}
+
+func Test_registryRepository_AddModuleDependencies(t *testing.T) {
+	type args struct {
+		ctx          context.Context
+		name         string
+		tag          string
+		dependencies []*v1.Dependency
+	}
+	type want struct {
+		dependencies []*v1.Dependency
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    want
+		wantErr bool
+	}{
+		{
+			name: "Add module dependencies",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.0.0",
+				dependencies: []*v1.Dependency{
+					{
+						Name: "pbuf.io/pbuf-registry-2",
+						Tag:  "v0.0.0",
+					},
+				},
+			},
+			want: want{
+				dependencies: []*v1.Dependency{
+					{
+						Name: "pbuf.io/pbuf-registry-2",
+						Tag:  "v0.0.0",
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			if err := r.AddModuleDependencies(tt.args.ctx, tt.args.name, tt.args.tag, tt.args.dependencies); (err != nil) != tt.wantErr {
+				t.Errorf("AddModuleDependencies() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			dependencies, err := r.GetModuleDependencies(tt.args.ctx, tt.args.name, tt.args.tag)
+			if err != nil {
+				t.Errorf("GetModuleDependencies() error = %v", err)
+			}
+
+			if !reflect.DeepEqual(dependencies, tt.want.dependencies) {
+				t.Errorf("GetModuleDependencies() got = %v, want %v", dependencies, tt.args.dependencies)
+			}
+		})
+	}
+}
+
+func Test_registryRepository_GetModuleDependencies(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+		tag  string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []*v1.Dependency
+		wantErr bool
+	}{
+		{
+			name: "Get module dependencies",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+			},
+			want: []*v1.Dependency{
+				{
+					Name: "pbuf.io/pbuf-registry-2",
+					Tag:  "v0.0.0",
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			got, err := r.GetModuleDependencies(tt.args.ctx, tt.args.name, tt.args.tag)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetModuleDependencies() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetModuleDependencies() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	v1 "github.com/pbufio/pbuf-registry/gen/v1"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"

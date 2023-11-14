@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/martian/log"
-	v1 "github.com/pbufio/pbuf-registry/gen/v1"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/utils"
 )
@@ -110,10 +110,6 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		return nil, errors.New("tag cannot be empty")
 	}
 
-	if len(request.Protofiles) == 0 {
-		return nil, errors.New("protofiles cannot be empty")
-	}
-
 	err := utils.ValidateProtoFiles(request.Protofiles)
 	if err != nil {
 		return nil, err
@@ -122,6 +118,12 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles)
 	if err != nil {
 		log.Infof("error pushing module: %v", err)
+		return nil, err
+	}
+
+	err = r.registryRepository.AddModuleDependencies(ctx, name, tag, request.Dependencies)
+	if err != nil {
+		log.Infof("error while adding dependencies for module: %v", err)
 		return nil, err
 	}
 
@@ -171,5 +173,22 @@ func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.Delete
 	return &v1.DeleteModuleTagResponse{
 		Name: name,
 		Tag:  tag,
+	}, nil
+}
+
+func (r *RegistryServer) GetModuleDependencies(ctx context.Context, request *v1.GetModuleDependenciesRequest) (*v1.GetModuleDependenciesResponse, error) {
+	name := request.Name
+	if name == "" {
+		return nil, errors.New("name cannot be empty")
+	}
+
+	dependencies, err := r.registryRepository.GetModuleDependencies(ctx, name, request.Tag)
+	if err != nil {
+		log.Infof("error getting module dependencies: %v", err)
+		return nil, err
+	}
+
+	return &v1.GetModuleDependenciesResponse{
+		Dependencies: dependencies,
 	}, nil
 }

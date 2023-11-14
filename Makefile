@@ -1,4 +1,4 @@
-API_PATH=api/v1
+API_PATH=api/pbuf-registry
 REGISTRY_VERSION?=latest
 
 .PHONY: vendor
@@ -9,7 +9,7 @@ vendor:
 .PHONY: vendor-gen
 # gen modules
 vendor-gen:
-	buf generate --template buf.modules.gen.yaml --exclude-path ${API_PATH}
+	buf generate --template buf.modules.gen.yaml --exclude-path ${API_PATH} --exclude-path third_party/google
 
 .PHONY: vendor-all
 vendor-all:
