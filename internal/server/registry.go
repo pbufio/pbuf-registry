@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/martian/log"
+	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/utils"
@@ -17,11 +17,13 @@ const (
 type RegistryServer struct {
 	v1.UnimplementedRegistryServer
 	registryRepository data.RegistryRepository
+	logger             *log.Helper
 }
 
-func NewRegistryServer(registryRepository data.RegistryRepository) *RegistryServer {
+func NewRegistryServer(registryRepository data.RegistryRepository, logger log.Logger) *RegistryServer {
 	return &RegistryServer{
 		registryRepository: registryRepository,
+		logger:             log.NewHelper(log.With(logger, "module", "server/RegistryServer")),
 	}
 }
 
@@ -34,7 +36,7 @@ func (r *RegistryServer) RegisterModule(ctx context.Context, request *v1.Registe
 
 	err := r.registryRepository.RegisterModule(ctx, name)
 	if err != nil {
-		log.Infof("error registering module: %v", err)
+		r.logger.Infof("error registering module: %v", err)
 		return nil, err
 	}
 
@@ -52,7 +54,7 @@ func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleReq
 
 	module, err := r.registryRepository.GetModule(ctx, name)
 	if err != nil {
-		log.Infof("error getting module: %v", err)
+		r.logger.Infof("error getting module: %v", err)
 		return nil, err
 	}
 
@@ -71,7 +73,7 @@ func (r *RegistryServer) ListModules(ctx context.Context, request *v1.ListModule
 
 	modules, nextPageToken, err := r.registryRepository.ListModules(ctx, pageSize, request.PageToken)
 	if err != nil {
-		log.Infof("error listing modules: %v", err)
+		r.logger.Infof("error listing modules: %v", err)
 		return nil, err
 	}
 
@@ -90,7 +92,7 @@ func (r *RegistryServer) DeleteModule(ctx context.Context, request *v1.DeleteMod
 
 	err := r.registryRepository.DeleteModule(ctx, name)
 	if err != nil {
-		log.Infof("error deleting module: %v", err)
+		r.logger.Infof("error deleting module: %v", err)
 		return nil, err
 	}
 
@@ -117,13 +119,13 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 
 	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles)
 	if err != nil {
-		log.Infof("error pushing module: %v", err)
+		r.logger.Infof("error pushing module: %v", err)
 		return nil, err
 	}
 
 	err = r.registryRepository.AddModuleDependencies(ctx, name, tag, request.Dependencies)
 	if err != nil {
-		log.Infof("error while adding dependencies for module: %v", err)
+		r.logger.Infof("error while adding dependencies for module: %v", err)
 		return nil, err
 	}
 
@@ -143,7 +145,7 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 
 	module, protoFiles, err := r.registryRepository.PullModule(ctx, name, tag)
 	if err != nil {
-		log.Infof("error pulling module: %v", err)
+		r.logger.Infof("error pulling module: %v", err)
 		return nil, err
 	}
 
@@ -166,7 +168,7 @@ func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.Delete
 
 	err := r.registryRepository.DeleteModuleTag(ctx, name, tag)
 	if err != nil {
-		log.Infof("error deleting module tag: %v", err)
+		r.logger.Infof("error deleting module tag: %v", err)
 		return nil, err
 	}
 
@@ -184,7 +186,7 @@ func (r *RegistryServer) GetModuleDependencies(ctx context.Context, request *v1.
 
 	dependencies, err := r.registryRepository.GetModuleDependencies(ctx, name, request.Tag)
 	if err != nil {
-		log.Infof("error getting module dependencies: %v", err)
+		r.logger.Infof("error getting module dependencies: %v", err)
 		return nil, err
 	}
 

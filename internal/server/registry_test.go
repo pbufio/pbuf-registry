@@ -23,7 +23,7 @@ func setup(ctx context.Context) (v1.RegistryClient, func()) {
 	registryRepository := &mocks.RegistryRepository{}
 	registryRepository.On("RegisterModule", mock.Anything, "hello").Return(nil)
 
-	v1.RegisterRegistryServer(baseServer, NewRegistryServer(registryRepository))
+	v1.RegisterRegistryServer(baseServer, NewRegistryServer(registryRepository, nil))
 	go func() {
 		if err := baseServer.Serve(lis); err != nil {
 			log.Printf("error serving server: %v", err)

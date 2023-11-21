@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -11,24 +12,41 @@ import (
 //go:embed config.yaml
 var embeddedConfigBytes []byte
 
+type Auth struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Type    string `mapstructure:"type"`
+}
+
+type Server struct {
+	HTTP struct {
+		Addr    string        `mapstructure:"addr"`
+		Timeout time.Duration `mapstructure:"timeout"`
+		Auth    Auth          `mapstructure:"auth"`
+	} `mapstructure:"http"`
+	GRPC struct {
+		Addr    string        `mapstructure:"addr"`
+		Timeout time.Duration `mapstructure:"timeout"`
+		TLS     struct {
+			Enabled  bool   `mapstructure:"enabled"`
+			CertFile string `mapstructure:"certFile"`
+			KeyFile  string `mapstructure:"keyFile"`
+		} `mapstructure:"tls"`
+		Auth Auth `mapstructure:"auth"`
+	} `mapstructure:"grpc"`
+	Debug struct {
+		Addr    string        `mapstructure:"addr"`
+		Timeout time.Duration `mapstructure:"timeout"`
+	} `mapstructure:"debug"`
+}
+
 type Config struct {
-	Server struct {
-		HTTP struct {
-			Addr string `mapstructure:"addr"`
-		}
-		GRPC struct {
-			Addr string `mapstructure:"addr"`
-		}
-		Debug struct {
-			Addr string `mapstructure:"addr"`
-		}
-	}
+	Server Server `mapstructure:"server"`
 
 	Data struct {
 		Database struct {
 			DSN string `mapstructure:"dsn"`
-		}
-	}
+		} `mapstructure:"database"`
+	} `mapstructure:"data"`
 }
 
 // Cfg is the global config

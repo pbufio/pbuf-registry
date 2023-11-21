@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/martian/log"
+	"github.com/go-kratos/kratos/v2/log"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
@@ -25,12 +25,14 @@ type RegistryRepository interface {
 }
 
 type registryRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	logger *log.Helper
 }
 
-func NewRegistryRepository(pool *pgxpool.Pool) RegistryRepository {
+func NewRegistryRepository(pool *pgxpool.Pool, logger log.Logger) RegistryRepository {
 	return &registryRepository{
-		pool: pool,
+		pool:   pool,
+		logger: log.NewHelper(logger),
 	}
 }
 
@@ -66,7 +68,7 @@ func (r *registryRepository) GetModule(ctx context.Context, name string) (*v1.Mo
 	if err != nil {
 		// tags not found
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Infof("no tags found for module %s", name)
+			r.logger.Infof("no tags found for module %s", name)
 			return &module, nil
 		}
 
@@ -138,7 +140,7 @@ func (r *registryRepository) DeleteModule(ctx context.Context, name string) erro
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted %d protofiles for module %s", res.RowsAffected(), name)
+		r.logger.Infof("deleted %d protofiles for module %s", res.RowsAffected(), name)
 	}
 
 	// delete all module dependencies
@@ -150,7 +152,7 @@ func (r *registryRepository) DeleteModule(ctx context.Context, name string) erro
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted %d dependencies for module %s", res.RowsAffected(), name)
+		r.logger.Infof("deleted %d dependencies for module %s", res.RowsAffected(), name)
 	}
 
 	// delete all module tags
@@ -162,7 +164,7 @@ func (r *registryRepository) DeleteModule(ctx context.Context, name string) erro
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted %d tags for module %s", res.RowsAffected(), name)
+		r.logger.Infof("deleted %d tags for module %s", res.RowsAffected(), name)
 	}
 
 	// delete module
@@ -174,7 +176,7 @@ func (r *registryRepository) DeleteModule(ctx context.Context, name string) erro
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted module %s", name)
+		r.logger.Infof("deleted module %s", name)
 	} else {
 		return errors.New("module not found")
 	}
@@ -303,7 +305,7 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted %d protofiles for tag %s", res.RowsAffected(), tag)
+		r.logger.Infof("deleted %d protofiles for tag %s", res.RowsAffected(), tag)
 	}
 
 	// delete dependencies
@@ -315,7 +317,7 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted %d dependencies for tag %s", res.RowsAffected(), tag)
+		r.logger.Infof("deleted %d dependencies for tag %s", res.RowsAffected(), tag)
 	}
 
 	// delete tag
@@ -327,7 +329,7 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 	}
 
 	if res.RowsAffected() > 0 {
-		log.Infof("deleted tag %s", tag)
+		r.logger.Infof("deleted tag %s", tag)
 	} else {
 		return errors.New("tag not found")
 	}
