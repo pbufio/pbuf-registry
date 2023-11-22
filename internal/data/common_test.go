@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kratos/kratos/v2/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pbufio/pbuf-registry/migrations"
 	"github.com/pbufio/pbuf-registry/test_utils"
@@ -49,7 +50,7 @@ func (s *TestSuite) SetupSuite() {
 	}
 	migrations.Migrate(db)
 
-	s.registryRepository = NewRegistryRepository(pool)
+	s.registryRepository = NewRegistryRepository(pool, log.DefaultLogger)
 }
 
 func (s *TestSuite) TearDownSuite() {

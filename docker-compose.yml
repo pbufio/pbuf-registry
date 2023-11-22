@@ -17,20 +17,30 @@ services:
       timeout: 10s
       retries: 5
   pbuf-registry:
-    image: ghcr.io/pbufio/registry:v0.1.2
+    image: ghcr.io/pbufio/registry:v0.3.0-rc.1
     restart: always
     depends_on:
       - db
     ports:
       - "8080:8080"
-      - "8081:8081"
+      - "6777:6777"
       - "8082:8082"
     healthcheck:
       test: wget -O - http://localhost:8082/healthz || exit 1
       interval: 5s
       timeout: 10s
       retries: 5
+    volumes:
+      - ./gen/certs:/app/certs
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
+      SERVER_GRPC_TLS_ENABLED: true
+      SERVER_GRPC_TLS_CERTFILE: /app/certs/server-cert.pem
+      SERVER_GRPC_TLS_KEYFILE: /app/certs/server-key.pem
+      SERVER_GRPC_AUTH_ENABLED: true
+      SERVER_GRPC_AUTH_TYPE: static-token
+      SERVER_HTTP_AUTH_ENABLED: true
+      SERVER_HTTP_AUTH_TYPE: static-token
+      SERVER_STATIC_TOKEN: ${SERVER_STATIC_TOKEN}
     command: >
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"

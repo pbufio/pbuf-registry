@@ -24,7 +24,14 @@ The registry solves this problem by providing a central place to store and manag
 #### Steps
 
 1. Clone the repository
-2. Run `docker-compose up -d`
+2. Generate certificates with `make certs-gen` command (they will appear in `gen/certs` folder) or put your own certificates in the folder
+3. Export `SERVER_STATIC_TOKEN` with static authorization token
+4. Run `make run-prod` to start the registry
+5. Run `make stop-prod` to stop the running registry
+
+#### Configuration
+
+The registry can be configured with environment variables that overrides values in the `config/config.yaml` file. For instance, to change the database DSN you can set `DATA_DATABASE_DSN` environment variable that is reflect to `data.database.dsn` yaml property.
 
 ### Helm Chart
 
@@ -63,7 +70,7 @@ The registry provides a REST API (`:8080` port by default). You can find the swa
 
 #### gRPC
 
-The registry provides a gRPC API (`:8081` port by default). You can find the protobuf definition [here](https://github.com/pbufio/pbuf-registry/blob/main/api/v1/registry.proto)
+The registry provides a gRPC API (`:6777` port by default). You can find the protobuf definition [here](https://github.com/pbufio/pbuf-registry/blob/main/api/v1/registry.proto)
 
 ## Development and Contributing
 

@@ -72,6 +72,21 @@ run:
 stop:
 	docker-compose -f docker-compose.dev.yml down
 
+.PHONY: cert-gen
+# generate cert
+cert-gen:
+	./scripts/cert-gen.sh
+
+.PHONY: run-prod
+# run prod
+run-prod:
+	docker-compose -f docker-compose.yml up --force-recreate -d
+
+.PHONY: stop-prod
+# stop prod
+stop-prod:
+	docker-compose -f docker-compose.yml down
+
 # show help
 help:
 	@echo ''

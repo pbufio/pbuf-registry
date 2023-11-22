@@ -1,10 +1,23 @@
 server:
   http:
     addr: 0.0.0.0:8080
+    timeout: 30s
+    auth:
+      enabled: false
+      type:
   grpc:
-    addr: 0.0.0.0:8081
+    addr: 0.0.0.0:6777
+    timeout: 30s
+    tls:
+      enabled: false
+      certFile:
+      keyFile:
+    auth:
+      enabled: false
+      type:
   debug:
     addr: 0.0.0.0:8082
+    timeout: 10s
 
 
 data:
