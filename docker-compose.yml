@@ -17,7 +17,7 @@ services:
       timeout: 10s
       retries: 5
   pbuf-registry:
-    image: ghcr.io/pbufio/registry:v0.3.0-rc1
+    image: ghcr.io/pbufio/registry:v0.3.0-rc.1
     restart: always
     depends_on:
       - db
