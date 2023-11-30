@@ -71,7 +71,7 @@ jobs:
 
       - name: Setup pbuf cli
         id: pbuf-setup
-        uses: pbufio/pbuf-setup@v1
+        uses: pbufio/pbuf-setup-action@v1
         with:
           pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
 
