@@ -60,3 +60,25 @@ jobs:
 
       - name: Docker Push GHCR
         run: docker push ghcr.io/pbufio/registry:${{ github.ref_name }}
+
+  upload_proto:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup pbuf cli
+        id: pbuf-setup
+        uses: pbufio/pbuf-setup@v1
+        with:
+          pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
+
+      - name: Register Module
+        id: pbuf-register
+        run: pbuf-cli modules register
+
+      - name: Push Module Tag
+        id: pbuf-push
+        run: pbuf-cli modules push ${{ github.ref_name }}
