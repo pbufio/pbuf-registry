@@ -75,6 +75,13 @@ jobs:
         with:
           pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
 
+      - name: Install custom CA certificate
+        run: |
+          sudo apt-get install -y ca-certificates
+          mkdir -p /usr/local/share/ca-certificates
+          echo "${{ secrets.PBUF_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/pbuf.crt
+          sudo update-ca-certificates
+
       - name: Register Module
         id: pbuf-register
         run: pbuf-cli modules register
