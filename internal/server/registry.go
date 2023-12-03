@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
@@ -117,6 +118,16 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		return nil, err
 	}
 
+	if request.IsDraft {
+		module, err := r.registryRepository.PushDraftModule(ctx, name, tag, request.Protofiles, request.Dependencies)
+		if err != nil {
+			r.logger.Infof("error pushing draft module: %v", err)
+			return nil, err
+		}
+
+		return module, nil
+	}
+
 	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles)
 	if err != nil {
 		r.logger.Infof("error pushing module: %v", err)
@@ -143,10 +154,28 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 		return nil, errors.New("tag cannot be empty")
 	}
 
+	tagNotFound := false
+
 	module, protoFiles, err := r.registryRepository.PullModule(ctx, name, tag)
 	if err != nil {
-		r.logger.Infof("error pulling module: %v", err)
-		return nil, err
+		if errors.Is(err, data.TagNotFoundError) {
+			tagNotFound = true
+		} else {
+			r.logger.Infof("error pulling module: %v", err)
+			return nil, err
+		}
+	}
+
+	if tagNotFound {
+		module, protoFiles, err = r.registryRepository.PullDraftModule(ctx, name, tag)
+		if err != nil {
+			if errors.Is(err, data.TagNotFoundError) {
+				return nil, fmt.Errorf("tag %s not found for module %s", tag, name)
+			} else {
+				r.logger.Infof("error pulling draft module: %v", err)
+				return nil, err
+			}
+		}
 	}
 
 	return &v1.PullModuleResponse{

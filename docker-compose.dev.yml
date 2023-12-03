@@ -33,3 +33,21 @@ services:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
     command: >
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"
+  pbuf-registry-compaction:
+    build:
+      context: .
+    restart: always
+    depends_on:
+      - db
+      - pbuf-registry
+    ports:
+      - "8083:8082"
+    healthcheck:
+      test: wget -O - http://localhost:8082/healthz || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    environment:
+      DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
+    command: >
+      sh -c "/app/pbuf-registry compaction"

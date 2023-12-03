@@ -418,6 +418,10 @@
         "name": {
           "type": "string",
           "description": "The name of the module to retrieve."
+        },
+        "includeDraftTags": {
+          "type": "boolean",
+          "title": "Include draft tags or not"
         }
       },
       "description": "GetModuleRequest is the request message for GetModule."
@@ -457,6 +461,13 @@
             "type": "string"
           },
           "description": "The tags of the module."
+        },
+        "draftTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The draft tags of the module."
         }
       },
       "description": "Module is a module registered in the registry."
@@ -533,6 +544,10 @@
             "$ref": "#/definitions/v1Dependency"
           },
           "title": "Dependencies"
+        },
+        "isDraft": {
+          "type": "boolean",
+          "title": "Is tag a draft"
         }
       },
       "description": "PushModuleRequest is the request message for PushModule."

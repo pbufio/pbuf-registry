@@ -7,6 +7,7 @@ import (
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pbufio/pbuf-registry/internal/background"
 	"github.com/pbufio/pbuf-registry/internal/config"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/server"
@@ -21,6 +22,15 @@ var (
 
 	id, _ = os.Hostname()
 )
+
+type Launcher struct {
+	config *config.Config
+
+	mainApp  *kratos.App
+	debugApp *kratos.App
+
+	compactionDaemon background.CompactionDaemon
+}
 
 func main() {
 	config.NewLoader().MustLoad()
@@ -51,8 +61,29 @@ func main() {
 		),
 	)
 
-	err = app.Run()
+	debugApp := kratos.New(
+		kratos.ID(id),
+		kratos.Name(Name),
+		kratos.Version(Version),
+		kratos.Metadata(map[string]string{}),
+		kratos.Logger(logger),
+		kratos.Server(
+			server.NewDebugServer(&config.Cfg.Server, logger),
+		),
+	)
+
+	launcher := &Launcher{
+		config: config.Cfg,
+
+		mainApp:  app,
+		debugApp: debugApp,
+
+		compactionDaemon: background.NewCompactionDaemon(registryRepository, logger),
+	}
+
+	err = CreateRootCommand(launcher).Execute()
 	if err != nil {
-		logHelper.Errorf("failed to run application: %v", err)
+		logHelper.Errorf("failed to execute command: %v", err)
+		return
 	}
 }
