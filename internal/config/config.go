@@ -47,6 +47,12 @@ type Config struct {
 			DSN string `mapstructure:"dsn"`
 		} `mapstructure:"database"`
 	} `mapstructure:"data"`
+
+	Daemons struct {
+		Compaction struct {
+			CronSchedule string `mapstructure:"cron"`
+		}
+	}
 }
 
 // Cfg is the global config

@@ -103,6 +103,9 @@ message ListModulesResponse {
 message GetModuleRequest {
   // The name of the module to retrieve.
   string name = 1;
+
+  // Include draft tags or not
+  bool include_draft_tags = 2;
 }
 
 // PullModuleRequest is the request message for PullModule.
@@ -142,6 +145,9 @@ message PushModuleRequest {
 
   // Dependencies
   repeated Dependency dependencies = 4;
+
+  // Is tag a draft
+  bool is_draft = 5;
 }
 
 // DeleteModuleRequest is the request message for DeleteModule.

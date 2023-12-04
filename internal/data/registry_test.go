@@ -269,6 +269,112 @@ func Test_registryRepository_PushModule(t *testing.T) {
 	}
 }
 
+func Test_registryRepository_PushDraftModule(t *testing.T) {
+	type args struct {
+		ctx          context.Context
+		name         string
+		tag          string
+		protofiles   []*v1.ProtoFile
+		dependencies []*v1.Dependency
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *v1.Module
+		wantErr bool
+	}{
+		{
+			name: "Push draft module",
+			args: args{
+				ctx:        context.Background(),
+				name:       "pbuf.io/pbuf-registry",
+				tag:        "v0.0.0-rc.1",
+				protofiles: protofiles,
+			},
+			want: &v1.Module{
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Push draft module with existing tag",
+			args: args{
+				ctx:        context.Background(),
+				name:       "pbuf.io/pbuf-registry",
+				tag:        "v0.0.0-rc.1",
+				protofiles: protofiles,
+			},
+			want: &v1.Module{
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Push draft module",
+			args: args{
+				ctx:        context.Background(),
+				name:       "pbuf.io/pbuf-registry-2",
+				tag:        "v0.0.0-rc.1",
+				protofiles: protofiles,
+			},
+			want: &v1.Module{
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry-2",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Push draft module with dependencies",
+			args: args{
+				ctx:        context.Background(),
+				name:       "pbuf.io/pbuf-registry-2",
+				tag:        "v0.0.0-rc.1",
+				protofiles: protofiles,
+				dependencies: []*v1.Dependency{
+					{
+						Name: "pbuf.io/pbuf-registry",
+						Tag:  "v0.0.0",
+					},
+				},
+			},
+			want: &v1.Module{
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry-2",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			got, err := r.PushDraftModule(tt.args.ctx, tt.args.name, tt.args.tag, tt.args.protofiles, tt.args.dependencies)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PushDraftModule() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if got != nil {
+				got.Id = fakeUUID
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("PushDraftModule() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_registryRepository_PullModule(t *testing.T) {
 	type args struct {
 		ctx  context.Context
@@ -290,9 +396,10 @@ func Test_registryRepository_PullModule(t *testing.T) {
 				tag:  "v0.0.0",
 			},
 			wantModule: &v1.Module{
-				Id:   fakeUUID,
-				Name: "pbuf.io/pbuf-registry",
-				Tags: []string{"v0.0.0"},
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
 			},
 			want:    protofiles,
 			wantErr: false,
@@ -339,6 +446,104 @@ func Test_registryRepository_PullModule(t *testing.T) {
 			}
 			if !reflect.DeepEqual(protoFiles, tt.want) {
 				t.Errorf("PullModule() got1 = %v, want %v", protoFiles, tt.want)
+			}
+		})
+	}
+}
+
+func Test_registryRepository_PullDraftModule(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+		tag  string
+	}
+	tests := []struct {
+		name       string
+		args       args
+		want       []*v1.ProtoFile
+		wantModule *v1.Module
+		wantErr    bool
+	}{
+		{
+			name: "Pull draft module",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.0.0-rc.1",
+			},
+			wantModule: &v1.Module{
+				Id:        fakeUUID,
+				Name:      "pbuf.io/pbuf-registry",
+				Tags:      []string{"v0.0.0"},
+				DraftTags: []string{"v0.0.0-rc.1"},
+			},
+			want:    protofiles,
+			wantErr: false,
+		},
+		{
+			name: "Pull draft module not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry-not-found",
+				tag:  "v0.0.0-rc.1",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name: "Pull draft module - tag not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.1.0",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name: "Pull draft module - tag not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.1.0",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name: "Pull draft module - tag not found",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry",
+				tag:  "v0.1.0",
+			},
+			wantModule: nil,
+			want:       nil,
+			wantErr:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := suite.registryRepository
+
+			module, protoFiles, err := r.PullDraftModule(tt.args.ctx, tt.args.name, tt.args.tag)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PullDraftModule() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if module != nil {
+				module.Id = fakeUUID
+			}
+
+			if !reflect.DeepEqual(module, tt.wantModule) {
+				t.Errorf("PullDraftModule() got = %v, want %v", module, tt.want)
+			}
+			if !reflect.DeepEqual(protoFiles, tt.want) {
+				t.Errorf("PullDraftModule() got1 = %v, want %v", protoFiles, tt.want)
 			}
 		})
 	}

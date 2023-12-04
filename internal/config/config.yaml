@@ -19,7 +19,10 @@ server:
     addr: 0.0.0.0:8082
     timeout: 10s
 
-
 data:
   database:
     dsn: "postgres://pbuf:pbuf@localhost:5432/pbuf_registry?sslmode=disable"
+
+daemons:
+  compaction:
+    cron: "0 * * * *"
