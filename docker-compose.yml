@@ -54,6 +54,8 @@ services:
     depends_on:
       - db
       - pbuf-registry
+    networks:
+      - internal
     ports:
       - "127.0.0.1:8083:8082"
     healthcheck:
@@ -71,6 +73,8 @@ services:
     depends_on:
       - db
       - pbuf-registry
+    networks:
+      - internal
     ports:
       - "127.0.0.1:8084:8082"
     healthcheck:
