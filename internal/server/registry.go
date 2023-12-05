@@ -18,12 +18,14 @@ const (
 type RegistryServer struct {
 	v1.UnimplementedRegistryServer
 	registryRepository data.RegistryRepository
+	metadataRepository data.MetadataRepository
 	logger             *log.Helper
 }
 
-func NewRegistryServer(registryRepository data.RegistryRepository, logger log.Logger) *RegistryServer {
+func NewRegistryServer(registryRepository data.RegistryRepository, metadataRepository data.MetadataRepository, logger log.Logger) *RegistryServer {
 	return &RegistryServer{
 		registryRepository: registryRepository,
+		metadataRepository: metadataRepository,
 		logger:             log.NewHelper(log.With(logger, "module", "server/RegistryServer")),
 	}
 }
@@ -61,6 +63,24 @@ func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleReq
 
 	if module == nil {
 		return nil, errors.New("module not found")
+	}
+
+	if len(module.Tags) > 0 {
+		tagId, err := r.registryRepository.GetModuleTagId(ctx, name, module.Tags[0])
+		if err != nil {
+			r.logger.Infof("error getting module tag id: %v", err)
+			return nil, err
+		}
+
+		tagMeta, err := r.metadataRepository.GetTagMetaByTagId(ctx, tagId)
+		if err != nil {
+			r.logger.Infof("error getting tag meta: %v", err)
+			return nil, err
+		}
+
+		if tagMeta != nil {
+			module.Packages = tagMeta.Packages
+		}
 	}
 
 	return module, nil
@@ -113,7 +133,7 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		return nil, errors.New("tag cannot be empty")
 	}
 
-	err := utils.ValidateProtoFiles(request.Protofiles)
+	err := utils.ValidateProtoFiles(request.Protofiles, r.logger)
 	if err != nil {
 		return nil, err
 	}

@@ -3,15 +3,13 @@ package utils
 import (
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/google/martian/log"
+	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
-	"github.com/yoheimuta/go-protoparser/v4"
 )
 
 // ValidateProtoFiles validates proto files
-func ValidateProtoFiles(protoFiles []*v1.ProtoFile) error {
+func ValidateProtoFiles(protoFiles []*v1.ProtoFile, logger *log.Helper) error {
 	for _, protoFile := range protoFiles {
 		if protoFile.Filename == "" {
 			return errors.New("filename cannot be empty")
@@ -22,20 +20,10 @@ func ValidateProtoFiles(protoFiles []*v1.ProtoFile) error {
 		}
 
 		// check that file contents is valid
-		err := parseProtoFile(protoFile.Filename, protoFile.Content)
+		_, err := parseProtoFile(protoFile.Content)
 		if err != nil {
 			return fmt.Errorf("invalid proto file %s: %w", protoFile.Filename, err)
 		}
-	}
-
-	return nil
-}
-
-func parseProtoFile(filename, content string) error {
-	_, err := protoparser.Parse(strings.NewReader(content))
-	if err != nil {
-		log.Infof("error parsing proto file %s: %v", filename, err)
-		return err
 	}
 
 	return nil

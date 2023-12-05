@@ -21,6 +21,7 @@ var suite TestSuite
 type TestSuite struct {
 	psqlContainer      *test_utils.PostgreSQLContainer
 	registryRepository RegistryRepository
+	metadataRepository MetadataRepository
 }
 
 func (s *TestSuite) SetupSuite() {
@@ -51,6 +52,7 @@ func (s *TestSuite) SetupSuite() {
 	migrations.Migrate(db)
 
 	s.registryRepository = NewRegistryRepository(pool, log.DefaultLogger)
+	s.metadataRepository = NewMetadataRepository(pool, log.DefaultLogger)
 }
 
 func (s *TestSuite) TearDownSuite() {
