@@ -29,9 +29,9 @@ type Launcher struct {
 	mainApp  *kratos.App
 	debugApp *kratos.App
 
-	compactionDaemon background.CompactionDaemon
+	compactionDaemon   background.Daemon
+	protoParsingDaemon background.Daemon
 }
-
 func main() {
 	config.NewLoader().MustLoad()
 
@@ -46,7 +46,8 @@ func main() {
 	defer pool.Close()
 
 	registryRepository := data.NewRegistryRepository(pool, logger)
-	registryServer := server.NewRegistryServer(registryRepository, logger)
+	metadataRepository := data.NewMetadataRepository(pool, logger)
+	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
 
 	app := kratos.New(
 		kratos.ID(id),
@@ -78,12 +79,12 @@ func main() {
 		mainApp:  app,
 		debugApp: debugApp,
 
-		compactionDaemon: background.NewCompactionDaemon(registryRepository, logger),
+		compactionDaemon:   background.NewCompactionDaemon(registryRepository, logger),
+		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, logger),
 	}
 
 	err = CreateRootCommand(launcher).Execute()
 	if err != nil {
-		logHelper.Errorf("failed to execute command: %v", err)
-		return
+		logHelper.Errorf("failed to run application: %v", err)
 	}
 }

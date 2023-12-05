@@ -24,25 +24,26 @@ type RegistryRepository interface {
 	PushDraftModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies []*v1.Dependency) (*v1.Module, error)
 	PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
 	PullDraftModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
+	GetModuleTagId(ctx context.Context, moduleName string, tag string) (string, error)
 	DeleteModuleTag(ctx context.Context, name string, tag string) error
 	AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error
 	GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
 	DeleteObsoleteDraftTags(ctx context.Context) error
 }
 
-type registryRepository struct {
+type registryRepo struct {
 	pool   *pgxpool.Pool
 	logger *log.Helper
 }
 
 func NewRegistryRepository(pool *pgxpool.Pool, logger log.Logger) RegistryRepository {
-	return &registryRepository{
+	return &registryRepo{
 		pool:   pool,
 		logger: log.NewHelper(log.With(logger, "module", "data/RegistryRepository")),
 	}
 }
 
-func (r *registryRepository) RegisterModule(ctx context.Context, moduleName string) error {
+func (r *registryRepo) RegisterModule(ctx context.Context, moduleName string) error {
 	// Insert module
 	_, err := r.pool.Exec(ctx,
 		"INSERT INTO modules (name) VALUES ($1) ON CONFLICT (name) DO NOTHING",
@@ -54,7 +55,7 @@ func (r *registryRepository) RegisterModule(ctx context.Context, moduleName stri
 	return nil
 }
 
-func (r *registryRepository) GetModule(ctx context.Context, name string) (*v1.Module, error) {
+func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, error) {
 	var module v1.Module
 	err := r.pool.QueryRow(ctx,
 		"SELECT id, name FROM modules WHERE name = $1",
@@ -118,7 +119,7 @@ func (r *registryRepository) GetModule(ctx context.Context, name string) (*v1.Mo
 
 // ListModules returns a list of modules with paging support
 // Token is the base64 encoded module name
-func (r *registryRepository) ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error) {
+func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error) {
 	var modules []*v1.Module
 
 	query := "SELECT id, name FROM modules"
@@ -159,7 +160,7 @@ func (r *registryRepository) ListModules(ctx context.Context, pageSize int, toke
 	return modules, nextPageToken, nil
 }
 
-func (r *registryRepository) DeleteModule(ctx context.Context, name string) error {
+func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 	// delete all protofiles
 	res, err := r.pool.Exec(ctx,
 		"DELETE FROM protofiles WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
@@ -225,7 +226,7 @@ func (r *registryRepository) DeleteModule(ctx context.Context, name string) erro
 	return nil
 }
 
-func (r *registryRepository) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error) {
+func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error) {
 	// check if module exists
 	module, err := r.GetModule(ctx, name)
 	if err != nil {
@@ -243,8 +244,21 @@ func (r *registryRepository) PushModule(ctx context.Context, name string, tag st
 		}
 	}
 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not begin transaction: %w", err)
+	}
+	defer func(tx pgx.Tx, ctx context.Context) {
+		err := tx.Rollback(ctx)
+		if err != nil {
+			if !errors.Is(err, pgx.ErrTxClosed) {
+				r.logger.Errorf("could not rollback transaction: %w", err)
+			}
+		}
+	}(tx, context.Background())
+
 	// create the tag
-	_, err = r.pool.Exec(ctx, "INSERT INTO tags (module_id, tag) VALUES ($1, $2)", module.Id, tag)
+	_, err = tx.Exec(ctx, "INSERT INTO tags (module_id, tag) VALUES ($1, $2)", module.Id, tag)
 	if err != nil {
 		return nil, fmt.Errorf("could not insert tag into database: %w", err)
 	}
@@ -252,7 +266,7 @@ func (r *registryRepository) PushModule(ctx context.Context, name string, tag st
 	var tagId string
 
 	// fetch the new tag
-	err = r.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		"SELECT id FROM tags WHERE module_id = $1 AND tag = $2",
 		module.Id, tag).Scan(&tagId)
 	if err != nil {
@@ -261,7 +275,7 @@ func (r *registryRepository) PushModule(ctx context.Context, name string, tag st
 
 	// insert protofiles
 	for _, protofile := range protofiles {
-		_, err = r.pool.Exec(ctx,
+		_, err = tx.Exec(ctx,
 			"INSERT INTO protofiles (tag_id, filename, content) VALUES ($1, $2, $3)",
 			tagId, protofile.Filename, protofile.Content)
 		if err != nil {
@@ -269,12 +283,18 @@ func (r *registryRepository) PushModule(ctx context.Context, name string, tag st
 		}
 	}
 
+	err = tx.Commit(ctx)
+	if err != nil {
+		r.logger.Errorf("could not commit transaction: %w", err)
+		return nil, fmt.Errorf("could not push the module. internal error")
+	}
+
 	module.Tags = append(module.Tags, tag)
 
 	return module, nil
 }
 
-func (r *registryRepository) PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
+func (r *registryRepo) PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
 	// check if module exists
 	module, err := r.GetModule(ctx, name)
 	if err != nil {
@@ -285,7 +305,7 @@ func (r *registryRepository) PullModule(ctx context.Context, name string, tag st
 		return nil, nil, errors.New("module not found")
 	}
 
-	tagId, err := r.getModuleTagId(ctx, name, tag)
+	tagId, err := r.GetModuleTagId(ctx, name, tag)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get tag id: %w", err)
 	}
@@ -317,7 +337,7 @@ func (r *registryRepository) PullModule(ctx context.Context, name string, tag st
 	return module, protofiles, nil
 }
 
-func (r *registryRepository) PullDraftModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
+func (r *registryRepo) PullDraftModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error) {
 	// fetch module with GetModule method and get all other from draft_tags table
 	module, err := r.GetModule(ctx, name)
 	if err != nil {
@@ -351,8 +371,8 @@ func (r *registryRepository) PullDraftModule(ctx context.Context, name string, t
 	return module, protofiles, nil
 }
 
-func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, tag string) error {
-	tagId, err := r.getModuleTagId(ctx, name, tag)
+func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag string) error {
+	tagId, err := r.GetModuleTagId(ctx, name, tag)
 	if err != nil {
 		return fmt.Errorf("could not get tag id: %w", err)
 	}
@@ -402,9 +422,9 @@ func (r *registryRepository) DeleteModuleTag(ctx context.Context, name string, t
 	return nil
 }
 
-func (r *registryRepository) AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error {
+func (r *registryRepo) AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error {
 	// find the tag id by name and tag
-	tagId, err := r.getModuleTagId(ctx, name, tag)
+	tagId, err := r.GetModuleTagId(ctx, name, tag)
 	if err != nil {
 		return fmt.Errorf("could not get tag id: %w", err)
 	}
@@ -434,9 +454,8 @@ func (r *registryRepository) AddModuleDependencies(ctx context.Context, name str
 	return nil
 }
 
-func (r *registryRepository) GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
+func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
 	var dependencies []*v1.Dependency
-
 	// find the latest tag if tag is empty
 	if tag == "" {
 		err := r.pool.QueryRow(ctx,
@@ -450,7 +469,7 @@ func (r *registryRepository) GetModuleDependencies(ctx context.Context, name str
 		}
 	}
 
-	tagId, err := r.getModuleTagId(ctx, name, tag)
+	tagId, err := r.GetModuleTagId(ctx, name, tag)
 	if err != nil {
 		return nil, fmt.Errorf("could not get tag id: %w", err)
 	}
@@ -497,7 +516,7 @@ func (r *registryRepository) GetModuleDependencies(ctx context.Context, name str
 	return dependencies, nil
 }
 
-func (r *registryRepository) PushDraftModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies []*v1.Dependency) (*v1.Module, error) {
+func (r *registryRepo) PushDraftModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies []*v1.Dependency) (*v1.Module, error) {
 	// check if module exists
 	module, err := r.GetModule(ctx, name)
 	if err != nil {
@@ -544,7 +563,7 @@ func (r *registryRepository) PushDraftModule(ctx context.Context, name string, t
 	return module, nil
 }
 
-func (r *registryRepository) getModuleTagId(ctx context.Context, moduleName string, tag string) (string, error) {
+func (r *registryRepo) GetModuleTagId(ctx context.Context, moduleName string, tag string) (string, error) {
 	// check if tag exists
 	var tagId string
 	err := r.pool.QueryRow(ctx,
@@ -562,7 +581,7 @@ func (r *registryRepository) getModuleTagId(ctx context.Context, moduleName stri
 
 // DeleteObsoleteDraftTags deletes all draft tags
 // that are older than 7 days
-func (r *registryRepository) DeleteObsoleteDraftTags(ctx context.Context) error {
+func (r *registryRepo) DeleteObsoleteDraftTags(ctx context.Context) error {
 	res, err := r.pool.Exec(ctx,
 		"DELETE FROM draft_tags WHERE updated_at < NOW() - INTERVAL '7 days'")
 	if err != nil {

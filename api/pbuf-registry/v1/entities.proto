@@ -17,6 +17,9 @@ message Module {
 
   // The draft tags of the module.
   repeated string draft_tags = 4;
+
+  // Packages that uses in this module
+  repeated string packages = 5;
 }
 
 // ProtoFile is a proto file registered in the registry.

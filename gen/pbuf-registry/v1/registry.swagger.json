@@ -468,6 +468,13 @@
             "type": "string"
           },
           "description": "The draft tags of the module."
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages that uses in this module"
         }
       },
       "description": "Module is a module registered in the registry."

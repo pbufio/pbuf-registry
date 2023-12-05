@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
+	"github.com/pbufio/pbuf-registry/internal/model"
+	"github.com/pbufio/pbuf-registry/internal/utils"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 var protofiles = []*v1.ProtoFile{
 	{
 		Filename: "hello/test.proto",
-		Content:  "syntax = \"proto3\";",
+		Content:  "syntax = \"proto3\"; package hello; message Hello {}",
 	},
 }
 
@@ -713,6 +715,14 @@ func Test_registryRepository_DeleteModule(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Delete module 2",
+			args: args{
+				ctx:  context.Background(),
+				name: "pbuf.io/pbuf-registry-2",
+			},
+			wantErr: false,
+		},
+		{
 			name: "Delete module not found",
 			args: args{
 				ctx:  context.Background(),
@@ -727,6 +737,231 @@ func Test_registryRepository_DeleteModule(t *testing.T) {
 
 			if err := r.DeleteModule(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteModule() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_metadataRepo_GetUnprocessedTagIds(t *testing.T) {
+	type args struct {
+		moduleName string
+		tagIds     []string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "get unprocessed tag ids",
+			args: args{
+				moduleName: "test-module",
+				tagIds: []string{
+					"test-tag-1",
+					"test-tag-2",
+					"test-tag-3",
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := suite.metadataRepository
+
+			err := suite.registryRepository.RegisterModule(context.Background(), tt.args.moduleName)
+			if err != nil {
+				t.Errorf("error registering module: %v", err)
+				return
+			}
+
+			for _, tagId := range tt.args.tagIds {
+				_, err := suite.registryRepository.PushModule(
+					context.Background(),
+					tt.args.moduleName,
+					tagId,
+					protofiles)
+				if err != nil {
+					t.Errorf("error pushing module: %v", err)
+					return
+				}
+			}
+
+			got, err := m.GetUnprocessedTagIds(context.Background())
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetUnprocessedTagIds() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if len(got) != len(tt.args.tagIds) {
+				t.Errorf("GetUnprocessedTagIds() got = %v, want %v", got, tt.args.tagIds)
+			}
+		})
+	}
+}
+
+func Test_metadataRepo_GetProtoFilesForTagId(t *testing.T) {
+	var noProtoFiles []*v1.ProtoFile
+
+	type args struct {
+		tagId string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []*v1.ProtoFile
+		wantErr bool
+	}{
+		{
+			name: "get proto files for tag id",
+			args: args{
+				tagId: fakeUUID,
+			},
+			want:    protofiles,
+			wantErr: false,
+		},
+		{
+			name: "get proto files for tag id not found",
+			args: args{
+				tagId: "not-found",
+			},
+			want:    noProtoFiles,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := suite.metadataRepository
+
+			tagIds, err := repository.GetUnprocessedTagIds(context.Background())
+			if err != nil {
+				t.Errorf("error getting unprocessed tag ids: %v", err)
+				return
+			}
+
+			tagId := tt.args.tagId
+			if tt.args.tagId == fakeUUID {
+				tagId = tagIds[0]
+			}
+
+			got, err := repository.GetProtoFilesForTagId(context.Background(), tagId)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetProtoFilesForTagId() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetProtoFilesForTagId() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_metadataRepo_SaveParsedProtoFiles(t *testing.T) {
+	type args struct {
+		tagId string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "save parsed proto files",
+			args: args{
+				tagId: fakeUUID,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := suite.metadataRepository
+
+			tagIds, err := repository.GetUnprocessedTagIds(context.Background())
+			if err != nil {
+				t.Errorf("error getting unprocessed tag ids: %v", err)
+				return
+			}
+
+			tagId := tt.args.tagId
+			if tt.args.tagId == fakeUUID {
+				tagId = tagIds[0]
+			}
+
+			parsedProtoFiles, err := utils.ParseProtoFilesContents(protofiles)
+			if err != nil {
+				t.Errorf("error parsing proto files: %v", err)
+				return
+			}
+
+			err = repository.SaveParsedProtoFiles(context.Background(), tagId, parsedProtoFiles)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SaveParsedProtoFiles() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+		})
+	}
+}
+
+func Test_metadataRepo_GetTagMeta(t *testing.T) {
+	noImports := []string{}
+	noRefPackages := []string{}
+
+	tests := []struct {
+		name    string
+		want    *model.TagMeta
+		wantErr bool
+	}{
+		{
+			name: "get tag meta",
+			want: &model.TagMeta{
+				Packages:    []string{"hello"},
+				Imports:     noImports,
+				RefPackages: noRefPackages,
+				FilesMeta: []*model.FileMeta{
+					{
+						Filename:    "hello/test.proto",
+						Packages:    []string{"hello"},
+						Imports:     noImports,
+						RefPackages: noRefPackages,
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := suite.metadataRepository
+
+			tagIds, err := repository.GetUnprocessedTagIds(context.Background())
+			if err != nil {
+				t.Errorf("error getting unprocessed tag ids: %v", err)
+				return
+			}
+
+			parsedProtoFiles, err := utils.ParseProtoFilesContents(protofiles)
+			if err != nil {
+				t.Errorf("error parsing proto files: %v", err)
+				return
+			}
+
+			tagId := tagIds[0]
+			err = repository.SaveParsedProtoFiles(context.Background(), tagId, parsedProtoFiles)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SaveParsedProtoFiles() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			tagMeta, err := repository.GetTagMetaByTagId(context.Background(), tagId)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetTagMetaByTagId() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !reflect.DeepEqual(&tagMeta, &tt.want) {
+				t.Errorf("GetTagMetaByTagId() got = %v, want %v", tagMeta, tt.want)
 			}
 		})
 	}

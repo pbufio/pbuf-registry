@@ -66,7 +66,7 @@ func TestValidateProtoFiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := ValidateProtoFiles(tt.args.protoFiles); (err != nil) != tt.wantErr {
+			if err := ValidateProtoFiles(tt.args.protoFiles, nil); (err != nil) != tt.wantErr {
 				t.Errorf("ValidateProtoFiles() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

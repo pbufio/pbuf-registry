@@ -147,6 +147,34 @@ func (_m *RegistryRepository) GetModuleDependencies(ctx context.Context, name st
 	return r0, r1
 }
 
+// GetModuleTagId provides a mock function with given fields: ctx, moduleName, tag
+func (_m *RegistryRepository) GetModuleTagId(ctx context.Context, moduleName string, tag string) (string, error) {
+	ret := _m.Called(ctx, moduleName, tag)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetModuleTagId")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+		return rf(ctx, moduleName, tag)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
+		r0 = rf(ctx, moduleName, tag)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, moduleName, tag)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ListModules provides a mock function with given fields: ctx, pageSize, token
 func (_m *RegistryRepository) ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error) {
 	ret := _m.Called(ctx, pageSize, token)

@@ -7,20 +7,24 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/data"
 )
 
-type CompactionDaemon interface {
-	Run() error
-}
+const (
+	compactionDaemonName = "compaction"
+)
 
 type compactionDaemon struct {
 	registryRepository data.RegistryRepository
 	log                *log.Helper
 }
 
-func NewCompactionDaemon(registryRepository data.RegistryRepository, logger log.Logger) CompactionDaemon {
+func NewCompactionDaemon(registryRepository data.RegistryRepository, logger log.Logger) Daemon {
 	return &compactionDaemon{
 		registryRepository: registryRepository,
 		log:                log.NewHelper(log.With(logger, "module", "background/CompactionDaemon")),
 	}
+}
+
+func (d *compactionDaemon) Name() string {
+	return compactionDaemonName
 }
 
 func (d *compactionDaemon) Run() error {

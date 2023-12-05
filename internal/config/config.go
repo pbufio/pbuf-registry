@@ -51,8 +51,11 @@ type Config struct {
 	Daemons struct {
 		Compaction struct {
 			CronSchedule string `mapstructure:"cron"`
-		}
-	}
+		} `mapstructure:"compaction"`
+		ProtoParsing struct {
+			CronSchedule string `mapstructure:"cron"`
+		} `mapstructure:"protoparsing"`
+	} `mapstructure:"daemons"`
 }
 
 // Cfg is the global config

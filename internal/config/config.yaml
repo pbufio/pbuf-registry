@@ -26,3 +26,5 @@ data:
 daemons:
   compaction:
     cron: "0 * * * *"
+  protoparsing:
+    cron: "*/1 * * * *"
