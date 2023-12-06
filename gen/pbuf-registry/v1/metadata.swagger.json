@@ -1,0 +1,334 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "pbuf-registry/v1/metadata.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "MetadataService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/metadata": {
+      "post": {
+        "operationId": "MetadataService_GetMetadata",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetMetadataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetMetadataRequest"
+            }
+          }
+        ],
+        "tags": [
+          "MetadataService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Enum": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the enum."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1EnumValue"
+          },
+          "description": "The values of the enum."
+        }
+      },
+      "description": "Enum is an enum in a proto file."
+    },
+    "v1EnumValue": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the value."
+        },
+        "tag": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The tag of the value."
+        }
+      },
+      "description": "EnumValue is a value in an enum."
+    },
+    "v1Field": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the field."
+        },
+        "messageType": {
+          "type": "string",
+          "description": "The message_type of the field."
+        },
+        "tag": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The tag of the field."
+        },
+        "repeated": {
+          "type": "boolean",
+          "description": "The repeated flag of the field."
+        },
+        "map": {
+          "type": "boolean",
+          "description": "The map flag of the field."
+        },
+        "oneof": {
+          "type": "boolean",
+          "description": "The oneof flag of the field."
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "The optional flag of the field."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "The required flag of the field."
+        },
+        "oneofNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The one of names of the field"
+        },
+        "oneofTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The one of types of the field"
+        },
+        "mapKeyType": {
+          "type": "string",
+          "description": "The map key type of the field."
+        },
+        "mapValueType": {
+          "type": "string",
+          "description": "The map value type of the field."
+        }
+      },
+      "description": "Field is a field in a message."
+    },
+    "v1GetMetadataRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The module to get metadata for"
+        },
+        "tag": {
+          "type": "string",
+          "title": "The tag id to get metadata for"
+        }
+      }
+    },
+    "v1GetMetadataResponse": {
+      "type": "object",
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Package"
+          },
+          "title": "The packages in the module"
+        }
+      }
+    },
+    "v1Message": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the message."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Field"
+          },
+          "description": "The fields of the message."
+        },
+        "nestedMessages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          },
+          "description": "The nested messages of the message."
+        },
+        "nestedEnums": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Enum"
+          },
+          "description": "The nested enums of the message."
+        }
+      },
+      "description": "Message is a message in a proto file."
+    },
+    "v1Method": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the method."
+        },
+        "inputType": {
+          "type": "string",
+          "description": "The input type of the method."
+        },
+        "outputType": {
+          "type": "string",
+          "description": "The output type of the method."
+        }
+      },
+      "description": "Method is a method in a service."
+    },
+    "v1Package": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the package."
+        },
+        "protoFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ParsedProtoFile"
+          },
+          "description": "The proto files of the package."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PackageDependency"
+          },
+          "description": "The dependencies of the package."
+        }
+      },
+      "title": "Package is a proto file package used in a module"
+    },
+    "v1PackageDependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the dependency."
+        }
+      },
+      "description": "PackageDependency is a dependency of a package."
+    },
+    "v1ParsedProtoFile": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "The filename of the proto file."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          },
+          "description": "The messages in the proto file."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Service"
+          },
+          "description": "The services in the proto file."
+        }
+      },
+      "title": "ParsedProtoFile is a proto file parsed by the registry\ncontains information about messages and services in the proto file"
+    },
+    "v1Service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the service."
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Method"
+          },
+          "description": "The methods of the service."
+        }
+      },
+      "description": "Service is a service in a proto file."
+    }
+  }
+}

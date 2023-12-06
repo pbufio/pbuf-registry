@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -10,12 +11,14 @@ import (
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/pbufio/pbuf-registry/internal/utils"
+	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
 )
 
 type MetadataRepository interface {
 	GetUnprocessedTagIds(ctx context.Context) ([]string, error)
 	GetProtoFilesForTagId(ctx context.Context, tagId string) ([]*v1.ProtoFile, error)
 	SaveParsedProtoFiles(ctx context.Context, tagId string, files []*model.ParsedProtoFile) error
+	GetParsedProtoFiles(ctx context.Context, tagId string) ([]*model.ParsedProtoFile, error)
 	GetTagMetaByTagId(ctx context.Context, tagId string) (*model.TagMeta, error)
 }
 
@@ -147,6 +150,43 @@ func (m *metadataRepo) GetTagMetaByTagId(ctx context.Context, tagId string) (*mo
 	}
 
 	return &meta, nil
+}
+
+func (m metadataRepo) GetParsedProtoFiles(ctx context.Context, tagId string) ([]*model.ParsedProtoFile, error) {
+	var parsedProtoFiles []*model.ParsedProtoFile
+
+	rows, err := m.pool.Query(ctx, "SELECT filename, json FROM proto_parsed_data WHERE tag_id = $1", tagId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return parsedProtoFiles, nil
+		}
+		m.logger.Errorf("error getting parsed proto files for tag id %s: %v", tagId, err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var filename, protoJson string
+		var proto *unordered.Proto
+		err = rows.Scan(&filename, &protoJson)
+		if err != nil {
+			m.logger.Errorf("error scanning parsed proto file: %v", err)
+			return nil, err
+		}
+
+		err = json.Unmarshal([]byte(protoJson), &proto)
+		if err != nil {
+			m.logger.Errorf("error unmarshaling json: %v", err)
+			return nil, err
+		}
+
+		parsedProtoFiles = append(parsedProtoFiles, &model.ParsedProtoFile{
+			Filename: filename,
+			Proto:    proto,
+		})
+	}
+
+	return parsedProtoFiles, nil
 }
 
 // NewMetadataRepository create a new metadata repository with pool
