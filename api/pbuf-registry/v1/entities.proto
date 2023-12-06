@@ -39,3 +39,127 @@ message Dependency {
   // The tag of the dependency.
   string tag = 2;
 }
+
+// Package is a proto file package used in a module
+message Package {
+  // The name of the package.
+  string name = 1;
+
+  // The proto files of the package.
+  repeated ParsedProtoFile proto_files = 2;
+
+  // The dependencies of the package.
+  repeated PackageDependency dependencies = 3;
+}
+
+// ParsedProtoFile is a proto file parsed by the registry
+// contains information about messages and services in the proto file
+message ParsedProtoFile {
+  // The filename of the proto file.
+  string filename = 1;
+
+  // The messages in the proto file.
+  repeated Message messages = 2;
+
+  // The services in the proto file.
+  repeated Service services = 3;
+}
+
+// Message is a message in a proto file.
+message Message {
+  // The name of the message.
+  string name = 1;
+
+  // The fields of the message.
+  repeated Field fields = 2;
+
+  // The nested messages of the message.
+  repeated Message nested_messages = 3;
+
+  // The nested enums of the message.
+  repeated Enum nested_enums = 4;
+}
+
+// Field is a field in a message.
+message Field {
+  // The name of the field.
+  string name = 1;
+
+  // The message_type of the field.
+  string message_type = 2;
+
+  // The tag of the field.
+  int32 tag = 3;
+
+  // The repeated flag of the field.
+  bool repeated = 4;
+
+  // The map flag of the field.
+  bool map = 5;
+
+  // The oneof flag of the field.
+  bool oneof = 6;
+
+  // The optional flag of the field.
+  bool optional = 7;
+
+  // The required flag of the field.
+  bool required = 8;
+
+  // The one of names of the field
+  repeated string oneof_names = 9;
+
+  // The one of types of the field
+  repeated string oneof_types = 10;
+
+  // The map key type of the field.
+  string map_key_type = 11;
+
+  // The map value type of the field.
+  string map_value_type = 12;
+}
+
+// Enum is an enum in a proto file.
+message Enum {
+  // The name of the enum.
+  string name = 1;
+
+  // The values of the enum.
+  repeated EnumValue values = 2;
+}
+
+// EnumValue is a value in an enum.
+message EnumValue {
+  // The name of the value.
+  string name = 1;
+
+  // The tag of the value.
+  int32 tag = 2;
+}
+
+// Service is a service in a proto file.
+message Service {
+  // The name of the service.
+  string name = 1;
+
+  // The methods of the service.
+  repeated Method methods = 2;
+}
+
+// Method is a method in a service.
+message Method {
+  // The name of the method.
+  string name = 1;
+
+  // The input type of the method.
+  string input_type = 2;
+
+  // The output type of the method.
+  string output_type = 3;
+}
+
+// PackageDependency is a dependency of a package.
+message PackageDependency {
+  // The name of the dependency.
+  string name = 1;
+}

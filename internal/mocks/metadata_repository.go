@@ -17,6 +17,36 @@ type MetadataRepository struct {
 	mock.Mock
 }
 
+// GetParsedProtoFiles provides a mock function with given fields: ctx, tagId
+func (_m *MetadataRepository) GetParsedProtoFiles(ctx context.Context, tagId string) ([]*model.ParsedProtoFile, error) {
+	ret := _m.Called(ctx, tagId)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetParsedProtoFiles")
+	}
+
+	var r0 []*model.ParsedProtoFile
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*model.ParsedProtoFile, error)); ok {
+		return rf(ctx, tagId)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) []*model.ParsedProtoFile); ok {
+		r0 = rf(ctx, tagId)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*model.ParsedProtoFile)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, tagId)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetProtoFilesForTagId provides a mock function with given fields: ctx, tagId
 func (_m *MetadataRepository) GetProtoFilesForTagId(ctx context.Context, tagId string) ([]*v1.ProtoFile, error) {
 	ret := _m.Called(ctx, tagId)

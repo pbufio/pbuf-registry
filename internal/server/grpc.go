@@ -11,7 +11,11 @@ import (
 )
 
 // NewGRPCServer new a gRPC server.
-func NewGRPCServer(cfg *config.Server, registryServer *RegistryServer, logger log.Logger) *grpc.Server {
+func NewGRPCServer(cfg *config.Server,
+	registryServer *RegistryServer,
+	metadataServer *MetadataServer,
+	logger log.Logger,
+) *grpc.Server {
 	logHelper := log.NewHelper(logger)
 
 	tlsConfig, err := createTLSConfig(cfg, logHelper)
@@ -36,6 +40,7 @@ func NewGRPCServer(cfg *config.Server, registryServer *RegistryServer, logger lo
 	grpcServer := grpc.NewServer(opts...)
 
 	v1.RegisterRegistryServer(grpcServer, registryServer)
+	v1.RegisterMetadataServiceServer(grpcServer, metadataServer)
 
 	return grpcServer
 }

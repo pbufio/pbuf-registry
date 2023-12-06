@@ -221,6 +221,655 @@ func (x *Dependency) GetTag() string {
 	return ""
 }
 
+// Package is a proto file package used in a module
+type Package struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the package.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The proto files of the package.
+	ProtoFiles []*ParsedProtoFile `protobuf:"bytes,2,rep,name=proto_files,json=protoFiles,proto3" json:"proto_files,omitempty"`
+	// The dependencies of the package.
+	Dependencies []*PackageDependency `protobuf:"bytes,3,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+}
+
+func (x *Package) Reset() {
+	*x = Package{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Package) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Package) ProtoMessage() {}
+
+func (x *Package) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Package.ProtoReflect.Descriptor instead.
+func (*Package) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Package) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Package) GetProtoFiles() []*ParsedProtoFile {
+	if x != nil {
+		return x.ProtoFiles
+	}
+	return nil
+}
+
+func (x *Package) GetDependencies() []*PackageDependency {
+	if x != nil {
+		return x.Dependencies
+	}
+	return nil
+}
+
+// ParsedProtoFile is a proto file parsed by the registry
+// contains information about messages and services in the proto file
+type ParsedProtoFile struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The filename of the proto file.
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	// The messages in the proto file.
+	Messages []*Message `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
+	// The services in the proto file.
+	Services []*Service `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty"`
+}
+
+func (x *ParsedProtoFile) Reset() {
+	*x = ParsedProtoFile{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ParsedProtoFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ParsedProtoFile) ProtoMessage() {}
+
+func (x *ParsedProtoFile) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ParsedProtoFile.ProtoReflect.Descriptor instead.
+func (*ParsedProtoFile) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ParsedProtoFile) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *ParsedProtoFile) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *ParsedProtoFile) GetServices() []*Service {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+// Message is a message in a proto file.
+type Message struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the message.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The fields of the message.
+	Fields []*Field `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
+	// The nested messages of the message.
+	NestedMessages []*Message `protobuf:"bytes,3,rep,name=nested_messages,json=nestedMessages,proto3" json:"nested_messages,omitempty"`
+	// The nested enums of the message.
+	NestedEnums []*Enum `protobuf:"bytes,4,rep,name=nested_enums,json=nestedEnums,proto3" json:"nested_enums,omitempty"`
+}
+
+func (x *Message) Reset() {
+	*x = Message{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Message) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message) ProtoMessage() {}
+
+func (x *Message) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Message.ProtoReflect.Descriptor instead.
+func (*Message) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Message) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Message) GetFields() []*Field {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *Message) GetNestedMessages() []*Message {
+	if x != nil {
+		return x.NestedMessages
+	}
+	return nil
+}
+
+func (x *Message) GetNestedEnums() []*Enum {
+	if x != nil {
+		return x.NestedEnums
+	}
+	return nil
+}
+
+// Field is a field in a message.
+type Field struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the field.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The message_type of the field.
+	MessageType string `protobuf:"bytes,2,opt,name=message_type,json=messageType,proto3" json:"message_type,omitempty"`
+	// The tag of the field.
+	Tag int32 `protobuf:"varint,3,opt,name=tag,proto3" json:"tag,omitempty"`
+	// The repeated flag of the field.
+	Repeated bool `protobuf:"varint,4,opt,name=repeated,proto3" json:"repeated,omitempty"`
+	// The map flag of the field.
+	Map bool `protobuf:"varint,5,opt,name=map,proto3" json:"map,omitempty"`
+	// The oneof flag of the field.
+	Oneof bool `protobuf:"varint,6,opt,name=oneof,proto3" json:"oneof,omitempty"`
+	// The optional flag of the field.
+	Optional bool `protobuf:"varint,7,opt,name=optional,proto3" json:"optional,omitempty"`
+	// The required flag of the field.
+	Required bool `protobuf:"varint,8,opt,name=required,proto3" json:"required,omitempty"`
+	// The one of names of the field
+	OneofNames []string `protobuf:"bytes,9,rep,name=oneof_names,json=oneofNames,proto3" json:"oneof_names,omitempty"`
+	// The one of types of the field
+	OneofTypes []string `protobuf:"bytes,10,rep,name=oneof_types,json=oneofTypes,proto3" json:"oneof_types,omitempty"`
+	// The map key type of the field.
+	MapKeyType string `protobuf:"bytes,11,opt,name=map_key_type,json=mapKeyType,proto3" json:"map_key_type,omitempty"`
+	// The map value type of the field.
+	MapValueType string `protobuf:"bytes,12,opt,name=map_value_type,json=mapValueType,proto3" json:"map_value_type,omitempty"`
+}
+
+func (x *Field) Reset() {
+	*x = Field{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Field) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Field) ProtoMessage() {}
+
+func (x *Field) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Field.ProtoReflect.Descriptor instead.
+func (*Field) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *Field) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Field) GetMessageType() string {
+	if x != nil {
+		return x.MessageType
+	}
+	return ""
+}
+
+func (x *Field) GetTag() int32 {
+	if x != nil {
+		return x.Tag
+	}
+	return 0
+}
+
+func (x *Field) GetRepeated() bool {
+	if x != nil {
+		return x.Repeated
+	}
+	return false
+}
+
+func (x *Field) GetMap() bool {
+	if x != nil {
+		return x.Map
+	}
+	return false
+}
+
+func (x *Field) GetOneof() bool {
+	if x != nil {
+		return x.Oneof
+	}
+	return false
+}
+
+func (x *Field) GetOptional() bool {
+	if x != nil {
+		return x.Optional
+	}
+	return false
+}
+
+func (x *Field) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *Field) GetOneofNames() []string {
+	if x != nil {
+		return x.OneofNames
+	}
+	return nil
+}
+
+func (x *Field) GetOneofTypes() []string {
+	if x != nil {
+		return x.OneofTypes
+	}
+	return nil
+}
+
+func (x *Field) GetMapKeyType() string {
+	if x != nil {
+		return x.MapKeyType
+	}
+	return ""
+}
+
+func (x *Field) GetMapValueType() string {
+	if x != nil {
+		return x.MapValueType
+	}
+	return ""
+}
+
+// Enum is an enum in a proto file.
+type Enum struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the enum.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The values of the enum.
+	Values []*EnumValue `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+}
+
+func (x *Enum) Reset() {
+	*x = Enum{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Enum) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Enum) ProtoMessage() {}
+
+func (x *Enum) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Enum.ProtoReflect.Descriptor instead.
+func (*Enum) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Enum) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Enum) GetValues() []*EnumValue {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// EnumValue is a value in an enum.
+type EnumValue struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the value.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The tag of the value.
+	Tag int32 `protobuf:"varint,2,opt,name=tag,proto3" json:"tag,omitempty"`
+}
+
+func (x *EnumValue) Reset() {
+	*x = EnumValue{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *EnumValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumValue) ProtoMessage() {}
+
+func (x *EnumValue) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumValue.ProtoReflect.Descriptor instead.
+func (*EnumValue) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EnumValue) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *EnumValue) GetTag() int32 {
+	if x != nil {
+		return x.Tag
+	}
+	return 0
+}
+
+// Service is a service in a proto file.
+type Service struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the service.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The methods of the service.
+	Methods []*Method `protobuf:"bytes,2,rep,name=methods,proto3" json:"methods,omitempty"`
+}
+
+func (x *Service) Reset() {
+	*x = Service{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Service) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Service) ProtoMessage() {}
+
+func (x *Service) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Service.ProtoReflect.Descriptor instead.
+func (*Service) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Service) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Service) GetMethods() []*Method {
+	if x != nil {
+		return x.Methods
+	}
+	return nil
+}
+
+// Method is a method in a service.
+type Method struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the method.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The input type of the method.
+	InputType string `protobuf:"bytes,2,opt,name=input_type,json=inputType,proto3" json:"input_type,omitempty"`
+	// The output type of the method.
+	OutputType string `protobuf:"bytes,3,opt,name=output_type,json=outputType,proto3" json:"output_type,omitempty"`
+}
+
+func (x *Method) Reset() {
+	*x = Method{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Method) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Method) ProtoMessage() {}
+
+func (x *Method) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Method.ProtoReflect.Descriptor instead.
+func (*Method) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Method) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Method) GetInputType() string {
+	if x != nil {
+		return x.InputType
+	}
+	return ""
+}
+
+func (x *Method) GetOutputType() string {
+	if x != nil {
+		return x.OutputType
+	}
+	return ""
+}
+
+// PackageDependency is a dependency of a package.
+type PackageDependency struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of the dependency.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *PackageDependency) Reset() {
+	*x = PackageDependency{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PackageDependency) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PackageDependency) ProtoMessage() {}
+
+func (x *PackageDependency) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PackageDependency.ProtoReflect.Descriptor instead.
+func (*PackageDependency) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *PackageDependency) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_pbuf_registry_v1_entities_proto protoreflect.FileDescriptor
 
 var file_pbuf_registry_v1_entities_proto_rawDesc = []byte{
@@ -242,9 +891,86 @@ var file_pbuf_registry_v1_entities_proto_rawDesc = []byte{
 	0x6e, 0x74, 0x22, 0x32, 0x0a, 0x0a, 0x44, 0x65, 0x70, 0x65, 0x6e, 0x64, 0x65, 0x6e, 0x63, 0x79,
 	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
 	0x6e, 0x61, 0x6d, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x74, 0x61, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x03, 0x74, 0x61, 0x67, 0x42, 0x18, 0x5a, 0x16, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65,
-	0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x76, 0x31,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x09, 0x52, 0x03, 0x74, 0x61, 0x67, 0x22, 0xa8, 0x01, 0x0a, 0x07, 0x50, 0x61, 0x63, 0x6b, 0x61,
+	0x67, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x41, 0x0a, 0x0b, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5f,
+	0x66, 0x69, 0x6c, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x70, 0x62,
+	0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x61,
+	0x72, 0x73, 0x65, 0x64, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x46, 0x69, 0x6c, 0x65, 0x52, 0x0a, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x46, 0x0a, 0x0c, 0x64, 0x65, 0x70,
+	0x65, 0x6e, 0x64, 0x65, 0x6e, 0x63, 0x69, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x22, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76,
+	0x31, 0x2e, 0x50, 0x61, 0x63, 0x6b, 0x61, 0x67, 0x65, 0x44, 0x65, 0x70, 0x65, 0x6e, 0x64, 0x65,
+	0x6e, 0x63, 0x79, 0x52, 0x0c, 0x64, 0x65, 0x70, 0x65, 0x6e, 0x64, 0x65, 0x6e, 0x63, 0x69, 0x65,
+	0x73, 0x22, 0x99, 0x01, 0x0a, 0x0f, 0x50, 0x61, 0x72, 0x73, 0x65, 0x64, 0x50, 0x72, 0x6f, 0x74,
+	0x6f, 0x46, 0x69, 0x6c, 0x65, 0x12, 0x1a, 0x0a, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d,
+	0x65, 0x12, 0x34, 0x0a, 0x08, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x18, 0x02, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74,
+	0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x08, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x12, 0x34, 0x0a, 0x08, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x70, 0x62, 0x75, 0x66,
+	0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x52, 0x08, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x22, 0xca, 0x01,
+	0x0a, 0x07, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x2e, 0x0a,
+	0x06, 0x66, 0x69, 0x65, 0x6c, 0x64, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x16, 0x2e,
+	0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e,
+	0x46, 0x69, 0x65, 0x6c, 0x64, 0x52, 0x06, 0x66, 0x69, 0x65, 0x6c, 0x64, 0x73, 0x12, 0x41, 0x0a,
+	0x0f, 0x6e, 0x65, 0x73, 0x74, 0x65, 0x64, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73,
+	0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67,
+	0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x52, 0x0e, 0x6e, 0x65, 0x73, 0x74, 0x65, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73,
+	0x12, 0x38, 0x0a, 0x0c, 0x6e, 0x65, 0x73, 0x74, 0x65, 0x64, 0x5f, 0x65, 0x6e, 0x75, 0x6d, 0x73,
+	0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67,
+	0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6e, 0x75, 0x6d, 0x52, 0x0b, 0x6e,
+	0x65, 0x73, 0x74, 0x65, 0x64, 0x45, 0x6e, 0x75, 0x6d, 0x73, 0x22, 0xd6, 0x02, 0x0a, 0x05, 0x46,
+	0x69, 0x65, 0x6c, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x21, 0x0a, 0x0c, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b,
+	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x74,
+	0x61, 0x67, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x03, 0x74, 0x61, 0x67, 0x12, 0x1a, 0x0a,
+	0x08, 0x72, 0x65, 0x70, 0x65, 0x61, 0x74, 0x65, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x08, 0x72, 0x65, 0x70, 0x65, 0x61, 0x74, 0x65, 0x64, 0x12, 0x10, 0x0a, 0x03, 0x6d, 0x61, 0x70,
+	0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x03, 0x6d, 0x61, 0x70, 0x12, 0x14, 0x0a, 0x05, 0x6f,
+	0x6e, 0x65, 0x6f, 0x66, 0x18, 0x06, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x6f, 0x6e, 0x65, 0x6f,
+	0x66, 0x12, 0x1a, 0x0a, 0x08, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x18, 0x07, 0x20,
+	0x01, 0x28, 0x08, 0x52, 0x08, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x12, 0x1a, 0x0a,
+	0x08, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x08, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6f, 0x6e, 0x65,
+	0x6f, 0x66, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x18, 0x09, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0a,
+	0x6f, 0x6e, 0x65, 0x6f, 0x66, 0x4e, 0x61, 0x6d, 0x65, 0x73, 0x12, 0x1f, 0x0a, 0x0b, 0x6f, 0x6e,
+	0x65, 0x6f, 0x66, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x73, 0x18, 0x0a, 0x20, 0x03, 0x28, 0x09, 0x52,
+	0x0a, 0x6f, 0x6e, 0x65, 0x6f, 0x66, 0x54, 0x79, 0x70, 0x65, 0x73, 0x12, 0x20, 0x0a, 0x0c, 0x6d,
+	0x61, 0x70, 0x5f, 0x6b, 0x65, 0x79, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x0b, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0a, 0x6d, 0x61, 0x70, 0x4b, 0x65, 0x79, 0x54, 0x79, 0x70, 0x65, 0x12, 0x24, 0x0a,
+	0x0e, 0x6d, 0x61, 0x70, 0x5f, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18,
+	0x0c, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x6d, 0x61, 0x70, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x54,
+	0x79, 0x70, 0x65, 0x22, 0x4e, 0x0a, 0x04, 0x45, 0x6e, 0x75, 0x6d, 0x12, 0x12, 0x0a, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12,
+	0x32, 0x0a, 0x06, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x1a, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76,
+	0x31, 0x2e, 0x45, 0x6e, 0x75, 0x6d, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x06, 0x76, 0x61, 0x6c,
+	0x75, 0x65, 0x73, 0x22, 0x31, 0x0a, 0x09, 0x45, 0x6e, 0x75, 0x6d, 0x56, 0x61, 0x6c, 0x75, 0x65,
+	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
+	0x6e, 0x61, 0x6d, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x74, 0x61, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x05, 0x52, 0x03, 0x74, 0x61, 0x67, 0x22, 0x50, 0x0a, 0x07, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x31, 0x0a, 0x07, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x73,
+	0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67,
+	0x69, 0x73, 0x74, 0x72, 0x79, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x52,
+	0x07, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64, 0x73, 0x22, 0x5c, 0x0a, 0x06, 0x4d, 0x65, 0x74, 0x68,
+	0x6f, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x5f,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x69, 0x6e, 0x70, 0x75,
+	0x74, 0x54, 0x79, 0x70, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x5f,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x6f, 0x75, 0x74, 0x70,
+	0x75, 0x74, 0x54, 0x79, 0x70, 0x65, 0x22, 0x27, 0x0a, 0x11, 0x50, 0x61, 0x63, 0x6b, 0x61, 0x67,
+	0x65, 0x44, 0x65, 0x70, 0x65, 0x6e, 0x64, 0x65, 0x6e, 0x63, 0x79, 0x12, 0x12, 0x0a, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x42,
+	0x18, 0x5a, 0x16, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2f,
+	0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 }
 
 var (
@@ -259,18 +985,36 @@ func file_pbuf_registry_v1_entities_proto_rawDescGZIP() []byte {
 	return file_pbuf_registry_v1_entities_proto_rawDescData
 }
 
-var file_pbuf_registry_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_pbuf_registry_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_pbuf_registry_v1_entities_proto_goTypes = []interface{}{
-	(*Module)(nil),     // 0: pbufregistry.v1.Module
-	(*ProtoFile)(nil),  // 1: pbufregistry.v1.ProtoFile
-	(*Dependency)(nil), // 2: pbufregistry.v1.Dependency
+	(*Module)(nil),            // 0: pbufregistry.v1.Module
+	(*ProtoFile)(nil),         // 1: pbufregistry.v1.ProtoFile
+	(*Dependency)(nil),        // 2: pbufregistry.v1.Dependency
+	(*Package)(nil),           // 3: pbufregistry.v1.Package
+	(*ParsedProtoFile)(nil),   // 4: pbufregistry.v1.ParsedProtoFile
+	(*Message)(nil),           // 5: pbufregistry.v1.Message
+	(*Field)(nil),             // 6: pbufregistry.v1.Field
+	(*Enum)(nil),              // 7: pbufregistry.v1.Enum
+	(*EnumValue)(nil),         // 8: pbufregistry.v1.EnumValue
+	(*Service)(nil),           // 9: pbufregistry.v1.Service
+	(*Method)(nil),            // 10: pbufregistry.v1.Method
+	(*PackageDependency)(nil), // 11: pbufregistry.v1.PackageDependency
 }
 var file_pbuf_registry_v1_entities_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4,  // 0: pbufregistry.v1.Package.proto_files:type_name -> pbufregistry.v1.ParsedProtoFile
+	11, // 1: pbufregistry.v1.Package.dependencies:type_name -> pbufregistry.v1.PackageDependency
+	5,  // 2: pbufregistry.v1.ParsedProtoFile.messages:type_name -> pbufregistry.v1.Message
+	9,  // 3: pbufregistry.v1.ParsedProtoFile.services:type_name -> pbufregistry.v1.Service
+	6,  // 4: pbufregistry.v1.Message.fields:type_name -> pbufregistry.v1.Field
+	5,  // 5: pbufregistry.v1.Message.nested_messages:type_name -> pbufregistry.v1.Message
+	7,  // 6: pbufregistry.v1.Message.nested_enums:type_name -> pbufregistry.v1.Enum
+	8,  // 7: pbufregistry.v1.Enum.values:type_name -> pbufregistry.v1.EnumValue
+	10, // 8: pbufregistry.v1.Service.methods:type_name -> pbufregistry.v1.Method
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_pbuf_registry_v1_entities_proto_init() }
@@ -315,6 +1059,114 @@ func file_pbuf_registry_v1_entities_proto_init() {
 				return nil
 			}
 		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Package); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ParsedProtoFile); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Message); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Field); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Enum); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*EnumValue); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Service); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Method); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PackageDependency); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -322,7 +1174,7 @@ func file_pbuf_registry_v1_entities_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_pbuf_registry_v1_entities_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

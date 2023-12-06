@@ -32,6 +32,7 @@ type Launcher struct {
 	compactionDaemon   background.Daemon
 	protoParsingDaemon background.Daemon
 }
+
 func main() {
 	config.NewLoader().MustLoad()
 
@@ -48,6 +49,7 @@ func main() {
 	registryRepository := data.NewRegistryRepository(pool, logger)
 	metadataRepository := data.NewMetadataRepository(pool, logger)
 	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
+	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
 
 	app := kratos.New(
 		kratos.ID(id),
@@ -56,8 +58,8 @@ func main() {
 		kratos.Metadata(map[string]string{}),
 		kratos.Logger(logger),
 		kratos.Server(
-			server.NewGRPCServer(&config.Cfg.Server, registryServer, logger),
-			server.NewHTTPServer(&config.Cfg.Server, registryServer, logger),
+			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, logger),
+			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, logger),
 			server.NewDebugServer(&config.Cfg.Server, logger),
 		),
 	)

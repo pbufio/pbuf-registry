@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+import "google/api/annotations.proto";
+import "pbuf-registry/v1/entities.proto";
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// The metadata service must return parsed information
+service MetadataService {
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {
+    option (google.api.http) = {
+      post: "/v1/metadata"
+      body: "*"
+    };
+  }
+}
+
+message GetMetadataRequest {
+  // The module to get metadata for
+  string name = 1;
+
+  // The tag id to get metadata for
+  string tag = 2;
+}
+
+message GetMetadataResponse {
+  // The packages in the module
+  repeated Package packages = 1;
+}

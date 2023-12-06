@@ -9,7 +9,11 @@ import (
 )
 
 // NewHTTPServer new a HTTP server.
-func NewHTTPServer(cfg *config.Server, registryServer *RegistryServer, logger log.Logger) *kratosHttp.Server {
+func NewHTTPServer(cfg *config.Server,
+	registryServer *RegistryServer,
+	metadataServer *MetadataServer,
+	logger log.Logger,
+) *kratosHttp.Server {
 	logHelper := log.NewHelper(logger)
 
 	authMiddleware, err := middleware.CreateAuthMiddleware(&cfg.GRPC.Auth, logger)
@@ -28,6 +32,7 @@ func NewHTTPServer(cfg *config.Server, registryServer *RegistryServer, logger lo
 	srv := kratosHttp.NewServer(opts...)
 
 	v1.RegisterRegistryHTTPServer(srv, registryServer)
+	v1.RegisterMetadataServiceHTTPServer(srv, metadataServer)
 
 	return srv
 }
