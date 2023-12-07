@@ -40,6 +40,10 @@ func (m MetadataServer) GetMetadata(ctx context.Context, request *v1.GetMetadata
 		return nil, err
 	}
 
+	if tagId == "" {
+		return nil, errors.New("module tag not found")
+	}
+
 	tagMeta, err := m.metadataRepository.GetTagMetaByTagId(ctx, tagId)
 	if err != nil {
 		m.logger.Infof("error getting tag meta: %v", err)
