@@ -71,22 +71,6 @@ service Registry {
       body: "*"
     };
   }
-
-  // Register authorization token
-  rpc RegisterToken(RegisterTokenRequest) returns (RegisterTokenResponse) {
-    option (google.api.http) = {
-      post: "/v1/tokens/register"
-      body: "*"
-    };
-  }
-
-  // Revoke authorization token
-  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {
-    option (google.api.http) = {
-      post: "/v1/tokens/revoke"
-      body: "*"
-    };
-  }
 }
 
 // ListModulesRequest is the request message for ListModules.
@@ -209,30 +193,4 @@ message GetModuleDependenciesRequest {
 message GetModuleDependenciesResponse {
   // The dependencies of the module.
   repeated Dependency dependencies = 1;
-}
-
-// RegisterTokenRequest is the request message for RegisterToken.
-message RegisterTokenRequest {
-  // The name of token to be displayed.
-  string display_name = 1;
-  // The token access role
-  string role = 2;
-}
-
-// RegisterTokenResponse is the response message for RegisterToken.
-message RegisterTokenResponse {
-  // The authorization token.
-  string token = 1;
-}
-
-// RegisterTokenRequest is the request message for RevokeToken.
-message RevokeTokenRequest {
-  // The authorization token.
-  string token = 1;
-}
-
-// RevokeTokenResponse is the response message for RevokeToken.
-message RevokeTokenResponse {
-  // The authorization token.
-  string result = 1;
 }

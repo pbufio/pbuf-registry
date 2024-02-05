@@ -48,8 +48,10 @@ func main() {
 
 	registryRepository := data.NewRegistryRepository(pool, logger)
 	metadataRepository := data.NewMetadataRepository(pool, logger)
-	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
+	tokenRepository := data.NewTokenRepository(pool, logger)
+	registryServer := server.NewRegistryServer(registryRepository, logger)
 	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
+	tokenServer := server.NewTokenServer(tokenRepository, logger)
 
 	mainApp := kratos.New(
 		kratos.ID(id),
@@ -58,8 +60,8 @@ func main() {
 		kratos.Metadata(map[string]string{}),
 		kratos.Logger(logger),
 		kratos.Server(
-			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, logger),
-			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, logger),
+			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, tokenServer, logger),
+			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, tokenServer, logger),
 			server.NewDebugServer(&config.Cfg.Server, logger),
 		),
 	)

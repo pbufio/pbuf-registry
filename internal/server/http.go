@@ -12,6 +12,7 @@ import (
 func NewHTTPServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
+	tokenServer *TokenServer,
 	logger log.Logger,
 ) *kratosHttp.Server {
 	logHelper := log.NewHelper(logger)
@@ -33,6 +34,7 @@ func NewHTTPServer(cfg *config.Server,
 
 	v1.RegisterRegistryHTTPServer(srv, registryServer)
 	v1.RegisterMetadataServiceHTTPServer(srv, metadataServer)
+	v1.RegisterTokenServiceHTTPServer(srv, tokenServer)
 
 	return srv
 }

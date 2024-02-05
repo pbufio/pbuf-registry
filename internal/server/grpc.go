@@ -14,6 +14,7 @@ import (
 func NewGRPCServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
+	tokenServer *TokenServer,
 	logger log.Logger,
 ) *grpc.Server {
 	logHelper := log.NewHelper(logger)
@@ -41,6 +42,7 @@ func NewGRPCServer(cfg *config.Server,
 
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	v1.RegisterMetadataServiceServer(grpcServer, metadataServer)
+	v1.RegisterTokenServiceServer(grpcServer, tokenServer)
 
 	return grpcServer
 }

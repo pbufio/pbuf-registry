@@ -22,10 +22,12 @@ type RegistryServer struct {
 	logger             *log.Helper
 }
 
-func NewRegistryServer(registryRepository data.RegistryRepository, metadataRepository data.MetadataRepository, logger log.Logger) *RegistryServer {
+func NewRegistryServer(
+	registryRepository data.RegistryRepository,
+	logger log.Logger,
+) *RegistryServer {
 	return &RegistryServer{
 		registryRepository: registryRepository,
-		metadataRepository: metadataRepository,
 		logger:             log.NewHelper(log.With(logger, "module", "server/RegistryServer")),
 	}
 }

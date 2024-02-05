@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+import "google/api/annotations.proto";
+import "pbuf-registry/v1/entities.proto";
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// The metadata service must return parsed information
+service TokenService {
+  // Register authorization token
+  rpc RegisterToken(RegisterTokenRequest) returns (RegisterTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/tokens/register"
+      body: "*"
+    };
+  }
+
+  // Revoke authorization token
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/tokens/revoke"
+      body: "*"
+    };
+  }
+}
+
+// RegisterTokenRequest is the request message for RegisterToken.
+message RegisterTokenRequest {
+  // The name of token to be displayed.
+  string display_name = 1;
+  // The token access role
+  string role = 2;
+}
+
+// RegisterTokenResponse is the response message for RegisterToken.
+message RegisterTokenResponse {
+  // The authorization token.
+  string token = 1;
+}
+
+// RegisterTokenRequest is the request message for RevokeToken.
+message RevokeTokenRequest {
+  // The authorization token.
+  string token = 1;
+}
+
+// RevokeTokenResponse is the response message for RevokeToken.
+message RevokeTokenResponse {
+  // The authorization token.
+  string result = 1;
+}
+
