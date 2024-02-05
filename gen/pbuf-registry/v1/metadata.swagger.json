@@ -72,7 +72,6 @@
         "details": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }
@@ -88,7 +87,6 @@
         "values": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1EnumValue"
           },
           "description": "The values of the enum."
@@ -191,7 +189,6 @@
         "packages": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Package"
           },
           "title": "The packages in the module"
@@ -208,7 +205,6 @@
         "fields": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Field"
           },
           "description": "The fields of the message."
@@ -216,7 +212,6 @@
         "nestedMessages": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Message"
           },
           "description": "The nested messages of the message."
@@ -224,7 +219,6 @@
         "nestedEnums": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Enum"
           },
           "description": "The nested enums of the message."
@@ -260,7 +254,6 @@
         "protoFiles": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1ParsedProtoFile"
           },
           "description": "The proto files of the package."
@@ -268,7 +261,6 @@
         "dependencies": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1PackageDependency"
           },
           "description": "The dependencies of the package."
@@ -296,7 +288,6 @@
         "messages": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Message"
           },
           "description": "The messages in the proto file."
@@ -304,7 +295,6 @@
         "services": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Service"
           },
           "description": "The services in the proto file."
@@ -322,7 +312,6 @@
         "methods": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Method"
           },
           "description": "The methods of the service."

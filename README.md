@@ -24,9 +24,9 @@ The registry solves this problem by providing a central place to store and manag
 #### Steps
 
 1. Clone the repository
-2. Generate certificates with `make certs-gen` command (they will appear in `gen/certs` folder) or put your own certificates in the folder
+2. Generate certificates with `make cert-gen` command (they will appear in `gen/certs` folder) or put your own certificates in the folder
 3. Export `SERVER_STATIC_TOKEN` with static authorization token
-4. Run `make run-prod` to start the registry
+4. Run `make run-prod` to start the registry. To pull images - You have to be [logged in](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) to GitHub container registry.
 5. Run `make stop-prod` to stop the running registry
 
 #### Configuration

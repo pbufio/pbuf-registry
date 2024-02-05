@@ -51,7 +51,7 @@ func main() {
 	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
 	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
 
-	app := kratos.New(
+	mainApp := kratos.New(
 		kratos.ID(id),
 		kratos.Name(Name),
 		kratos.Version(Version),
@@ -78,7 +78,7 @@ func main() {
 	launcher := &Launcher{
 		config: config.Cfg,
 
-		mainApp:  app,
+		mainApp:  mainApp,
 		debugApp: debugApp,
 
 		compactionDaemon:   background.NewCompactionDaemon(registryRepository, logger),

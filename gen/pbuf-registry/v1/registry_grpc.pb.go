@@ -27,6 +27,8 @@ const (
 	Registry_DeleteModule_FullMethodName          = "/pbufregistry.v1.Registry/DeleteModule"
 	Registry_DeleteModuleTag_FullMethodName       = "/pbufregistry.v1.Registry/DeleteModuleTag"
 	Registry_GetModuleDependencies_FullMethodName = "/pbufregistry.v1.Registry/GetModuleDependencies"
+	Registry_RegisterToken_FullMethodName         = "/pbufregistry.v1.Registry/RegisterToken"
+	Registry_RevokeToken_FullMethodName           = "/pbufregistry.v1.Registry/RevokeToken"
 )
 
 // RegistryClient is the client API for Registry service.
@@ -49,6 +51,10 @@ type RegistryClient interface {
 	DeleteModuleTag(ctx context.Context, in *DeleteModuleTagRequest, opts ...grpc.CallOption) (*DeleteModuleTagResponse, error)
 	// Get Module Dependencies
 	GetModuleDependencies(ctx context.Context, in *GetModuleDependenciesRequest, opts ...grpc.CallOption) (*GetModuleDependenciesResponse, error)
+	// Register authorization token
+	RegisterToken(ctx context.Context, in *RegisterTokenRequest, opts ...grpc.CallOption) (*RegisterTokenResponse, error)
+	// Revoke authorization token
+	RevokeToken(ctx context.Context, in *RevokeTokenRequest, opts ...grpc.CallOption) (*RevokeTokenResponse, error)
 }
 
 type registryClient struct {
@@ -131,6 +137,24 @@ func (c *registryClient) GetModuleDependencies(ctx context.Context, in *GetModul
 	return out, nil
 }
 
+func (c *registryClient) RegisterToken(ctx context.Context, in *RegisterTokenRequest, opts ...grpc.CallOption) (*RegisterTokenResponse, error) {
+	out := new(RegisterTokenResponse)
+	err := c.cc.Invoke(ctx, Registry_RegisterToken_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) RevokeToken(ctx context.Context, in *RevokeTokenRequest, opts ...grpc.CallOption) (*RevokeTokenResponse, error) {
+	out := new(RevokeTokenResponse)
+	err := c.cc.Invoke(ctx, Registry_RevokeToken_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RegistryServer is the server API for Registry service.
 // All implementations must embed UnimplementedRegistryServer
 // for forward compatibility
@@ -151,6 +175,10 @@ type RegistryServer interface {
 	DeleteModuleTag(context.Context, *DeleteModuleTagRequest) (*DeleteModuleTagResponse, error)
 	// Get Module Dependencies
 	GetModuleDependencies(context.Context, *GetModuleDependenciesRequest) (*GetModuleDependenciesResponse, error)
+	// Register authorization token
+	RegisterToken(context.Context, *RegisterTokenRequest) (*RegisterTokenResponse, error)
+	// Revoke authorization token
+	RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error)
 	mustEmbedUnimplementedRegistryServer()
 }
 
@@ -181,6 +209,12 @@ func (UnimplementedRegistryServer) DeleteModuleTag(context.Context, *DeleteModul
 }
 func (UnimplementedRegistryServer) GetModuleDependencies(context.Context, *GetModuleDependenciesRequest) (*GetModuleDependenciesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetModuleDependencies not implemented")
+}
+func (UnimplementedRegistryServer) RegisterToken(context.Context, *RegisterTokenRequest) (*RegisterTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterToken not implemented")
+}
+func (UnimplementedRegistryServer) RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeToken not implemented")
 }
 func (UnimplementedRegistryServer) mustEmbedUnimplementedRegistryServer() {}
 
@@ -339,6 +373,42 @@ func _Registry_GetModuleDependencies_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Registry_RegisterToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).RegisterToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_RegisterToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).RegisterToken(ctx, req.(*RegisterTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_RevokeToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).RevokeToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_RevokeToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).RevokeToken(ctx, req.(*RevokeTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Registry_ServiceDesc is the grpc.ServiceDesc for Registry service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -377,6 +447,14 @@ var Registry_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetModuleDependencies",
 			Handler:    _Registry_GetModuleDependencies_Handler,
+		},
+		{
+			MethodName: "RegisterToken",
+			Handler:    _Registry_RegisterToken_Handler,
+		},
+		{
+			MethodName: "RevokeToken",
+			Handler:    _Registry_RevokeToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

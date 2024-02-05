@@ -291,6 +291,74 @@
           "Registry"
         ]
       }
+    },
+    "/v1/tokens/register": {
+      "post": {
+        "summary": "Register authorization token",
+        "operationId": "Registry_RegisterToken",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RegisterTokenResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "RegisterTokenRequest is the request message for RegisterToken.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterTokenRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/tokens/revoke": {
+      "post": {
+        "summary": "Revoke authorization token",
+        "operationId": "Registry_RevokeToken",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RevokeTokenResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "RegisterTokenRequest is the request message for RevokeToken.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RevokeTokenRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
     }
   },
   "definitions": {
@@ -316,7 +384,6 @@
         "details": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }
@@ -404,7 +471,6 @@
         "dependencies": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Dependency"
           },
           "description": "The dependencies of the module."
@@ -432,7 +498,6 @@
         "modules": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Module"
           },
           "description": "The modules requested."
@@ -517,7 +582,6 @@
         "protofiles": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1ProtoFile"
           },
           "description": "The protofiles of the module."
@@ -539,7 +603,6 @@
         "protofiles": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1ProtoFile"
           },
           "title": "Protofiles"
@@ -547,7 +610,6 @@
         "dependencies": {
           "type": "array",
           "items": {
-            "type": "object",
             "$ref": "#/definitions/v1Dependency"
           },
           "title": "Dependencies"
@@ -568,6 +630,50 @@
         }
       },
       "description": "RegisterModuleRequest is the request message for RegisterModule."
+    },
+    "v1RegisterTokenRequest": {
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "The name of token to be displayed."
+        },
+        "role": {
+          "type": "string",
+          "title": "The token access role"
+        }
+      },
+      "description": "RegisterTokenRequest is the request message for RegisterToken."
+    },
+    "v1RegisterTokenResponse": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "The authorization token."
+        }
+      },
+      "description": "RegisterTokenResponse is the response message for RegisterToken."
+    },
+    "v1RevokeTokenRequest": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "The authorization token."
+        }
+      },
+      "description": "RegisterTokenRequest is the request message for RevokeToken."
+    },
+    "v1RevokeTokenResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "string",
+          "description": "The authorization token."
+        }
+      },
+      "description": "RevokeTokenResponse is the response message for RevokeToken."
     }
   }
 }

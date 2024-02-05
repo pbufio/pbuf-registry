@@ -20,6 +20,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Token_Role int32
+
+const (
+	Token_UNKNOWN   Token_Role = 0
+	Token_ROOT      Token_Role = 1
+	Token_ADMIN     Token_Role = 2
+	Token_DEVELOPER Token_Role = 3
+	Token_CICD      Token_Role = 4
+)
+
+// Enum value maps for Token_Role.
+var (
+	Token_Role_name = map[int32]string{
+		0: "UNKNOWN",
+		1: "ROOT",
+		2: "ADMIN",
+		3: "DEVELOPER",
+		4: "CICD",
+	}
+	Token_Role_value = map[string]int32{
+		"UNKNOWN":   0,
+		"ROOT":      1,
+		"ADMIN":     2,
+		"DEVELOPER": 3,
+		"CICD":      4,
+	}
+)
+
+func (x Token_Role) Enum() *Token_Role {
+	p := new(Token_Role)
+	*p = x
+	return p
+}
+
+func (x Token_Role) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Token_Role) Descriptor() protoreflect.EnumDescriptor {
+	return file_pbuf_registry_v1_entities_proto_enumTypes[0].Descriptor()
+}
+
+func (Token_Role) Type() protoreflect.EnumType {
+	return &file_pbuf_registry_v1_entities_proto_enumTypes[0]
+}
+
+func (x Token_Role) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Token_Role.Descriptor instead.
+func (Token_Role) EnumDescriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{12, 0}
+}
+
 // Module is a module registered in the registry.
 type Module struct {
 	state         protoimpl.MessageState
@@ -870,6 +925,70 @@ func (x *PackageDependency) GetName() string {
 	return ""
 }
 
+// Token is an authorization token.
+type Token struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Token string     `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Name  string     `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Role  Token_Role `protobuf:"varint,3,opt,name=role,proto3,enum=pbufregistry.v1.Token_Role" json:"role,omitempty"`
+}
+
+func (x *Token) Reset() {
+	*x = Token{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pbuf_registry_v1_entities_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Token) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Token) ProtoMessage() {}
+
+func (x *Token) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_entities_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Token.ProtoReflect.Descriptor instead.
+func (*Token) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_entities_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Token) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *Token) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Token) GetRole() Token_Role {
+	if x != nil {
+		return x.Role
+	}
+	return Token_UNKNOWN
+}
+
 var File_pbuf_registry_v1_entities_proto protoreflect.FileDescriptor
 
 var file_pbuf_registry_v1_entities_proto_rawDesc = []byte{
@@ -967,10 +1086,20 @@ var file_pbuf_registry_v1_entities_proto_rawDesc = []byte{
 	0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x6f, 0x75, 0x74, 0x70,
 	0x75, 0x74, 0x54, 0x79, 0x70, 0x65, 0x22, 0x27, 0x0a, 0x11, 0x50, 0x61, 0x63, 0x6b, 0x61, 0x67,
 	0x65, 0x44, 0x65, 0x70, 0x65, 0x6e, 0x64, 0x65, 0x6e, 0x63, 0x79, 0x12, 0x12, 0x0a, 0x04, 0x6e,
-	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x42,
-	0x18, 0x5a, 0x16, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2f,
-	0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
+	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22,
+	0xa5, 0x01, 0x0a, 0x05, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x6f, 0x6b,
+	0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x12, 0x2f, 0x0a, 0x04, 0x72, 0x6f, 0x6c, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x0e, 0x32, 0x1b, 0x2e, 0x70, 0x62, 0x75, 0x66, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79,
+	0x2e, 0x76, 0x31, 0x2e, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x2e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x04,
+	0x72, 0x6f, 0x6c, 0x65, 0x22, 0x41, 0x0a, 0x04, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x0b, 0x0a, 0x07,
+	0x55, 0x4e, 0x4b, 0x4e, 0x4f, 0x57, 0x4e, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x52, 0x4f, 0x4f,
+	0x54, 0x10, 0x01, 0x12, 0x09, 0x0a, 0x05, 0x41, 0x44, 0x4d, 0x49, 0x4e, 0x10, 0x02, 0x12, 0x0d,
+	0x0a, 0x09, 0x44, 0x45, 0x56, 0x45, 0x4c, 0x4f, 0x50, 0x45, 0x52, 0x10, 0x03, 0x12, 0x08, 0x0a,
+	0x04, 0x43, 0x49, 0x43, 0x44, 0x10, 0x04, 0x42, 0x18, 0x5a, 0x16, 0x70, 0x62, 0x75, 0x66, 0x72,
+	0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x79, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x76,
+	0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -985,36 +1114,40 @@ func file_pbuf_registry_v1_entities_proto_rawDescGZIP() []byte {
 	return file_pbuf_registry_v1_entities_proto_rawDescData
 }
 
-var file_pbuf_registry_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_pbuf_registry_v1_entities_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_pbuf_registry_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_pbuf_registry_v1_entities_proto_goTypes = []interface{}{
-	(*Module)(nil),            // 0: pbufregistry.v1.Module
-	(*ProtoFile)(nil),         // 1: pbufregistry.v1.ProtoFile
-	(*Dependency)(nil),        // 2: pbufregistry.v1.Dependency
-	(*Package)(nil),           // 3: pbufregistry.v1.Package
-	(*ParsedProtoFile)(nil),   // 4: pbufregistry.v1.ParsedProtoFile
-	(*Message)(nil),           // 5: pbufregistry.v1.Message
-	(*Field)(nil),             // 6: pbufregistry.v1.Field
-	(*Enum)(nil),              // 7: pbufregistry.v1.Enum
-	(*EnumValue)(nil),         // 8: pbufregistry.v1.EnumValue
-	(*Service)(nil),           // 9: pbufregistry.v1.Service
-	(*Method)(nil),            // 10: pbufregistry.v1.Method
-	(*PackageDependency)(nil), // 11: pbufregistry.v1.PackageDependency
+	(Token_Role)(0),           // 0: pbufregistry.v1.Token.Role
+	(*Module)(nil),            // 1: pbufregistry.v1.Module
+	(*ProtoFile)(nil),         // 2: pbufregistry.v1.ProtoFile
+	(*Dependency)(nil),        // 3: pbufregistry.v1.Dependency
+	(*Package)(nil),           // 4: pbufregistry.v1.Package
+	(*ParsedProtoFile)(nil),   // 5: pbufregistry.v1.ParsedProtoFile
+	(*Message)(nil),           // 6: pbufregistry.v1.Message
+	(*Field)(nil),             // 7: pbufregistry.v1.Field
+	(*Enum)(nil),              // 8: pbufregistry.v1.Enum
+	(*EnumValue)(nil),         // 9: pbufregistry.v1.EnumValue
+	(*Service)(nil),           // 10: pbufregistry.v1.Service
+	(*Method)(nil),            // 11: pbufregistry.v1.Method
+	(*PackageDependency)(nil), // 12: pbufregistry.v1.PackageDependency
+	(*Token)(nil),             // 13: pbufregistry.v1.Token
 }
 var file_pbuf_registry_v1_entities_proto_depIdxs = []int32{
-	4,  // 0: pbufregistry.v1.Package.proto_files:type_name -> pbufregistry.v1.ParsedProtoFile
-	11, // 1: pbufregistry.v1.Package.dependencies:type_name -> pbufregistry.v1.PackageDependency
-	5,  // 2: pbufregistry.v1.ParsedProtoFile.messages:type_name -> pbufregistry.v1.Message
-	9,  // 3: pbufregistry.v1.ParsedProtoFile.services:type_name -> pbufregistry.v1.Service
-	6,  // 4: pbufregistry.v1.Message.fields:type_name -> pbufregistry.v1.Field
-	5,  // 5: pbufregistry.v1.Message.nested_messages:type_name -> pbufregistry.v1.Message
-	7,  // 6: pbufregistry.v1.Message.nested_enums:type_name -> pbufregistry.v1.Enum
-	8,  // 7: pbufregistry.v1.Enum.values:type_name -> pbufregistry.v1.EnumValue
-	10, // 8: pbufregistry.v1.Service.methods:type_name -> pbufregistry.v1.Method
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	5,  // 0: pbufregistry.v1.Package.proto_files:type_name -> pbufregistry.v1.ParsedProtoFile
+	12, // 1: pbufregistry.v1.Package.dependencies:type_name -> pbufregistry.v1.PackageDependency
+	6,  // 2: pbufregistry.v1.ParsedProtoFile.messages:type_name -> pbufregistry.v1.Message
+	10, // 3: pbufregistry.v1.ParsedProtoFile.services:type_name -> pbufregistry.v1.Service
+	7,  // 4: pbufregistry.v1.Message.fields:type_name -> pbufregistry.v1.Field
+	6,  // 5: pbufregistry.v1.Message.nested_messages:type_name -> pbufregistry.v1.Message
+	8,  // 6: pbufregistry.v1.Message.nested_enums:type_name -> pbufregistry.v1.Enum
+	9,  // 7: pbufregistry.v1.Enum.values:type_name -> pbufregistry.v1.EnumValue
+	11, // 8: pbufregistry.v1.Service.methods:type_name -> pbufregistry.v1.Method
+	0,  // 9: pbufregistry.v1.Token.role:type_name -> pbufregistry.v1.Token.Role
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pbuf_registry_v1_entities_proto_init() }
@@ -1167,19 +1300,32 @@ func file_pbuf_registry_v1_entities_proto_init() {
 				return nil
 			}
 		}
+		file_pbuf_registry_v1_entities_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Token); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_pbuf_registry_v1_entities_proto_rawDesc,
-			NumEnums:      0,
-			NumMessages:   12,
+			NumEnums:      1,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_pbuf_registry_v1_entities_proto_goTypes,
 		DependencyIndexes: file_pbuf_registry_v1_entities_proto_depIdxs,
+		EnumInfos:         file_pbuf_registry_v1_entities_proto_enumTypes,
 		MessageInfos:      file_pbuf_registry_v1_entities_proto_msgTypes,
 	}.Build()
 	File_pbuf_registry_v1_entities_proto = out.File

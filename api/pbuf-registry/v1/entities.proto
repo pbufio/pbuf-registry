@@ -163,3 +163,18 @@ message PackageDependency {
   // The name of the dependency.
   string name = 1;
 }
+
+// Token is an authorization token.
+message Token {
+  enum Role {
+    UNKNOWN = 0;
+    ROOT = 1;
+    ADMIN = 2;
+    DEVELOPER = 3;
+    CICD = 4;
+  }
+
+  string token = 1;
+  string name = 2;
+  Role role = 3;
+}
