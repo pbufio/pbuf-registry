@@ -65,7 +65,7 @@ build-in-docker:
       -v "./bin:/app/bin" \
       -v "${HOME}/.netrc:/root/.netrc" \
       -w /app \
-      golang:1.21 \
+      golang:1.25 \
       sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-migrations"
 
 .PHONY: docker

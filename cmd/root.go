@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/go-co-op/gocron"
+	"github.com/go-co-op/gocron/v2"
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/pbufio/pbuf-registry/internal/background"
@@ -63,29 +63,38 @@ func CreateProtoParsingDaemon(launcher *Launcher) *cobra.Command {
 }
 
 func runBackgroundDaemon(cronSchedule string, daemon background.Daemon, debugApp *kratos.App) {
-	s := gocron.NewScheduler(time.UTC)
+	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
+	if err != nil {
+		log.Fatalf("failed to create scheduler: %v", err)
+	}
 
 	// start every hour
-	_, err := s.Cron(cronSchedule).Do(func() {
-		err := daemon.Run()
-		if err != nil {
-			log.Fatalf("failed to run %s daemon: %v", daemon.Name(), err)
-		}
-	})
+	_, err = s.NewJob(
+		gocron.CronJob(cronSchedule, false),
+		gocron.NewTask(func() {
+			err := daemon.Run()
+			if err != nil {
+				log.Fatalf("failed to run %s daemon: %v", daemon.Name(), err)
+			}
+		}),
+	)
 
 	if err != nil {
 		log.Fatalf("failed to create cron job: %v", err)
 	}
 
 	// start the scheduler
-	s.StartAsync()
+	s.Start()
 
 	err = debugApp.Run()
 	if err != nil {
 		log.Fatalf("failed to run debug app: %v", err)
 	}
 
-	s.Stop()
+	err = s.Shutdown()
+	if err != nil {
+		log.Errorf("failed to shutdown scheduler: %v", err)
+	}
 
 	log.Infof("%s daemon stopped", daemon.Name())
 }
