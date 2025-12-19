@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v3
         with:
-          go-version: 1.21.x
+          go-version: 1.25.x
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -41,9 +41,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.54
+          version: v2.7
 
       - name: Test
         run: make test
