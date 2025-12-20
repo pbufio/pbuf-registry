@@ -13,7 +13,7 @@ import (
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 )
 
-var TagNotFoundError = errors.New("tag not found")
+var ErrTagNotFound = errors.New("tag not found")
 
 type RegistryRepository interface {
 	RegisterModule(ctx context.Context, moduleName string) error
@@ -311,7 +311,7 @@ func (r *registryRepo) PullModule(ctx context.Context, name string, tag string) 
 	}
 
 	if tagId == "" {
-		return nil, nil, TagNotFoundError
+		return nil, nil, ErrTagNotFound
 	}
 
 	// fetch protofiles
@@ -378,7 +378,7 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	}
 
 	if tagId == "" {
-		return TagNotFoundError
+		return ErrTagNotFound
 	}
 
 	// delete protofiles
@@ -416,7 +416,7 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	if res.RowsAffected() > 0 {
 		r.logger.Infof("deleted tag %s", tag)
 	} else {
-		return TagNotFoundError
+		return ErrTagNotFound
 	}
 
 	return nil
@@ -430,7 +430,7 @@ func (r *registryRepo) AddModuleDependencies(ctx context.Context, name string, t
 	}
 
 	if tagId == "" {
-		return TagNotFoundError
+		return ErrTagNotFound
 	}
 
 	// for each dependency find tag id and insert into dependencies table
@@ -475,7 +475,7 @@ func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, t
 	}
 
 	if tagId == "" {
-		return nil, TagNotFoundError
+		return nil, ErrTagNotFound
 	}
 
 	// find all dependencies

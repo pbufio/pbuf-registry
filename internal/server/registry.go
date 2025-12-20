@@ -178,7 +178,7 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 
 	module, protoFiles, err := r.registryRepository.PullModule(ctx, name, tag)
 	if err != nil {
-		if errors.Is(err, data.TagNotFoundError) {
+		if errors.Is(err, data.ErrTagNotFound) {
 			tagNotFound = true
 		} else {
 			r.logger.Infof("error pulling module: %v", err)
@@ -189,7 +189,7 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 	if tagNotFound {
 		module, protoFiles, err = r.registryRepository.PullDraftModule(ctx, name, tag)
 		if err != nil {
-			if errors.Is(err, data.TagNotFoundError) {
+			if errors.Is(err, data.ErrTagNotFound) {
 				return nil, fmt.Errorf("tag %s not found for module %s", tag, name)
 			} else {
 				r.logger.Infof("error pulling draft module: %v", err)

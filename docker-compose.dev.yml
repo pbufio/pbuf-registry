@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   db:
-    image: postgres:14.7
+    image: postgres:18.1-alpine3.23
     restart: always
     ports:
       - "5432:5432"

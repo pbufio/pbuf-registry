@@ -32,9 +32,9 @@ func setup(ctx context.Context) (v1.RegistryClient, func()) {
 		}
 	}()
 
-	conn, err := grpc.DialContext(ctx, "",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("error connecting to server: %v", err)

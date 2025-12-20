@@ -96,7 +96,7 @@ func (loader *Loader) MustLoad() {
 func (loader *Loader) decorateViper(v *viper.Viper) {
 	v.SetConfigType(loader.configType)
 
-	if "" != loader.envPrefix {
+	if loader.envPrefix != "" {
 		v.SetEnvPrefix(loader.envPrefix)
 	}
 
