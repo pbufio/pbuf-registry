@@ -74,6 +74,11 @@ build-in-docker:
 docker:
 	docker build -t registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION} .
 
+.PHONY: build-docker
+# build-docker
+build-docker:
+	docker build -t ghcr.io/pbufio/registry:${REGISTRY_VERSION} .
+
 .PHONY: run
 # run
 run:
