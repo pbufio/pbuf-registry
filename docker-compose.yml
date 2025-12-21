@@ -18,15 +18,15 @@ services:
       interval: 5s
       timeout: 10s
       retries: 5
-  nginx:
+  registry-nginx:
     image: nginx:alpine
     restart: always
     depends_on:
       - pbuf-registry
     networks:
       - internal
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
   pbuf-registry:
@@ -98,6 +98,18 @@ services:
       DATA_DATABASE_DSN: "postgres://pbuf:${PBUF_POSTGRES_PASSWORD:-pbuf}@db:5432/pbuf_registry?sslmode=disable"
     command: >
       sh -c "/app/pbuf-registry proto-parsing"
+  pbuf-registry-ui:
+    image: ghcr.io/pbufio/registry-ui:0.4.1
+    restart: always
+    depends_on:
+      - registry-nginx
+    networks:
+      - internal
+    ports:
+      - "80:80"
+    environment:
+      API_BASE_URL: http://registry-nginx
+      API_TOKEN: ${SERVER_STATIC_TOKEN}
 
 networks:
   internal:
