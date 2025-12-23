@@ -1,0 +1,7 @@
+version: v1
+name: yourorg/hello-proto
+registry:
+  addr: pbuf.cloud
+export:
+  paths:
+    - hello-proto

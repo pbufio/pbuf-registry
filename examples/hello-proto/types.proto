@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package hello.v1;
+
+option go_package = "github.com/yourorg/hello-proto/gen/hello/v1;hellov1";
+
+// User represents a user in the system
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  UserRole role = 4;
+}
+
+// UserRole defines the possible roles for a user
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_GUEST = 1;
+  USER_ROLE_MEMBER = 2;
+  USER_ROLE_ADMIN = 3;
+}
