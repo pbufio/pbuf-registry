@@ -72,7 +72,7 @@ jobs:
 
       - name: Setup pbuf cli
         id: pbuf-setup
-        uses: pbufio/pbuf-setup-action@v1.1.0
+        uses: pbufio/pbuf-setup-action@v1.2.0
         with:
           pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
 
@@ -85,13 +85,13 @@ jobs:
 
       - name: Register Module
         id: pbuf-register
-        run: pbuf-cli modules register
+        run: pbuf modules register
 
       - name: Push Module Tag
         id: pbuf-push
         run: |
           if [[ ${{ github.ref_name }} == *"rc"* ]] || [[ ${{ github.ref_name }} == *"wip"* ]]; then
-            pbuf-cli modules push ${{ github.ref_name }} --draft
+            pbuf modules push ${{ github.ref_name }} --draft
           else
-            pbuf-cli modules push ${{ github.ref_name }}
+            pbuf modules push ${{ github.ref_name }}
           fi

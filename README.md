@@ -56,23 +56,52 @@ helm install my-pbuf-registry pbuf/pbuf-registry --set secrets.databaseDSN=<data
 
 More information about the chart can be found in [the chart repository](https://github.com/pbufio/helm-charts)
 
+## Quick Start (2 minutes)
+
+Once the registry is running, try these commands to see it in action:
+
+**Prerequisites:** Install [pbuf](https://github.com/pbufio/pbuf-cli)
+
+```shell
+# 1. Configure pbuf to point to your registry
+export PBUF_REGISTRY_URL=https://localhost:6777
+export PBUF_REGISTRY_TOKEN=${SERVER_STATIC_TOKEN}
+
+# 2. Register a new module (module name comes from pbuf.yaml)
+pbuf modules register
+
+# 3. Push your first tag (from a directory with .proto files and pbuf.yaml)
+pbuf modules push v1.0.0
+
+# 4. Pull dependencies (add module to pbuf.yaml's modules section, then run)
+pbuf vendor
+```
+
+**New to pbuf?** Check out the [examples/](examples/) directory for a complete walkthrough with sample protobuf files.
+
 ## Usage
 
 ### CLI
 
-We recommend to use the [CLI](https://github.com/pbufio/pbuf-cli) to interact with the registry.
+We recommend to use the [pbuf CLI](https://github.com/pbufio/pbuf-cli) to interact with the registry.
 
 ### API
 
 #### HTTP
 
-The registry provides a REST API (`:8080` port by default). You can find the swagger documentation [here](https://github.com/pbufio/pbuf-registry/blob/main/gen/v1/registry.swagger.json).
+The registry provides a REST API (`:8080` port by default). You can find the swagger documentation [here](https://github.com/pbufio/pbuf-registry/blob/main/gen/pbuf-registry/v1/registry.swagger.json).
 
 #### gRPC
 
-The registry provides a gRPC API (`:6777` port by default). You can find the protobuf definition [here](https://github.com/pbufio/pbuf-registry/blob/main/api/v1/registry.proto)
+The registry provides a gRPC API (`:6777` port by default). You can find the protobuf definition [here](https://github.com/pbufio/pbuf-registry/blob/main/api/pbuf-registry/v1/registry.proto)
 
 ## Development and Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- How to report issues and request features
+- Pull request process
+- Code style guidelines
+- Issue templates and labels
 
 ### Prerequisites
 

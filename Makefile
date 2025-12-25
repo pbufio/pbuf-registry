@@ -10,13 +10,12 @@ init:
 	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@latest
 	go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest
 	go install github.com/vektra/mockery/v2@latest
-	go install github.com/pbufio/pbuf-cli@latest
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.2
 
 .PHONY: vendor
 # vendor modules
 vendor:
-	pbuf-cli vendor
+	pbuf vendor
 
 .PHONY: vendor-gen
 # gen modules
