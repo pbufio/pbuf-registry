@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -110,7 +111,7 @@ func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
  		// Check if it's a user/bot token (will be verified using pgcrypto)
  		user, err := a.userRepo.GetUserByToken(ctx, token)
  		if err != nil {
- 			if err == data.ErrUserNotFound {
+ 			if errors.Is(err, data.ErrUserNotFound) {
  				return nil, jwt.ErrTokenInvalid
  			}
  			a.logger.Errorf("failed to get user by token: %v", err)

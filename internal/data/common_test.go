@@ -22,6 +22,8 @@ type TestSuite struct {
 	psqlContainer      *test_utils.PostgreSQLContainer
 	registryRepository RegistryRepository
 	metadataRepository MetadataRepository
+	userRepository     UserRepository
+	aclRepository      ACLRepository
 }
 
 func (s *TestSuite) SetupSuite() {
@@ -53,6 +55,8 @@ func (s *TestSuite) SetupSuite() {
 
 	s.registryRepository = NewRegistryRepository(pool, log.DefaultLogger)
 	s.metadataRepository = NewMetadataRepository(pool, log.DefaultLogger)
+	s.userRepository = NewUserRepository(pool, log.DefaultLogger)
+	s.aclRepository = NewACLRepository(pool, log.DefaultLogger)
 }
 
 func (s *TestSuite) TearDownSuite() {

@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	stdErrors "errors"
 	"fmt"
 
-	"github.com/go-kratos/kratos/v2/errors"
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
 	"github.com/pbufio/pbuf-registry/internal/data"
@@ -14,9 +15,9 @@ import (
 )
 
 var (
-	ErrInvalidRequest = errors.BadRequest("INVALID_REQUEST", "invalid request")
-	ErrUserNotFound   = errors.NotFound("USER_NOT_FOUND", "user not found")
-	ErrUnauthorized   = errors.Unauthorized("UNAUTHORIZED", "unauthorized")
+	ErrInvalidRequest = kerrors.BadRequest("INVALID_REQUEST", "invalid request")
+	ErrUserNotFound   = kerrors.NotFound("USER_NOT_FOUND", "user not found")
+	ErrUnauthorized   = kerrors.Unauthorized("UNAUTHORIZED", "unauthorized")
 )
 
 type UserService struct {
@@ -43,7 +44,7 @@ func (s *UserService) CreateUser(ctx context.Context, name string, userType mode
 	token, err := generateToken(userType)
 	if err != nil {
 		s.logger.Errorf("failed to generate token: %v", err)
-		return nil, "", errors.InternalServer("TOKEN_GENERATION_FAILED", "failed to generate token")
+		return nil, "", kerrors.InternalServer("TOKEN_GENERATION_FAILED", "failed to generate token")
 	}
 
 	// Create user (token will be encrypted by database using pgcrypto)
@@ -57,7 +58,7 @@ func (s *UserService) CreateUser(ctx context.Context, name string, userType mode
 	err = s.userRepo.CreateUser(ctx, user)
 	if err != nil {
 		s.logger.Errorf("failed to create user: %v", err)
-		return nil, "", errors.InternalServer("USER_CREATION_FAILED", "failed to create user")
+		return nil, "", kerrors.InternalServer("USER_CREATION_FAILED", "failed to create user")
 	}
 
 	s.logger.Infof("created user %s (type: %s) with id %s", name, userType, user.ID)
@@ -68,11 +69,11 @@ func (s *UserService) CreateUser(ctx context.Context, name string, userType mode
 func (s *UserService) GetUser(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	user, err := s.userRepo.GetUser(ctx, id)
 	if err != nil {
-		if err == data.ErrUserNotFound {
+		if stdErrors.Is(err, data.ErrUserNotFound) {
 			return nil, ErrUserNotFound
 		}
 		s.logger.Errorf("failed to get user: %v", err)
-		return nil, errors.InternalServer("USER_FETCH_FAILED", "failed to get user")
+		return nil, kerrors.InternalServer("USER_FETCH_FAILED", "failed to get user")
 	}
 	return user, nil
 }
@@ -93,7 +94,7 @@ func (s *UserService) ListUsers(ctx context.Context, pageSize, page int) ([]*mod
 	users, err := s.userRepo.ListUsers(ctx, pageSize, offset)
 	if err != nil {
 		s.logger.Errorf("failed to list users: %v", err)
-		return nil, errors.InternalServer("USER_LIST_FAILED", "failed to list users")
+		return nil, kerrors.InternalServer("USER_LIST_FAILED", "failed to list users")
 	}
 	return users, nil
 }
@@ -102,11 +103,11 @@ func (s *UserService) ListUsers(ctx context.Context, pageSize, page int) ([]*mod
 func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, name string, isActive bool) (*model.User, error) {
 	user, err := s.userRepo.GetUser(ctx, id)
 	if err != nil {
-		if err == data.ErrUserNotFound {
+		if stdErrors.Is(err, data.ErrUserNotFound) {
 			return nil, ErrUserNotFound
 		}
 		s.logger.Errorf("failed to get user: %v", err)
-		return nil, errors.InternalServer("USER_FETCH_FAILED", "failed to get user")
+		return nil, kerrors.InternalServer("USER_FETCH_FAILED", "failed to get user")
 	}
 
 	// Update fields if provided
@@ -118,7 +119,7 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, name string,
 	err = s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		s.logger.Errorf("failed to update user: %v", err)
-		return nil, errors.InternalServer("USER_UPDATE_FAILED", "failed to update user")
+		return nil, kerrors.InternalServer("USER_UPDATE_FAILED", "failed to update user")
 	}
 
 	s.logger.Infof("updated user %s", user.ID)
@@ -131,17 +132,17 @@ func (s *UserService) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	err := s.aclRepo.DeleteUserPermissions(ctx, id)
 	if err != nil {
 		s.logger.Errorf("failed to delete user permissions: %v", err)
-		return errors.InternalServer("PERMISSION_DELETE_FAILED", "failed to delete user permissions")
+		return kerrors.InternalServer("PERMISSION_DELETE_FAILED", "failed to delete user permissions")
 	}
 
 	// Delete user
 	err = s.userRepo.DeleteUser(ctx, id)
 	if err != nil {
-		if err == data.ErrUserNotFound {
+		if stdErrors.Is(err, data.ErrUserNotFound) {
 			return ErrUserNotFound
 		}
 		s.logger.Errorf("failed to delete user: %v", err)
-		return errors.InternalServer("USER_DELETE_FAILED", "failed to delete user")
+		return kerrors.InternalServer("USER_DELETE_FAILED", "failed to delete user")
 	}
 
 	s.logger.Infof("deleted user %s", id)
@@ -152,18 +153,18 @@ func (s *UserService) DeleteUser(ctx context.Context, id uuid.UUID) error {
 func (s *UserService) RegenerateToken(ctx context.Context, id uuid.UUID) (string, error) {
 	user, err := s.userRepo.GetUser(ctx, id)
 	if err != nil {
-		if err == data.ErrUserNotFound {
+		if stdErrors.Is(err, data.ErrUserNotFound) {
 			return "", ErrUserNotFound
 		}
 		s.logger.Errorf("failed to get user: %v", err)
-		return "", errors.InternalServer("USER_FETCH_FAILED", "failed to get user")
+		return "", kerrors.InternalServer("USER_FETCH_FAILED", "failed to get user")
 	}
 
 	// Generate new token
 	token, err := generateToken(user.Type)
 	if err != nil {
 		s.logger.Errorf("failed to generate token: %v", err)
-		return "", errors.InternalServer("TOKEN_GENERATION_FAILED", "failed to generate token")
+		return "", kerrors.InternalServer("TOKEN_GENERATION_FAILED", "failed to generate token")
 	}
 
 	// Update token (will be encrypted by database using pgcrypto)
@@ -171,7 +172,7 @@ func (s *UserService) RegenerateToken(ctx context.Context, id uuid.UUID) (string
 	err = s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		s.logger.Errorf("failed to update user token: %v", err)
-		return "", errors.InternalServer("USER_UPDATE_FAILED", "failed to update user token")
+		return "", kerrors.InternalServer("USER_UPDATE_FAILED", "failed to update user token")
 	}
 
 	s.logger.Infof("regenerated token for user %s", user.ID)
@@ -183,11 +184,11 @@ func (s *UserService) GrantPermission(ctx context.Context, userID uuid.UUID, mod
 	// Verify user exists
 	_, err := s.userRepo.GetUser(ctx, userID)
 	if err != nil {
-		if err == data.ErrUserNotFound {
+		if stdErrors.Is(err, data.ErrUserNotFound) {
 			return nil, ErrUserNotFound
 		}
 		s.logger.Errorf("failed to get user: %v", err)
-		return nil, errors.InternalServer("USER_FETCH_FAILED", "failed to get user")
+		return nil, kerrors.InternalServer("USER_FETCH_FAILED", "failed to get user")
 	}
 
 	// Create ACL entry
@@ -200,7 +201,7 @@ func (s *UserService) GrantPermission(ctx context.Context, userID uuid.UUID, mod
 	err = s.aclRepo.GrantPermission(ctx, entry)
 	if err != nil {
 		s.logger.Errorf("failed to grant permission: %v", err)
-		return nil, errors.InternalServer("PERMISSION_GRANT_FAILED", "failed to grant permission")
+		return nil, kerrors.InternalServer("PERMISSION_GRANT_FAILED", "failed to grant permission")
 	}
 
 	s.logger.Infof("granted %s permission on module %s to user %s", permission, moduleName, userID)
@@ -211,11 +212,11 @@ func (s *UserService) GrantPermission(ctx context.Context, userID uuid.UUID, mod
 func (s *UserService) RevokePermission(ctx context.Context, userID uuid.UUID, moduleName string) error {
 	err := s.aclRepo.RevokePermission(ctx, userID, moduleName)
 	if err != nil {
-		if err == data.ErrPermissionNotFound {
-			return errors.NotFound("PERMISSION_NOT_FOUND", "permission not found")
+		if stdErrors.Is(err, data.ErrPermissionNotFound) {
+			return kerrors.NotFound("PERMISSION_NOT_FOUND", "permission not found")
 		}
 		s.logger.Errorf("failed to revoke permission: %v", err)
-		return errors.InternalServer("PERMISSION_REVOKE_FAILED", "failed to revoke permission")
+		return kerrors.InternalServer("PERMISSION_REVOKE_FAILED", "failed to revoke permission")
 	}
 
 	s.logger.Infof("revoked permission on module %s from user %s", moduleName, userID)
@@ -227,7 +228,7 @@ func (s *UserService) ListUserPermissions(ctx context.Context, userID uuid.UUID)
 	entries, err := s.aclRepo.ListUserPermissions(ctx, userID)
 	if err != nil {
 		s.logger.Errorf("failed to list user permissions: %v", err)
-		return nil, errors.InternalServer("PERMISSION_LIST_FAILED", "failed to list user permissions")
+		return nil, kerrors.InternalServer("PERMISSION_LIST_FAILED", "failed to list user permissions")
 	}
 	return entries, nil
 }
