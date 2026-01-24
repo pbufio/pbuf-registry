@@ -16,6 +16,7 @@ import (
 func NewGRPCServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
+	usersServer *UsersServer,
 	userRepo data.UserRepository,
 	aclRepo data.ACLRepository,
 	logger log.Logger,
@@ -51,6 +52,7 @@ func NewGRPCServer(cfg *config.Server,
 
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	v1.RegisterMetadataServiceServer(grpcServer, metadataServer)
+	v1.RegisterUserServiceServer(grpcServer, usersServer)
 
 	return grpcServer
 }

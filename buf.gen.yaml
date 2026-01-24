@@ -11,3 +11,6 @@ plugins:
     opt: paths=source_relative
   - plugin: openapiv2
     out: gen
+    opt:
+      - allow_merge=true
+      - merge_file_name=pbufregistry

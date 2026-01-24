@@ -52,6 +52,7 @@ func main() {
 	aclRepository := data.NewACLRepository(pool, logger)
 	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
 	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
+	usersServer := server.NewUsersServer(userRepository, aclRepository, logger)
 
 	app := kratos.New(
 		kratos.ID(id),
@@ -60,8 +61,8 @@ func main() {
 		kratos.Metadata(map[string]string{}),
 		kratos.Logger(logger),
 		kratos.Server(
-			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, userRepository, aclRepository, logger),
-			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, userRepository, aclRepository, logger),
+			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, usersServer, userRepository, aclRepository, logger),
+			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, usersServer, userRepository, aclRepository, logger),
 			server.NewDebugServer(&config.Cfg.Server, logger),
 		),
 	)
