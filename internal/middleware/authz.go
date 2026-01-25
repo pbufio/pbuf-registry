@@ -51,7 +51,7 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 		}
 
 		operation := serverContext.Operation()
-		
+
 		// Determine required permission based on method
 		requiredPermission, moduleName := getRequiredPermission(operation, req)
 		if requiredPermission == "" {
@@ -78,8 +78,15 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 // getRequiredPermission determines the required permission level based on the gRPC method
 func getRequiredPermission(operation string, req interface{}) (model.Permission, string) {
 	// UserService operations - only admin can access
-	if strings.Contains(operation, "/UserService/") {
+	if strings.Contains(operation, "UserService/") {
 		return model.PermissionAdmin, "*"
+	}
+
+	// Metadata service operations
+	if strings.Contains(operation, "MetadataService/") {
+		// Read operations
+		moduleName := extractModuleName(req)
+		return model.PermissionRead, moduleName
 	}
 
 	// Registry service operations
@@ -105,7 +112,7 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 		return model.PermissionAdmin, moduleName
 
 	default:
-		// No permission check required (e.g., health checks, metadata)
+		// No permission check required (e.g., health checks)
 		return "", ""
 	}
 }
@@ -115,12 +122,12 @@ func extractModuleName(req interface{}) string {
 	// Use reflection or type assertions to extract module name from request
 	// For now, return "*" to check global permissions
 	// In a full implementation, we would extract the actual module name from the request
-	
+
 	// Type assertions for known request types
 	type moduleNameGetter interface {
 		GetModuleName() string
 	}
-	
+
 	type nameGetter interface {
 		GetName() string
 	}
