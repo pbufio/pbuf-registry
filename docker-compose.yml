@@ -54,9 +54,9 @@ services:
       SERVER_GRPC_TLS_CERTFILE: /app/certs/server-cert.pem
       SERVER_GRPC_TLS_KEYFILE: /app/certs/server-key.pem
       SERVER_GRPC_AUTH_ENABLED: "true"
-      SERVER_GRPC_AUTH_TYPE: static-token
+      SERVER_GRPC_AUTH_TYPE: acl
       SERVER_HTTP_AUTH_ENABLED: "true"
-      SERVER_HTTP_AUTH_TYPE: static-token
+      SERVER_HTTP_AUTH_TYPE: acl
       SERVER_STATIC_TOKEN: ${SERVER_STATIC_TOKEN}
     command: >
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"
