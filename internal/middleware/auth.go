@@ -15,8 +15,15 @@ import (
 
 const (
 	authorizationKey = "Authorization"
-	userContextKey   = "user"
-	isAdminKey       = "is_admin"
+)
+
+type userContextKeyType struct{}
+
+type isAdminKeyType struct{}
+
+var (
+	userContextKey = userContextKeyType{}
+	isAdminKey     = isAdminKeyType{}
 )
 
 type AuthMiddleware interface {
@@ -101,22 +108,22 @@ func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
 				token = strings.TrimPrefix(authHeader, "Bearer ")
 			}
 
- 		// Check if it's the admin token
- 		if token == a.adminToken {
- 			// Admin has full access
- 			ctx = context.WithValue(ctx, isAdminKey, true)
- 			return handler(ctx, req)
- 		}
+			// Check if it's the admin token
+			if token == a.adminToken {
+				// Admin has full access
+				ctx = context.WithValue(ctx, isAdminKey, true)
+				return handler(ctx, req)
+			}
 
- 		// Check if it's a user/bot token (will be verified using pgcrypto)
- 		user, err := a.userRepo.GetUserByToken(ctx, token)
- 		if err != nil {
- 			if errors.Is(err, data.ErrUserNotFound) {
- 				return nil, jwt.ErrTokenInvalid
- 			}
- 			a.logger.Errorf("failed to get user by token: %v", err)
- 			return nil, jwt.ErrTokenInvalid
- 		}
+			// Check if it's a user/bot token (will be verified using pgcrypto)
+			user, err := a.userRepo.GetUserByToken(ctx, token)
+			if err != nil {
+				if errors.Is(err, data.ErrUserNotFound) {
+					return nil, jwt.ErrTokenInvalid
+				}
+				a.logger.Errorf("failed to get user by token: %v", err)
+				return nil, jwt.ErrTokenInvalid
+			}
 
 			// User found and active, add to context
 			ctx = context.WithValue(ctx, userContextKey, user)
