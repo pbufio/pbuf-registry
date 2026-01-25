@@ -1,0 +1,1397 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "pbuf-registry/v1/entities.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "MetadataService"
+    },
+    {
+      "name": "Registry"
+    },
+    {
+      "name": "UserService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/metadata": {
+      "post": {
+        "operationId": "MetadataService_GetMetadata",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetMetadataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetMetadataRequest"
+            }
+          }
+        ],
+        "tags": [
+          "MetadataService"
+        ]
+      }
+    },
+    "/v1/modules": {
+      "get": {
+        "summary": "List all registered modules",
+        "operationId": "Registry_ListModules",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListModulesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page_size",
+            "description": "The maximum number of modules to return.\nThe service may return fewer than this value.\nIf unspecified, at most 50 modules will be returned.\nThe maximum value is 1000; values above 1000 will be coerced to 1000.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "description": "A page token, received from a previous `ListModules` call.\nProvide this to retrieve the subsequent page.\n\nWhen paginating, all other parameters provided to `ListModules` must match\nthe call that provided the page token.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      },
+      "post": {
+        "summary": "Register a module",
+        "operationId": "Registry_RegisterModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "RegisterModuleRequest is the request message for RegisterModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/delete": {
+      "post": {
+        "summary": "Delete a module by name",
+        "operationId": "Registry_DeleteModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "DeleteModuleRequest is the request message for DeleteModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/dependencies": {
+      "post": {
+        "summary": "Get Module Dependencies",
+        "operationId": "Registry_GetModuleDependencies",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependenciesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetModuleDependenciesRequest is the request message for GetModuleDependencies.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependenciesRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/get": {
+      "post": {
+        "summary": "Get a module by name",
+        "operationId": "Registry_GetModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetModuleRequest is the request message for GetModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/pull": {
+      "post": {
+        "summary": "Pull a module tag",
+        "operationId": "Registry_PullModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PullModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "PullModuleRequest is the request message for PullModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PullModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/push": {
+      "post": {
+        "summary": "Push a module",
+        "operationId": "Registry_PushModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Module"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "PushModuleRequest is the request message for PushModule.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PushModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/modules/tags/delete": {
+      "post": {
+        "summary": "Delete a specific module tag",
+        "operationId": "Registry_DeleteModuleTag",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleTagResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "DeleteModuleTagRequest is the request message for DeleteModuleTag.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1DeleteModuleTagRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Registry"
+        ]
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "summary": "List all users and bots",
+        "operationId": "UserService_ListUsers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListUsersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "pageSize",
+            "description": "The maximum number of users to return",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page",
+            "description": "The page number (0-indexed)",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      },
+      "post": {
+        "summary": "Create a new user or bot",
+        "operationId": "UserService_CreateUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateUserResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateUserRequest"
+            }
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      }
+    },
+    "/v1/users/{id}": {
+      "get": {
+        "summary": "Get a user or bot by ID",
+        "operationId": "UserService_GetUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      },
+      "delete": {
+        "summary": "Delete a user or bot",
+        "operationId": "UserService_DeleteUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteUserResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      },
+      "put": {
+        "summary": "Update a user or bot",
+        "operationId": "UserService_UpdateUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserServiceUpdateUserBody"
+            }
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      }
+    },
+    "/v1/users/{id}/regenerate-token": {
+      "post": {
+        "summary": "Regenerate a user or bot token",
+        "operationId": "UserService_RegenerateToken",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RegenerateTokenResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserServiceRegenerateTokenBody"
+            }
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      }
+    },
+    "/v1/users/{userId}/permissions": {
+      "get": {
+        "summary": "List permissions for a user or bot",
+        "operationId": "UserService_ListUserPermissions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListUserPermissionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      },
+      "post": {
+        "summary": "Grant permission to a user or bot",
+        "operationId": "UserService_GrantPermission",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GrantPermissionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserServiceGrantPermissionBody"
+            }
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      }
+    },
+    "/v1/users/{userId}/permissions/{moduleName}": {
+      "delete": {
+        "summary": "Revoke permission from a user or bot",
+        "operationId": "UserService_RevokePermission",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RevokePermissionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "description": "The ID of the user",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "moduleName",
+            "description": "The module name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "UserService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "UserServiceGrantPermissionBody": {
+      "type": "object",
+      "properties": {
+        "moduleName": {
+          "type": "string",
+          "title": "The module name (\"*\" for all modules)"
+        },
+        "permission": {
+          "$ref": "#/definitions/v1Permission",
+          "title": "The permission level"
+        }
+      },
+      "title": "GrantPermissionRequest is the request for granting a permission"
+    },
+    "UserServiceRegenerateTokenBody": {
+      "type": "object",
+      "title": "RegenerateTokenRequest is the request for regenerating a token"
+    },
+    "UserServiceUpdateUserBody": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The new name (optional)"
+        },
+        "isActive": {
+          "type": "boolean",
+          "title": "Whether the user is active (optional)"
+        }
+      },
+      "title": "UpdateUserRequest is the request for updating a user"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1ACLEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "The unique identifier of the ACL entry"
+        },
+        "userId": {
+          "type": "string",
+          "title": "The user ID this permission belongs to"
+        },
+        "moduleName": {
+          "type": "string",
+          "title": "The module name (\"*\" for all modules)"
+        },
+        "permission": {
+          "$ref": "#/definitions/v1Permission",
+          "title": "The permission level"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "title": "When the permission was granted"
+        }
+      },
+      "title": "ACLEntry represents a permission entry"
+    },
+    "v1CreateUserRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The name of the user"
+        },
+        "type": {
+          "$ref": "#/definitions/v1UserType",
+          "title": "The type of the user"
+        }
+      },
+      "title": "CreateUserRequest is the request for creating a user or bot"
+    },
+    "v1CreateUserResponse": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "$ref": "#/definitions/v1User",
+          "title": "The created user"
+        },
+        "token": {
+          "type": "string",
+          "title": "The generated token (only returned once)"
+        }
+      },
+      "title": "CreateUserResponse is the response for creating a user or bot"
+    },
+    "v1DeleteModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to delete."
+        }
+      },
+      "description": "DeleteModuleRequest is the request message for DeleteModule."
+    },
+    "v1DeleteModuleResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the deleted module."
+        }
+      },
+      "description": "DeleteModuleResponse is the response message for DeleteModule."
+    },
+    "v1DeleteModuleTagRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to delete."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to delete."
+        }
+      },
+      "description": "DeleteModuleTagRequest is the request message for DeleteModuleTag."
+    },
+    "v1DeleteModuleTagResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the deleted module."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the deleted module."
+        }
+      },
+      "description": "DeleteModuleTagResponse is the response message for DeleteModuleTag."
+    },
+    "v1DeleteUserResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "The ID of the deleted user"
+        }
+      },
+      "title": "DeleteUserResponse is the response for deleting a user"
+    },
+    "v1Dependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the dependency."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the dependency."
+        }
+      },
+      "description": "Dependency is a dependency registered in the registry."
+    },
+    "v1Enum": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the enum."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1EnumValue"
+          },
+          "description": "The values of the enum."
+        }
+      },
+      "description": "Enum is an enum in a proto file."
+    },
+    "v1EnumValue": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the value."
+        },
+        "tag": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The tag of the value."
+        }
+      },
+      "description": "EnumValue is a value in an enum."
+    },
+    "v1Field": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the field."
+        },
+        "messageType": {
+          "type": "string",
+          "description": "The message_type of the field."
+        },
+        "tag": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The tag of the field."
+        },
+        "repeated": {
+          "type": "boolean",
+          "description": "The repeated flag of the field."
+        },
+        "map": {
+          "type": "boolean",
+          "description": "The map flag of the field."
+        },
+        "oneof": {
+          "type": "boolean",
+          "description": "The oneof flag of the field."
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "The optional flag of the field."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "The required flag of the field."
+        },
+        "oneofNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The one of names of the field"
+        },
+        "oneofTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The one of types of the field"
+        },
+        "mapKeyType": {
+          "type": "string",
+          "description": "The map key type of the field."
+        },
+        "mapValueType": {
+          "type": "string",
+          "description": "The map value type of the field."
+        }
+      },
+      "description": "Field is a field in a message."
+    },
+    "v1GetMetadataRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The module to get metadata for"
+        },
+        "tag": {
+          "type": "string",
+          "title": "The tag id to get metadata for"
+        }
+      }
+    },
+    "v1GetMetadataResponse": {
+      "type": "object",
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Package"
+          },
+          "title": "The packages in the module"
+        }
+      }
+    },
+    "v1GetModuleDependenciesRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The name of the module to retrieve"
+        },
+        "tag": {
+          "type": "string",
+          "title": "The tag of the module to retrieve"
+        }
+      },
+      "description": "GetModuleDependenciesRequest is the request message for GetModuleDependencies."
+    },
+    "v1GetModuleDependenciesResponse": {
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Dependency"
+          },
+          "description": "The dependencies of the module."
+        }
+      },
+      "description": "GetModuleDependenciesResponse is the response message for GetModuleDependencies."
+    },
+    "v1GetModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to retrieve."
+        },
+        "includeDraftTags": {
+          "type": "boolean",
+          "title": "Include draft tags or not"
+        }
+      },
+      "description": "GetModuleRequest is the request message for GetModule."
+    },
+    "v1GrantPermissionResponse": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "$ref": "#/definitions/v1ACLEntry",
+          "title": "The created ACL entry"
+        }
+      },
+      "title": "GrantPermissionResponse is the response for granting a permission"
+    },
+    "v1ListModulesResponse": {
+      "type": "object",
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Module"
+          },
+          "description": "The modules requested."
+        },
+        "next_page_token": {
+          "type": "string",
+          "description": "A token, which can be sent as `page_token` to retrieve the next page.\nIf this field is omitted, there are no subsequent pages."
+        }
+      },
+      "description": "ListModulesResponse is the response message for ListModules."
+    },
+    "v1ListUserPermissionsResponse": {
+      "type": "object",
+      "properties": {
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ACLEntry"
+          },
+          "title": "The list of permissions"
+        }
+      },
+      "title": "ListUserPermissionsResponse is the response for listing user permissions"
+    },
+    "v1ListUsersResponse": {
+      "type": "object",
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1User"
+          },
+          "title": "The list of users"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32",
+          "title": "The total number of users"
+        }
+      },
+      "title": "ListUsersResponse is the response for listing users"
+    },
+    "v1Message": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the message."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Field"
+          },
+          "description": "The fields of the message."
+        },
+        "nestedMessages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          },
+          "description": "The nested messages of the message."
+        },
+        "nestedEnums": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Enum"
+          },
+          "description": "The nested enums of the message."
+        }
+      },
+      "description": "Message is a message in a proto file."
+    },
+    "v1Method": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the method."
+        },
+        "inputType": {
+          "type": "string",
+          "description": "The input type of the method."
+        },
+        "outputType": {
+          "type": "string",
+          "description": "The output type of the method."
+        }
+      },
+      "description": "Method is a method in a service."
+    },
+    "v1Module": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id is the unique identifier of the module."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the module."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The tags of the module."
+        },
+        "draftTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The draft tags of the module."
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages that uses in this module"
+        }
+      },
+      "description": "Module is a module registered in the registry."
+    },
+    "v1Package": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the package."
+        },
+        "protoFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ParsedProtoFile"
+          },
+          "description": "The proto files of the package."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PackageDependency"
+          },
+          "description": "The dependencies of the package."
+        }
+      },
+      "title": "Package is a proto file package used in a module"
+    },
+    "v1PackageDependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the dependency."
+        }
+      },
+      "description": "PackageDependency is a dependency of a package."
+    },
+    "v1ParsedProtoFile": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "The filename of the proto file."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          },
+          "description": "The messages in the proto file."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Service"
+          },
+          "description": "The services in the proto file."
+        }
+      },
+      "title": "ParsedProtoFile is a proto file parsed by the registry\ncontains information about messages and services in the proto file"
+    },
+    "v1Permission": {
+      "type": "string",
+      "enum": [
+        "PERMISSION_UNSPECIFIED",
+        "PERMISSION_READ",
+        "PERMISSION_WRITE",
+        "PERMISSION_ADMIN"
+      ],
+      "default": "PERMISSION_UNSPECIFIED",
+      "title": "Permission defines the permission level"
+    },
+    "v1ProtoFile": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "The filename of the proto file."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the proto file."
+        }
+      },
+      "description": "ProtoFile is a proto file registered in the registry."
+    },
+    "v1PullModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the module to retrieve."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to retrieve."
+        }
+      },
+      "description": "PullModuleRequest is the request message for PullModule."
+    },
+    "v1PullModuleResponse": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "$ref": "#/definitions/v1Module",
+          "description": "The module requested."
+        },
+        "protofiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProtoFile"
+          },
+          "description": "The protofiles of the module."
+        }
+      },
+      "description": "PullModuleResponse is the response message for PullModule."
+    },
+    "v1PushModuleRequest": {
+      "type": "object",
+      "properties": {
+        "module_name": {
+          "type": "string",
+          "description": "The module to register."
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag of the module to register."
+        },
+        "protofiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ProtoFile"
+          },
+          "title": "Protofiles"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Dependency"
+          },
+          "title": "Dependencies"
+        },
+        "isDraft": {
+          "type": "boolean",
+          "title": "Is tag a draft"
+        }
+      },
+      "description": "PushModuleRequest is the request message for PushModule."
+    },
+    "v1RegenerateTokenResponse": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "title": "The new token"
+        }
+      },
+      "title": "RegenerateTokenResponse is the response for regenerating a token"
+    },
+    "v1RegisterModuleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Module name"
+        }
+      },
+      "description": "RegisterModuleRequest is the request message for RegisterModule."
+    },
+    "v1RevokePermissionResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "title": "Success indicator"
+        }
+      },
+      "title": "RevokePermissionResponse is the response for revoking a permission"
+    },
+    "v1Service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the service."
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Method"
+          },
+          "description": "The methods of the service."
+        }
+      },
+      "description": "Service is a service in a proto file."
+    },
+    "v1User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "The unique identifier of the user"
+        },
+        "name": {
+          "type": "string",
+          "title": "The name of the user"
+        },
+        "type": {
+          "$ref": "#/definitions/v1UserType",
+          "title": "The type of the user (user or bot)"
+        },
+        "isActive": {
+          "type": "boolean",
+          "title": "Whether the user is active"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "title": "When the user was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "title": "When the user was last updated"
+        }
+      },
+      "title": "User represents a user or bot in the system"
+    },
+    "v1UserType": {
+      "type": "string",
+      "enum": [
+        "USER_TYPE_UNSPECIFIED",
+        "USER_TYPE_USER",
+        "USER_TYPE_BOT"
+      ],
+      "default": "USER_TYPE_UNSPECIFIED",
+      "title": "UserType defines the type of user"
+    }
+  }
+}

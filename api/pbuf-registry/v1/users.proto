@@ -1,0 +1,255 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// UserService manages users, bots, and their permissions
+service UserService {
+  // Create a new user or bot
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse) {
+    option (google.api.http) = {
+      post: "/v1/users"
+      body: "*"
+    };
+  }
+
+  // List all users and bots
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/v1/users"
+    };
+  }
+
+  // Get a user or bot by ID
+  rpc GetUser(GetUserRequest) returns (User) {
+    option (google.api.http) = {
+      get: "/v1/users/{id}"
+    };
+  }
+
+  // Update a user or bot
+  rpc UpdateUser(UpdateUserRequest) returns (User) {
+    option (google.api.http) = {
+      put: "/v1/users/{id}"
+      body: "*"
+    };
+  }
+
+  // Delete a user or bot
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+    option (google.api.http) = {
+      delete: "/v1/users/{id}"
+    };
+  }
+
+  // Regenerate a user or bot token
+  rpc RegenerateToken(RegenerateTokenRequest) returns (RegenerateTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/users/{id}/regenerate-token"
+      body: "*"
+    };
+  }
+
+  // Grant permission to a user or bot
+  rpc GrantPermission(GrantPermissionRequest) returns (GrantPermissionResponse) {
+    option (google.api.http) = {
+      post: "/v1/users/{user_id}/permissions"
+      body: "*"
+    };
+  }
+
+  // Revoke permission from a user or bot
+  rpc RevokePermission(RevokePermissionRequest) returns (RevokePermissionResponse) {
+    option (google.api.http) = {
+      delete: "/v1/users/{user_id}/permissions/{module_name}"
+    };
+  }
+
+  // List permissions for a user or bot
+  rpc ListUserPermissions(ListUserPermissionsRequest) returns (ListUserPermissionsResponse) {
+    option (google.api.http) = {
+      get: "/v1/users/{user_id}/permissions"
+    };
+  }
+}
+
+// User represents a user or bot in the system
+message User {
+  // The unique identifier of the user
+  string id = 1;
+
+  // The name of the user
+  string name = 2;
+
+  // The type of the user (user or bot)
+  UserType type = 3;
+
+  // Whether the user is active
+  bool is_active = 4;
+
+  // When the user was created
+  google.protobuf.Timestamp created_at = 5;
+
+  // When the user was last updated
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// UserType defines the type of user
+enum UserType {
+  USER_TYPE_UNSPECIFIED = 0;
+  USER_TYPE_USER = 1;
+  USER_TYPE_BOT = 2;
+}
+
+// Permission defines the permission level
+enum Permission {
+  PERMISSION_UNSPECIFIED = 0;
+  PERMISSION_READ = 1;
+  PERMISSION_WRITE = 2;
+  PERMISSION_ADMIN = 3;
+}
+
+// ACLEntry represents a permission entry
+message ACLEntry {
+  // The unique identifier of the ACL entry
+  string id = 1;
+
+  // The user ID this permission belongs to
+  string user_id = 2;
+
+  // The module name ("*" for all modules)
+  string module_name = 3;
+
+  // The permission level
+  Permission permission = 4;
+
+  // When the permission was granted
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// CreateUserRequest is the request for creating a user or bot
+message CreateUserRequest {
+  // The name of the user
+  string name = 1;
+
+  // The type of the user
+  UserType type = 2;
+}
+
+// CreateUserResponse is the response for creating a user or bot
+message CreateUserResponse {
+  // The created user
+  User user = 1;
+
+  // The generated token (only returned once)
+  string token = 2;
+}
+
+// ListUsersRequest is the request for listing users
+message ListUsersRequest {
+  // The maximum number of users to return
+  int32 page_size = 1;
+
+  // The page number (0-indexed)
+  int32 page = 2;
+}
+
+// ListUsersResponse is the response for listing users
+message ListUsersResponse {
+  // The list of users
+  repeated User users = 1;
+
+  // The total number of users
+  int32 total = 2;
+}
+
+// GetUserRequest is the request for getting a user
+message GetUserRequest {
+  // The ID of the user
+  string id = 1;
+}
+
+// UpdateUserRequest is the request for updating a user
+message UpdateUserRequest {
+  // The ID of the user
+  string id = 1;
+
+  // The new name (optional)
+  string name = 2;
+
+  // Whether the user is active (optional)
+  bool is_active = 3;
+}
+
+// DeleteUserRequest is the request for deleting a user
+message DeleteUserRequest {
+  // The ID of the user
+  string id = 1;
+}
+
+// DeleteUserResponse is the response for deleting a user
+message DeleteUserResponse {
+  // The ID of the deleted user
+  string id = 1;
+}
+
+// RegenerateTokenRequest is the request for regenerating a token
+message RegenerateTokenRequest {
+  // The ID of the user
+  string id = 1;
+}
+
+// RegenerateTokenResponse is the response for regenerating a token
+message RegenerateTokenResponse {
+  // The new token
+  string token = 1;
+}
+
+// GrantPermissionRequest is the request for granting a permission
+message GrantPermissionRequest {
+  // The ID of the user
+  string user_id = 1;
+
+  // The module name ("*" for all modules)
+  string module_name = 2;
+
+  // The permission level
+  Permission permission = 3;
+}
+
+// GrantPermissionResponse is the response for granting a permission
+message GrantPermissionResponse {
+  // The created ACL entry
+  ACLEntry entry = 1;
+}
+
+// RevokePermissionRequest is the request for revoking a permission
+message RevokePermissionRequest {
+  // The ID of the user
+  string user_id = 1;
+
+  // The module name
+  string module_name = 2;
+}
+
+// RevokePermissionResponse is the response for revoking a permission
+message RevokePermissionResponse {
+  // Success indicator
+  bool success = 1;
+}
+
+// ListUserPermissionsRequest is the request for listing user permissions
+message ListUserPermissionsRequest {
+  // The ID of the user
+  string user_id = 1;
+}
+
+// ListUserPermissionsResponse is the response for listing user permissions
+message ListUserPermissionsResponse {
+  // The list of permissions
+  repeated ACLEntry permissions = 1;
+}

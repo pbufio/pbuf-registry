@@ -79,6 +79,105 @@ pbuf vendor
 
 **New to pbuf?** Check out the [examples/](examples/) directory for a complete walkthrough with sample protobuf files.
 
+## Access Control (ACL)
+
+The registry supports role-based access control with fine-grained permissions per module.
+
+### Authentication
+
+The registry supports two types of authentication:
+
+1. **Admin Token** - The `SERVER_STATIC_TOKEN` environment variable serves as the admin token with full access to all operations
+2. **User/Bot Tokens** - Generated tokens for users and bots with configurable permissions
+
+### Permission Levels
+
+- **Read** - Pull modules, list modules, view metadata
+- **Write** - Read + Push modules, register new modules  
+- **Admin** - Write + Delete modules and tags
+
+Permissions can be granted per module or globally using `*` as the module name.
+
+### User and Bot Management
+
+Only admins can manage users, bots, and permissions.
+
+#### Create a User/Bot
+
+```shell
+# Using grpcurl (requires generated proto files)
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -d '{"name": "ci-bot", "type": "USER_TYPE_BOT"}' \
+  localhost:6777 pbufregistry.v1.UserService/CreateUser
+```
+
+Returns a response with the user details and a generated token (only shown once):
+```json
+{
+  "user": {"id": "...", "name": "ci-bot", "type": "USER_TYPE_BOT", ...},
+  "token": "pbuf_bot_<random>"
+}
+```
+
+#### Grant Permissions
+
+```shell
+# Grant read permission on a specific module
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -d '{"user_id": "<user-id>", "module_name": "my-module", "permission": "PERMISSION_READ"}' \
+  localhost:6777 pbufregistry.v1.UserService/GrantPermission
+
+# Grant write permission on all modules
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -d '{"user_id": "<user-id>", "module_name": "*", "permission": "PERMISSION_WRITE"}' \
+  localhost:6777 pbufregistry.v1.UserService/GrantPermission
+```
+
+#### List Users
+
+```shell
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  localhost:6777 pbufregistry.v1.UserService/ListUsers
+```
+
+#### Revoke Permissions
+
+```shell
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -d '{"user_id": "<user-id>", "module_name": "my-module"}' \
+  localhost:6777 pbufregistry.v1.UserService/RevokePermission
+```
+
+#### Regenerate Token
+
+```shell
+grpcurl -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -d '{"id": "<user-id>"}' \
+  localhost:6777 pbufregistry.v1.UserService/RegenerateToken
+```
+
+### Using User/Bot Tokens
+
+Once a user or bot has been created and granted permissions, they can authenticate using their token:
+
+```shell
+# Configure pbuf CLI with user/bot token
+export PBUF_REGISTRY_TOKEN="pbuf_bot_<random>"
+
+# Now the bot can perform operations based on its permissions
+pbuf modules pull my-module v1.0.0  # Requires read permission
+pbuf modules push v1.0.0            # Requires write permission
+```
+
+### Token Security
+
+- Tokens are generated using cryptographically secure random bytes (32 bytes)
+- Tokens are encrypted in the database using PostgreSQL pgcrypto extension (bcrypt)
+- Token format: `pbuf_<type>_<base64_random>` (e.g., `pbuf_bot_abc123...`)
+- Tokens are only displayed once during creation or regeneration
+
+For more details, see [ACL.md](ACL.md).
+
 ## Usage
 
 ### CLI

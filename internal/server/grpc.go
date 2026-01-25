@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 
 	"github.com/go-kratos/kratos/v2/log"
+	kratosmiddleware "github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
+	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/middleware"
 )
 
@@ -14,6 +16,9 @@ import (
 func NewGRPCServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
+	usersServer *UsersServer,
+	userRepo data.UserRepository,
+	aclRepo data.ACLRepository,
 	logger log.Logger,
 ) *grpc.Server {
 	logHelper := log.NewHelper(logger)
@@ -23,24 +28,31 @@ func NewGRPCServer(cfg *config.Server,
 		logHelper.Fatalf("failed to create TLS config: %v", err)
 	}
 
-	authMiddleware, err := middleware.CreateAuthMiddleware(&cfg.GRPC.Auth, logger)
+	authMiddleware, err := middleware.CreateAuthMiddleware(&cfg.GRPC.Auth, userRepo, logger)
 	if err != nil {
 		logHelper.Fatalf("failed to create auth middleware: %v", err)
+	}
+
+	serverMiddlewares := []kratosmiddleware.Middleware{authMiddleware.NewAuthMiddleware()}
+	if cfg.GRPC.Auth.Enabled && cfg.GRPC.Auth.Type == "acl" {
+		if aclRepo == nil {
+			logHelper.Fatalf("ACL repository is required when auth type is 'acl'")
+		}
+		serverMiddlewares = append(serverMiddlewares, middleware.NewAuthorizationMiddleware(aclRepo, logger))
 	}
 
 	opts := []grpc.ServerOption{
 		grpc.Address(cfg.GRPC.Addr),
 		grpc.Timeout(cfg.GRPC.Timeout),
 		grpc.TLSConfig(tlsConfig),
-		grpc.Middleware(
-			authMiddleware.NewAuthMiddleware(),
-		),
+		grpc.Middleware(serverMiddlewares...),
 	}
 
 	grpcServer := grpc.NewServer(opts...)
 
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	v1.RegisterMetadataServiceServer(grpcServer, metadataServer)
+	v1.RegisterUserServiceServer(grpcServer, usersServer)
 
 	return grpcServer
 }
