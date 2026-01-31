@@ -263,11 +263,8 @@ func hasPotentiallyBreakingChangesFromParsed(previous, current *unordered.Proto)
 	// Check for package changes
 	prevPackage := extractPackageFromParsed(prevBody.Packages)
 	currPackage := extractPackageFromParsed(currBody.Packages)
-	if prevPackage != currPackage {
-		return true
-	}
 
-	return false
+	return prevPackage != currPackage
 }
 
 // Helper functions to extract proto elements from parsed structures
