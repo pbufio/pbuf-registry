@@ -98,3 +98,25 @@ services:
       SEED_BOT_TOKEN: "pbuf_bot_dev_ci_token"
     command: >
       sh -c "python -m pip install --no-cache-dir 'psycopg[binary]' && python scripts/seed_acl_dev.py"
+
+  registry-nginx:
+    image: nginx:alpine
+    restart: always
+    depends_on:
+      - pbuf-registry
+    expose:
+      - "80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+
+  pbuf-registry-ui:
+    image: ui
+    restart: always
+    depends_on:
+      - registry-nginx
+    ports:
+      - "80:80"
+    environment:
+      API_BASE_URL: http://registry-nginx
+      API_TOKEN: ${SERVER_STATIC_TOKEN:-dev-admin-token}
+      PUBLIC_ENABLED: "true"

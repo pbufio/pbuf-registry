@@ -20,10 +20,12 @@ var suite TestSuite
 
 type TestSuite struct {
 	psqlContainer      *test_utils.PostgreSQLContainer
+	pool               *pgxpool.Pool
 	registryRepository RegistryRepository
 	metadataRepository MetadataRepository
 	userRepository     UserRepository
 	aclRepository      ACLRepository
+	driftRepository    DriftRepository
 }
 
 func (s *TestSuite) SetupSuite() {
@@ -53,10 +55,12 @@ func (s *TestSuite) SetupSuite() {
 	}
 	migrations.Migrate(db)
 
+	s.pool = pool
 	s.registryRepository = NewRegistryRepository(pool, log.DefaultLogger)
 	s.metadataRepository = NewMetadataRepository(pool, log.DefaultLogger)
 	s.userRepository = NewUserRepository(pool, log.DefaultLogger)
 	s.aclRepository = NewACLRepository(pool, log.DefaultLogger)
+	s.driftRepository = NewDriftRepository(pool, log.DefaultLogger)
 }
 
 func (s *TestSuite) TearDownSuite() {

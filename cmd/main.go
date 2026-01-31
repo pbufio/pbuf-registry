@@ -50,6 +50,7 @@ func main() {
 	metadataRepository := data.NewMetadataRepository(pool, logger)
 	userRepository := data.NewUserRepository(pool, logger)
 	aclRepository := data.NewACLRepository(pool, logger)
+	driftRepository := data.NewDriftRepository(pool, logger)
 	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
 	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
 	usersServer := server.NewUsersServer(userRepository, aclRepository, logger)
@@ -85,7 +86,7 @@ func main() {
 		debugApp: debugApp,
 
 		compactionDaemon:   background.NewCompactionDaemon(registryRepository, logger),
-		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, logger),
+		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger),
 	}
 
 	err = CreateRootCommand(launcher).Execute()
