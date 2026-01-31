@@ -1,4 +1,4 @@
-# Free-Forever Open-Source Protobuf Registry
+# Modern Open-Source Protobuf Registry
 
 ![Status](https://github.com/pbufio/pbuf-registry/actions/workflows/main.yml/badge.svg)
 
