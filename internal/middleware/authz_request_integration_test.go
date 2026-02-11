@@ -33,6 +33,27 @@ func (s *metadataTestServer) GetMetadata(_ context.Context, _ *v1.GetMetadataReq
 	return &v1.GetMetadataResponse{}, nil
 }
 
+type driftTestServer struct {
+	v1.UnimplementedDriftServiceServer
+}
+
+func (s *driftTestServer) ListDriftEvents(_ context.Context, _ *v1.ListDriftEventsRequest) (*v1.ListDriftEventsResponse, error) {
+	return &v1.ListDriftEventsResponse{}, nil
+}
+
+func (s *driftTestServer) GetModuleDriftEvents(_ context.Context, req *v1.GetModuleDriftEventsRequest) (*v1.GetModuleDriftEventsResponse, error) {
+	return &v1.GetModuleDriftEventsResponse{}, nil
+}
+
+func (s *driftTestServer) AcknowledgeDriftEvent(_ context.Context, req *v1.AcknowledgeDriftEventRequest) (*v1.AcknowledgeDriftEventResponse, error) {
+	return &v1.AcknowledgeDriftEventResponse{
+		Event: &v1.DriftEvent{
+			Id:           req.GetEventId(),
+			Acknowledged: true,
+		},
+	}, nil
+}
+
 func (s *registryTestServer) RegisterModule(_ context.Context, request *v1.RegisterModuleRequest) (*v1.Module, error) {
 	return &v1.Module{Name: request.GetName()}, nil
 }
@@ -45,7 +66,7 @@ func (s *registryTestServer) DeleteModule(_ context.Context, request *v1.DeleteM
 	return &v1.DeleteModuleResponse{Name: request.GetName()}, nil
 }
 
-func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v1.MetadataServiceClient, func()) {
+func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v1.MetadataServiceClient, v1.DriftServiceClient, func()) {
 	t.Helper()
 
 	buffer := 101024 * 1024
@@ -61,6 +82,7 @@ func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v
 	)
 	v1.RegisterRegistryServer(srv, &registryTestServer{})
 	v1.RegisterMetadataServiceServer(srv, &metadataTestServer{})
+	v1.RegisterDriftServiceServer(srv, &driftTestServer{})
 
 	go func() {
 		_ = srv.Serve(lis)
@@ -97,7 +119,7 @@ func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v
 		_ = conn.Close()
 	}
 
-	return v1.NewRegistryClient(conn), v1.NewMetadataServiceClient(conn), closer
+	return v1.NewRegistryClient(conn), v1.NewMetadataServiceClient(conn), v1.NewDriftServiceClient(conn), closer
 }
 
 func ctxWithAuthToken(ctx context.Context, token string) context.Context {
@@ -125,7 +147,7 @@ func requireUnauthenticated(t *testing.T, err error) {
 
 func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 	adminToken := "admin-secret-token-authz"
-	registryClient, metadataClient, closeServer := startAuthzGRPCServer(t, adminToken)
+	registryClient, metadataClient, driftClient, closeServer := startAuthzGRPCServer(t, adminToken)
 	defer closeServer()
 
 	t.Run("missing token is unauthenticated", func(t *testing.T) {
@@ -246,6 +268,87 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 	t.Run("admin token bypass allows admin operations", func(t *testing.T) {
 		ctx := ctxWithAuthToken(context.Background(), "Bearer "+adminToken)
 		_, err := registryClient.DeleteModule(ctx, &v1.DeleteModuleRequest{Name: "mod-admin"})
+		require.NoError(t, err)
+	})
+
+	// DriftService tests
+	t.Run("drift: missing token is unauthenticated", func(t *testing.T) {
+		_, err := driftClient.ListDriftEvents(context.Background(), &v1.ListDriftEventsRequest{})
+		requireUnauthenticated(t, err)
+
+		_, err = driftClient.GetModuleDriftEvents(context.Background(), &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		requireUnauthenticated(t, err)
+
+		_, err = driftClient.AcknowledgeDriftEvent(context.Background(), &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
+		requireUnauthenticated(t, err)
+	})
+
+	t.Run("drift: deny by default (no ACL entries)", func(t *testing.T) {
+		plainToken := "pbuf_user_authz_drift_deny_" + t.Name()
+		_ = createTestUser(t, "authz-drift-deny-"+t.Name(), plainToken)
+
+		ctx := ctxWithAuthToken(context.Background(), plainToken)
+		_, err := driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
+		requirePermissionDenied(t, err)
+
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		requirePermissionDenied(t, err)
+
+		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
+		requirePermissionDenied(t, err)
+	})
+
+	t.Run("drift: wildcard read allows list and get, denies acknowledge", func(t *testing.T) {
+		plainToken := "pbuf_user_authz_drift_read_" + t.Name()
+		user := createTestUser(t, "authz-drift-read-"+t.Name(), plainToken)
+
+		err := integrationSuite.aclRepository.GrantPermission(context.Background(), &model.ACLEntry{
+			UserID:     user.ID,
+			ModuleName: "*",
+			Permission: model.PermissionRead,
+		})
+		require.NoError(t, err)
+
+		ctx := ctxWithAuthToken(context.Background(), plainToken)
+		_, err = driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
+		require.NoError(t, err)
+
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		require.NoError(t, err)
+
+		// Acknowledge requires write permission
+		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
+		requirePermissionDenied(t, err)
+	})
+
+	t.Run("drift: wildcard write allows acknowledge", func(t *testing.T) {
+		plainToken := "pbuf_user_authz_drift_write_" + t.Name()
+		user := createTestUser(t, "authz-drift-write-"+t.Name(), plainToken)
+
+		err := integrationSuite.aclRepository.GrantPermission(context.Background(), &model.ACLEntry{
+			UserID:     user.ID,
+			ModuleName: "*",
+			Permission: model.PermissionWrite,
+		})
+		require.NoError(t, err)
+
+		ctx := ctxWithAuthToken(context.Background(), plainToken)
+		resp, err := driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-123", AcknowledgedBy: "test-user"})
+		require.NoError(t, err)
+		assert.Equal(t, "event-123", resp.GetEvent().GetId())
+		assert.True(t, resp.GetEvent().GetAcknowledged())
+	})
+
+	t.Run("drift: admin token bypass allows all drift operations", func(t *testing.T) {
+		ctx := ctxWithAuthToken(context.Background(), "Bearer "+adminToken)
+
+		_, err := driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
+		require.NoError(t, err)
+
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		require.NoError(t, err)
+
+		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
 		require.NoError(t, err)
 	})
 }
