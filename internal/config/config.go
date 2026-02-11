@@ -55,6 +55,9 @@ type Config struct {
 		ProtoParsing struct {
 			CronSchedule string `mapstructure:"cron"`
 		} `mapstructure:"protoparsing"`
+		DriftDetection struct {
+			CronSchedule string `mapstructure:"cron"`
+		} `mapstructure:"driftdetection"`
 	} `mapstructure:"daemons"`
 }
 

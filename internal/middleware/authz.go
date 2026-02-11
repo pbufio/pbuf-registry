@@ -89,6 +89,22 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 		return model.PermissionRead, moduleName
 	}
 
+	// DriftService operations
+	if strings.Contains(operation, "DriftService/") {
+		switch {
+		case strings.Contains(operation, "/ListDriftEvents"),
+			strings.Contains(operation, "/GetModuleDriftEvents"):
+			// Read operations
+			moduleID := extractModuleID(req)
+			return model.PermissionRead, moduleID
+		case strings.Contains(operation, "/AcknowledgeDriftEvent"):
+			// Write operation - acknowledging drift events
+			return model.PermissionWrite, "*"
+		default:
+			return model.PermissionRead, "*"
+		}
+	}
+
 	// Registry service operations
 	switch {
 	case strings.Contains(operation, "/ListModules"),
@@ -141,6 +157,22 @@ func extractModuleName(req interface{}) string {
 	if r, ok := req.(nameGetter); ok {
 		if name := r.GetName(); name != "" {
 			return name
+		}
+	}
+
+	// Default to wildcard - checks global permissions
+	return "*"
+}
+
+// extractModuleID attempts to extract module ID from the request (used by DriftService)
+func extractModuleID(req interface{}) string {
+	type moduleIDGetter interface {
+		GetModuleId() string
+	}
+
+	if r, ok := req.(moduleIDGetter); ok {
+		if id := r.GetModuleId(); id != "" {
+			return id
 		}
 	}
 

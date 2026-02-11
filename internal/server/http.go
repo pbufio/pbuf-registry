@@ -15,6 +15,7 @@ func NewHTTPServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
 	usersServer *UsersServer,
+	driftServer *DriftServer,
 	userRepo data.UserRepository,
 	aclRepo data.ACLRepository,
 	logger log.Logger,
@@ -45,6 +46,7 @@ func NewHTTPServer(cfg *config.Server,
 	v1.RegisterRegistryHTTPServer(srv, registryServer)
 	v1.RegisterMetadataServiceHTTPServer(srv, metadataServer)
 	v1.RegisterUserServiceHTTPServer(srv, usersServer)
+	v1.RegisterDriftServiceHTTPServer(srv, driftServer)
 
 	return srv
 }

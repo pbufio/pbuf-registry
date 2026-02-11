@@ -17,6 +17,7 @@ func NewGRPCServer(cfg *config.Server,
 	registryServer *RegistryServer,
 	metadataServer *MetadataServer,
 	usersServer *UsersServer,
+	driftServer *DriftServer,
 	userRepo data.UserRepository,
 	aclRepo data.ACLRepository,
 	logger log.Logger,
@@ -53,6 +54,7 @@ func NewGRPCServer(cfg *config.Server,
 	v1.RegisterRegistryServer(grpcServer, registryServer)
 	v1.RegisterMetadataServiceServer(grpcServer, metadataServer)
 	v1.RegisterUserServiceServer(grpcServer, usersServer)
+	v1.RegisterDriftServiceServer(grpcServer, driftServer)
 
 	return grpcServer
 }

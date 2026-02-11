@@ -45,7 +45,7 @@ mocks:
 .PHONY: test
 # tests
 test:
-	go test -v -cover ./...
+	go test -cover --race ./...
 
 .PHONY: build
 # build

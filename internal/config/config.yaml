@@ -28,3 +28,5 @@ daemons:
     cron: "0 * * * *"
   protoparsing:
     cron: "*/1 * * * *"
+  driftdetection:
+    cron: "*/5 * * * *"
