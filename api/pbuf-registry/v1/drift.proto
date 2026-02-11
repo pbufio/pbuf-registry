@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package pbufregistry.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "pbufregistry/api/v1;v1";
+
+// DriftService provides access to drift detection events
+service DriftService {
+  // List all unacknowledged drift events
+  rpc ListDriftEvents(ListDriftEventsRequest) returns (ListDriftEventsResponse) {
+    option (google.api.http) = {
+      get: "/v1/drift/events"
+    };
+  }
+
+  // Get drift events for a specific module
+  rpc GetModuleDriftEvents(GetModuleDriftEventsRequest) returns (GetModuleDriftEventsResponse) {
+    option (google.api.http) = {
+      get: "/v1/drift/modules/{module_id}/events"
+    };
+  }
+
+  // Acknowledge a drift event
+  rpc AcknowledgeDriftEvent(AcknowledgeDriftEventRequest) returns (AcknowledgeDriftEventResponse) {
+    option (google.api.http) = {
+      post: "/v1/drift/events/{event_id}/acknowledge"
+      body: "*"
+    };
+  }
+}
+
+// DriftEventType represents the type of drift event
+enum DriftEventType {
+  DRIFT_EVENT_TYPE_UNSPECIFIED = 0;
+  DRIFT_EVENT_TYPE_ADDED = 1;
+  DRIFT_EVENT_TYPE_MODIFIED = 2;
+  DRIFT_EVENT_TYPE_DELETED = 3;
+}
+
+// DriftSeverity represents the severity level of a drift event
+enum DriftSeverity {
+  DRIFT_SEVERITY_UNSPECIFIED = 0;
+  DRIFT_SEVERITY_INFO = 1;
+  DRIFT_SEVERITY_WARNING = 2;
+  DRIFT_SEVERITY_CRITICAL = 3;
+}
+
+// DriftEvent represents a detected change in a proto file
+message DriftEvent {
+  // The unique identifier of the drift event
+  string id = 1;
+
+  // The module ID where the drift was detected
+  string module_id = 2;
+
+  // The tag ID where the drift was detected
+  string tag_id = 3;
+
+  // The filename of the proto file that changed
+  string filename = 4;
+
+  // The type of drift event
+  DriftEventType event_type = 5;
+
+  // The previous content hash (empty for added files)
+  string previous_hash = 6;
+
+  // The current content hash (empty for deleted files)
+  string current_hash = 7;
+
+  // The severity of the drift event
+  DriftSeverity severity = 8;
+
+  // When the drift was detected
+  google.protobuf.Timestamp detected_at = 9;
+
+  // Whether the event has been acknowledged
+  bool acknowledged = 10;
+
+  // When the event was acknowledged
+  google.protobuf.Timestamp acknowledged_at = 11;
+
+  // Who acknowledged the event
+  string acknowledged_by = 12;
+}
+
+// ListDriftEventsRequest is the request message for ListDriftEvents
+message ListDriftEventsRequest {
+  // Optional: only return unacknowledged events (default: true)
+  bool unacknowledged_only = 1;
+}
+
+// ListDriftEventsResponse is the response message for ListDriftEvents
+message ListDriftEventsResponse {
+  // The list of drift events
+  repeated DriftEvent events = 1;
+}
+
+// GetModuleDriftEventsRequest is the request message for GetModuleDriftEvents
+message GetModuleDriftEventsRequest {
+  // The module ID to get drift events for
+  string module_id = 1;
+}
+
+// GetModuleDriftEventsResponse is the response message for GetModuleDriftEvents
+message GetModuleDriftEventsResponse {
+  // The list of drift events for the module
+  repeated DriftEvent events = 1;
+}
+
+// AcknowledgeDriftEventRequest is the request message for AcknowledgeDriftEvent
+message AcknowledgeDriftEventRequest {
+  // The ID of the drift event to acknowledge
+  string event_id = 1;
+
+  // Who is acknowledging the event
+  string acknowledged_by = 2;
+}
+
+// AcknowledgeDriftEventResponse is the response message for AcknowledgeDriftEvent
+message AcknowledgeDriftEventResponse {
+  // The acknowledged drift event
+  DriftEvent event = 1;
+}

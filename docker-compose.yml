@@ -30,7 +30,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
   pbuf-registry:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.4.1}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.6.0}
     restart: always
     depends_on:
       - db
@@ -61,7 +61,7 @@ services:
     command: >
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"
   pbuf-registry-compaction:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.4.1}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.6.0}
     restart: always
     depends_on:
       - db
@@ -80,7 +80,7 @@ services:
     command: >
       sh -c "/app/pbuf-registry compaction"
   pbuf-registry-protoparser:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.4.1}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.6.0}
     restart: always
     depends_on:
       - db
@@ -99,7 +99,7 @@ services:
     command: >
       sh -c "/app/pbuf-registry proto-parsing"
   pbuf-registry-ui:
-    image: ghcr.io/pbufio/registry-ui:0.4.1
+    image: ghcr.io/pbufio/registry-ui:${REGISTRY_UI_VERSION:-0.5.0}
     restart: always
     depends_on:
       - registry-nginx
@@ -110,6 +110,7 @@ services:
     environment:
       API_BASE_URL: http://registry-nginx
       API_TOKEN: ${SERVER_STATIC_TOKEN}
+      PUBLIC_ENABLED: "true"
 
 networks:
   internal:

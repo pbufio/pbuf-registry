@@ -1,10 +1,13 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "pbuf-registry/v1/entities.proto",
+    "title": "pbuf-registry/v1/drift.proto",
     "version": "version not set"
   },
   "tags": [
+    {
+      "name": "DriftService"
+    },
     {
       "name": "MetadataService"
     },
@@ -22,6 +25,110 @@
     "application/json"
   ],
   "paths": {
+    "/v1/drift/events": {
+      "get": {
+        "summary": "List all unacknowledged drift events",
+        "operationId": "DriftService_ListDriftEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListDriftEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "unacknowledgedOnly",
+            "description": "Optional: only return unacknowledged events (default: true)",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "DriftService"
+        ]
+      }
+    },
+    "/v1/drift/events/{eventId}/acknowledge": {
+      "post": {
+        "summary": "Acknowledge a drift event",
+        "operationId": "DriftService_AcknowledgeDriftEvent",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AcknowledgeDriftEventResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "eventId",
+            "description": "The ID of the drift event to acknowledge",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DriftServiceAcknowledgeDriftEventBody"
+            }
+          }
+        ],
+        "tags": [
+          "DriftService"
+        ]
+      }
+    },
+    "/v1/drift/modules/{moduleId}/events": {
+      "get": {
+        "summary": "Get drift events for a specific module",
+        "operationId": "DriftService_GetModuleDriftEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDriftEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "moduleId",
+            "description": "The module ID to get drift events for",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "DriftService"
+        ]
+      }
+    },
     "/v1/metadata": {
       "post": {
         "operationId": "MetadataService_GetMetadata",
@@ -653,6 +760,16 @@
     }
   },
   "definitions": {
+    "DriftServiceAcknowledgeDriftEventBody": {
+      "type": "object",
+      "properties": {
+        "acknowledgedBy": {
+          "type": "string",
+          "title": "Who is acknowledging the event"
+        }
+      },
+      "title": "AcknowledgeDriftEventRequest is the request message for AcknowledgeDriftEvent"
+    },
     "UserServiceGrantPermissionBody": {
       "type": "object",
       "properties": {
@@ -739,6 +856,16 @@
         }
       },
       "title": "ACLEntry represents a permission entry"
+    },
+    "v1AcknowledgeDriftEventResponse": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/definitions/v1DriftEvent",
+          "title": "The acknowledged drift event"
+        }
+      },
+      "title": "AcknowledgeDriftEventResponse is the response message for AcknowledgeDriftEvent"
     },
     "v1CreateUserRequest": {
       "type": "object",
@@ -839,6 +966,84 @@
         }
       },
       "description": "Dependency is a dependency registered in the registry."
+    },
+    "v1DriftEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "The unique identifier of the drift event"
+        },
+        "moduleId": {
+          "type": "string",
+          "title": "The module ID where the drift was detected"
+        },
+        "tagId": {
+          "type": "string",
+          "title": "The tag ID where the drift was detected"
+        },
+        "filename": {
+          "type": "string",
+          "title": "The filename of the proto file that changed"
+        },
+        "eventType": {
+          "$ref": "#/definitions/v1DriftEventType",
+          "title": "The type of drift event"
+        },
+        "previousHash": {
+          "type": "string",
+          "title": "The previous content hash (empty for added files)"
+        },
+        "currentHash": {
+          "type": "string",
+          "title": "The current content hash (empty for deleted files)"
+        },
+        "severity": {
+          "$ref": "#/definitions/v1DriftSeverity",
+          "title": "The severity of the drift event"
+        },
+        "detectedAt": {
+          "type": "string",
+          "format": "date-time",
+          "title": "When the drift was detected"
+        },
+        "acknowledged": {
+          "type": "boolean",
+          "title": "Whether the event has been acknowledged"
+        },
+        "acknowledgedAt": {
+          "type": "string",
+          "format": "date-time",
+          "title": "When the event was acknowledged"
+        },
+        "acknowledgedBy": {
+          "type": "string",
+          "title": "Who acknowledged the event"
+        }
+      },
+      "title": "DriftEvent represents a detected change in a proto file"
+    },
+    "v1DriftEventType": {
+      "type": "string",
+      "enum": [
+        "DRIFT_EVENT_TYPE_UNSPECIFIED",
+        "DRIFT_EVENT_TYPE_ADDED",
+        "DRIFT_EVENT_TYPE_MODIFIED",
+        "DRIFT_EVENT_TYPE_DELETED"
+      ],
+      "default": "DRIFT_EVENT_TYPE_UNSPECIFIED",
+      "title": "DriftEventType represents the type of drift event"
+    },
+    "v1DriftSeverity": {
+      "type": "string",
+      "enum": [
+        "DRIFT_SEVERITY_UNSPECIFIED",
+        "DRIFT_SEVERITY_INFO",
+        "DRIFT_SEVERITY_WARNING",
+        "DRIFT_SEVERITY_CRITICAL"
+      ],
+      "default": "DRIFT_SEVERITY_UNSPECIFIED",
+      "title": "DriftSeverity represents the severity level of a drift event"
     },
     "v1Enum": {
       "type": "object",
@@ -988,6 +1193,20 @@
       },
       "description": "GetModuleDependenciesResponse is the response message for GetModuleDependencies."
     },
+    "v1GetModuleDriftEventsResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1DriftEvent"
+          },
+          "title": "The list of drift events for the module"
+        }
+      },
+      "title": "GetModuleDriftEventsResponse is the response message for GetModuleDriftEvents"
+    },
     "v1GetModuleRequest": {
       "type": "object",
       "properties": {
@@ -1011,6 +1230,20 @@
         }
       },
       "title": "GrantPermissionResponse is the response for granting a permission"
+    },
+    "v1ListDriftEventsResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1DriftEvent"
+          },
+          "title": "The list of drift events"
+        }
+      },
+      "title": "ListDriftEventsResponse is the response message for ListDriftEvents"
     },
     "v1ListModulesResponse": {
       "type": "object",
