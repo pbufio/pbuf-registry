@@ -24,7 +24,9 @@ const (
 type DriftEvent struct {
 	ID             string
 	ModuleID       string
+	ModuleName     string
 	TagID          string
+	TagName        string
 	Filename       string
 	EventType      DriftEventType
 	PreviousHash   string

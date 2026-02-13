@@ -276,7 +276,7 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		_, err := driftClient.ListDriftEvents(context.Background(), &v1.ListDriftEventsRequest{})
 		requireUnauthenticated(t, err)
 
-		_, err = driftClient.GetModuleDriftEvents(context.Background(), &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		_, err = driftClient.GetModuleDriftEvents(context.Background(), &v1.GetModuleDriftEventsRequest{ModuleName: "test.module"})
 		requireUnauthenticated(t, err)
 
 		_, err = driftClient.AcknowledgeDriftEvent(context.Background(), &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
@@ -291,7 +291,7 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		_, err := driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
 		requirePermissionDenied(t, err)
 
-		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "test.module"})
 		requirePermissionDenied(t, err)
 
 		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
@@ -313,7 +313,7 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		_, err = driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
 		require.NoError(t, err)
 
-		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "test.module"})
 		require.NoError(t, err)
 
 		// Acknowledge requires write permission
@@ -345,7 +345,7 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		_, err := driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
 		require.NoError(t, err)
 
-		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "mod-id"})
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "test.module"})
 		require.NoError(t, err)
 
 		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})

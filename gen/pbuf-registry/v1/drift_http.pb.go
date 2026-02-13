@@ -35,7 +35,7 @@ type DriftServiceHTTPServer interface {
 func RegisterDriftServiceHTTPServer(s *http.Server, srv DriftServiceHTTPServer) {
 	r := s.Route("/")
 	r.GET("/v1/drift/events", _DriftService_ListDriftEvents0_HTTP_Handler(srv))
-	r.GET("/v1/drift/modules/{module_id}/events", _DriftService_GetModuleDriftEvents0_HTTP_Handler(srv))
+	r.POST("/v1/drift/modules/events", _DriftService_GetModuleDriftEvents0_HTTP_Handler(srv))
 	r.POST("/v1/drift/events/{event_id}/acknowledge", _DriftService_AcknowledgeDriftEvent0_HTTP_Handler(srv))
 }
 
@@ -61,10 +61,10 @@ func _DriftService_ListDriftEvents0_HTTP_Handler(srv DriftServiceHTTPServer) fun
 func _DriftService_GetModuleDriftEvents0_HTTP_Handler(srv DriftServiceHTTPServer) func(ctx http.Context) error {
 	return func(ctx http.Context) error {
 		var in GetModuleDriftEventsRequest
-		if err := ctx.BindQuery(&in); err != nil {
+		if err := ctx.Bind(&in); err != nil {
 			return err
 		}
-		if err := ctx.BindVars(&in); err != nil {
+		if err := ctx.BindQuery(&in); err != nil {
 			return err
 		}
 		http.SetOperation(ctx, OperationDriftServiceGetModuleDriftEvents)
@@ -139,11 +139,11 @@ func (c *DriftServiceHTTPClientImpl) AcknowledgeDriftEvent(ctx context.Context, 
 // GetModuleDriftEvents Get drift events for a specific module
 func (c *DriftServiceHTTPClientImpl) GetModuleDriftEvents(ctx context.Context, in *GetModuleDriftEventsRequest, opts ...http.CallOption) (*GetModuleDriftEventsResponse, error) {
 	var out GetModuleDriftEventsResponse
-	pattern := "/v1/drift/modules/{module_id}/events"
-	path := binding.EncodeURL(pattern, in, true)
+	pattern := "/v1/drift/modules/events"
+	path := binding.EncodeURL(pattern, in, false)
 	opts = append(opts, http.Operation(OperationDriftServiceGetModuleDriftEvents))
 	opts = append(opts, http.PathTemplate(pattern))
-	err := c.cc.Invoke(ctx, "GET", path, nil, &out, opts...)
+	err := c.cc.Invoke(ctx, "POST", path, in, &out, opts...)
 	if err != nil {
 		return nil, err
 	}

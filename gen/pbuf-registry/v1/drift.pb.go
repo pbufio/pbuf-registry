@@ -134,10 +134,10 @@ type DriftEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The unique identifier of the drift event
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// The module ID where the drift was detected
-	ModuleId string `protobuf:"bytes,2,opt,name=module_id,json=moduleId,proto3" json:"module_id,omitempty"`
-	// The tag ID where the drift was detected
-	TagId string `protobuf:"bytes,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	// The module name where the drift was detected
+	ModuleName string `protobuf:"bytes,2,opt,name=module_name,json=moduleName,proto3" json:"module_name,omitempty"`
+	// The tag name where the drift was detected
+	TagName string `protobuf:"bytes,3,opt,name=tag_name,json=tagName,proto3" json:"tag_name,omitempty"`
 	// The filename of the proto file that changed
 	Filename string `protobuf:"bytes,4,opt,name=filename,proto3" json:"filename,omitempty"`
 	// The type of drift event
@@ -197,16 +197,16 @@ func (x *DriftEvent) GetId() string {
 	return ""
 }
 
-func (x *DriftEvent) GetModuleId() string {
+func (x *DriftEvent) GetModuleName() string {
 	if x != nil {
-		return x.ModuleId
+		return x.ModuleName
 	}
 	return ""
 }
 
-func (x *DriftEvent) GetTagId() string {
+func (x *DriftEvent) GetTagName() string {
 	if x != nil {
-		return x.TagId
+		return x.TagName
 	}
 	return ""
 }
@@ -369,8 +369,10 @@ func (x *ListDriftEventsResponse) GetEvents() []*DriftEvent {
 // GetModuleDriftEventsRequest is the request message for GetModuleDriftEvents
 type GetModuleDriftEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The module ID to get drift events for
-	ModuleId      string `protobuf:"bytes,1,opt,name=module_id,json=moduleId,proto3" json:"module_id,omitempty"`
+	// The module name to get drift events for
+	ModuleName string `protobuf:"bytes,1,opt,name=module_name,json=moduleName,proto3" json:"module_name,omitempty"`
+	// Optional: filter drift events by tag name
+	TagName       *string `protobuf:"bytes,2,opt,name=tag_name,json=tagName,proto3,oneof" json:"tag_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -405,9 +407,16 @@ func (*GetModuleDriftEventsRequest) Descriptor() ([]byte, []int) {
 	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetModuleDriftEventsRequest) GetModuleId() string {
+func (x *GetModuleDriftEventsRequest) GetModuleName() string {
 	if x != nil {
-		return x.ModuleId
+		return x.ModuleName
+	}
+	return ""
+}
+
+func (x *GetModuleDriftEventsRequest) GetTagName() string {
+	if x != nil && x.TagName != nil {
+		return *x.TagName
 	}
 	return ""
 }
@@ -563,12 +572,13 @@ var File_pbuf_registry_v1_drift_proto protoreflect.FileDescriptor
 
 const file_pbuf_registry_v1_drift_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpbuf-registry/v1/drift.proto\x12\x0fpbufregistry.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xff\x03\n" +
+	"\x1cpbuf-registry/v1/drift.proto\x12\x0fpbufregistry.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x87\x04\n" +
 	"\n" +
 	"DriftEvent\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
-	"\tmodule_id\x18\x02 \x01(\tR\bmoduleId\x12\x15\n" +
-	"\x06tag_id\x18\x03 \x01(\tR\x05tagId\x12\x1a\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vmodule_name\x18\x02 \x01(\tR\n" +
+	"moduleName\x12\x19\n" +
+	"\btag_name\x18\x03 \x01(\tR\atagName\x12\x1a\n" +
 	"\bfilename\x18\x04 \x01(\tR\bfilename\x12>\n" +
 	"\n" +
 	"event_type\x18\x05 \x01(\x0e2\x1f.pbufregistry.v1.DriftEventTypeR\teventType\x12#\n" +
@@ -584,9 +594,12 @@ const file_pbuf_registry_v1_drift_proto_rawDesc = "" +
 	"\x16ListDriftEventsRequest\x12/\n" +
 	"\x13unacknowledged_only\x18\x01 \x01(\bR\x12unacknowledgedOnly\"N\n" +
 	"\x17ListDriftEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DriftEventR\x06events\":\n" +
-	"\x1bGetModuleDriftEventsRequest\x12\x1b\n" +
-	"\tmodule_id\x18\x01 \x01(\tR\bmoduleId\"S\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DriftEventR\x06events\"k\n" +
+	"\x1bGetModuleDriftEventsRequest\x12\x1f\n" +
+	"\vmodule_name\x18\x01 \x01(\tR\n" +
+	"moduleName\x12\x1e\n" +
+	"\btag_name\x18\x02 \x01(\tH\x00R\atagName\x88\x01\x01B\v\n" +
+	"\t_tag_name\"S\n" +
 	"\x1cGetModuleDriftEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DriftEventR\x06events\"b\n" +
 	"\x1cAcknowledgeDriftEventRequest\x12\x19\n" +
@@ -603,10 +616,10 @@ const file_pbuf_registry_v1_drift_proto_rawDesc = "" +
 	"\x1aDRIFT_SEVERITY_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13DRIFT_SEVERITY_INFO\x10\x01\x12\x1a\n" +
 	"\x16DRIFT_SEVERITY_WARNING\x10\x02\x12\x1b\n" +
-	"\x17DRIFT_SEVERITY_CRITICAL\x10\x032\xdf\x03\n" +
+	"\x17DRIFT_SEVERITY_CRITICAL\x10\x032\xd6\x03\n" +
 	"\fDriftService\x12~\n" +
-	"\x0fListDriftEvents\x12'.pbufregistry.v1.ListDriftEventsRequest\x1a(.pbufregistry.v1.ListDriftEventsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/drift/events\x12\xa1\x01\n" +
-	"\x14GetModuleDriftEvents\x12,.pbufregistry.v1.GetModuleDriftEventsRequest\x1a-.pbufregistry.v1.GetModuleDriftEventsResponse\",\x82\xd3\xe4\x93\x02&\x12$/v1/drift/modules/{module_id}/events\x12\xaa\x01\n" +
+	"\x0fListDriftEvents\x12'.pbufregistry.v1.ListDriftEventsRequest\x1a(.pbufregistry.v1.ListDriftEventsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/drift/events\x12\x98\x01\n" +
+	"\x14GetModuleDriftEvents\x12,.pbufregistry.v1.GetModuleDriftEventsRequest\x1a-.pbufregistry.v1.GetModuleDriftEventsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/drift/modules/events\x12\xaa\x01\n" +
 	"\x15AcknowledgeDriftEvent\x12-.pbufregistry.v1.AcknowledgeDriftEventRequest\x1a..pbufregistry.v1.AcknowledgeDriftEventResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/drift/events/{event_id}/acknowledgeB\x18Z\x16pbufregistry/api/v1;v1b\x06proto3"
 
 var (
@@ -661,6 +674,7 @@ func file_pbuf_registry_v1_drift_proto_init() {
 	if File_pbuf_registry_v1_drift_proto != nil {
 		return
 	}
+	file_pbuf_registry_v1_drift_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

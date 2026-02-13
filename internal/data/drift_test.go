@@ -146,7 +146,7 @@ func TestDriftRepository_SaveDriftEvents_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify only one event was created (idempotent)
-	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID)
+	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
 	require.NoError(t, err)
 
 	// Count events with matching criteria
@@ -320,7 +320,7 @@ func TestDriftRepository_AcknowledgeDriftEvent(t *testing.T) {
 	assert.False(t, found, "acknowledged event should not be in unacknowledged list")
 
 	// Verify event details in module events
-	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID)
+	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID, "")
 	require.NoError(t, err)
 
 	for _, e := range moduleEvents {

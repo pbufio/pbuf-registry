@@ -97,8 +97,8 @@
         ]
       }
     },
-    "/v1/drift/modules/{moduleId}/events": {
-      "get": {
+    "/v1/drift/modules/events": {
+      "post": {
         "summary": "Get drift events for a specific module",
         "operationId": "DriftService_GetModuleDriftEvents",
         "responses": {
@@ -117,11 +117,12 @@
         },
         "parameters": [
           {
-            "name": "moduleId",
-            "description": "The module ID to get drift events for",
-            "in": "path",
+            "name": "body",
+            "in": "body",
             "required": true,
-            "type": "string"
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDriftEventsRequest"
+            }
           }
         ],
         "tags": [
@@ -974,13 +975,13 @@
           "type": "string",
           "title": "The unique identifier of the drift event"
         },
-        "moduleId": {
+        "moduleName": {
           "type": "string",
-          "title": "The module ID where the drift was detected"
+          "title": "The module name where the drift was detected"
         },
-        "tagId": {
+        "tagName": {
           "type": "string",
-          "title": "The tag ID where the drift was detected"
+          "title": "The tag name where the drift was detected"
         },
         "filename": {
           "type": "string",
@@ -1192,6 +1193,20 @@
         }
       },
       "description": "GetModuleDependenciesResponse is the response message for GetModuleDependencies."
+    },
+    "v1GetModuleDriftEventsRequest": {
+      "type": "object",
+      "properties": {
+        "moduleName": {
+          "type": "string",
+          "title": "The module name to get drift events for"
+        },
+        "tagName": {
+          "type": "string",
+          "title": "Optional: filter drift events by tag name"
+        }
+      },
+      "title": "GetModuleDriftEventsRequest is the request message for GetModuleDriftEvents"
     },
     "v1GetModuleDriftEventsResponse": {
       "type": "object",

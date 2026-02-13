@@ -12,6 +12,7 @@
 *.test
 bin/
 .postgres-data/
+data_dump.sql
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

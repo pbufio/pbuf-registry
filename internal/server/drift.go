@@ -55,13 +55,18 @@ func (s *DriftServer) ListDriftEvents(ctx context.Context, request *v1.ListDrift
 
 // GetModuleDriftEvents returns drift events for a specific module
 func (s *DriftServer) GetModuleDriftEvents(ctx context.Context, request *v1.GetModuleDriftEventsRequest) (*v1.GetModuleDriftEventsResponse, error) {
-	if request == nil || request.ModuleId == "" {
+	if request == nil || request.ModuleName == "" {
 		return nil, ErrInvalidRequest
 	}
 
-	events, err := s.driftRepo.GetDriftEventsForModule(ctx, request.ModuleId)
+	tagName := ""
+	if request.TagName != nil {
+		tagName = *request.TagName
+	}
+
+	events, err := s.driftRepo.GetDriftEventsForModule(ctx, request.ModuleName, tagName)
 	if err != nil {
-		s.logger.Errorf("failed to get drift events for module %s: %v", request.ModuleId, err)
+		s.logger.Errorf("failed to get drift events for module %s: %v", request.ModuleName, err)
 		return nil, kerrors.InternalServer("DRIFT_EVENTS_FETCH_FAILED", "failed to fetch drift events")
 	}
 
@@ -108,8 +113,8 @@ func (s *DriftServer) AcknowledgeDriftEvent(ctx context.Context, request *v1.Ack
 func toV1DriftEvent(event *model.DriftEvent) *v1.DriftEvent {
 	v1Event := &v1.DriftEvent{
 		Id:             event.ID,
-		ModuleId:       event.ModuleID,
-		TagId:          event.TagID,
+		ModuleName:     event.ModuleName,
+		TagName:        event.TagName,
 		Filename:       event.Filename,
 		EventType:      driftEventTypeToV1(event.EventType),
 		PreviousHash:   event.PreviousHash,

@@ -51,9 +51,9 @@ func (_m *DriftRepository) ComputeAndStoreHashes(ctx context.Context, tagID stri
 	return r0
 }
 
-// GetDriftEventsForModule provides a mock function with given fields: ctx, moduleID
-func (_m *DriftRepository) GetDriftEventsForModule(ctx context.Context, moduleID string) ([]model.DriftEvent, error) {
-	ret := _m.Called(ctx, moduleID)
+// GetDriftEventsForModule provides a mock function with given fields: ctx, moduleName, tagName
+func (_m *DriftRepository) GetDriftEventsForModule(ctx context.Context, moduleName string, tagName string) ([]model.DriftEvent, error) {
+	ret := _m.Called(ctx, moduleName, tagName)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDriftEventsForModule")
@@ -61,19 +61,19 @@ func (_m *DriftRepository) GetDriftEventsForModule(ctx context.Context, moduleID
 
 	var r0 []model.DriftEvent
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) ([]model.DriftEvent, error)); ok {
-		return rf(ctx, moduleID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]model.DriftEvent, error)); ok {
+		return rf(ctx, moduleName, tagName)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) []model.DriftEvent); ok {
-		r0 = rf(ctx, moduleID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []model.DriftEvent); ok {
+		r0 = rf(ctx, moduleName, tagName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]model.DriftEvent)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, moduleID)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, moduleName, tagName)
 	} else {
 		r1 = ret.Error(1)
 	}
