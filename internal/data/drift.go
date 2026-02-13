@@ -35,8 +35,9 @@ type DriftRepository interface {
 	GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error)
 	// AcknowledgeDriftEvent marks a drift event as acknowledged
 	AcknowledgeDriftEvent(ctx context.Context, eventID string, acknowledgedBy string) error
-	// GetDriftEventsForModule returns drift events for a specific module
-	GetDriftEventsForModule(ctx context.Context, moduleID string) ([]model.DriftEvent, error)
+	// GetDriftEventsForModule returns drift events for a specific module by name
+	// If tagName is provided (non-empty), it filters events by tag name
+	GetDriftEventsForModule(ctx context.Context, moduleName string, tagName string) ([]model.DriftEvent, error)
 }
 
 type driftRepo struct {
@@ -314,10 +315,12 @@ func (d *driftRepo) GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.D
 	var events []model.DriftEvent
 
 	rows, err := d.pool.Query(ctx, `
-		SELECT id, module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at
-		FROM drift_events
-		WHERE acknowledged = false
-		ORDER BY detected_at DESC
+		SELECT de.id, de.module_id, m.name, de.tag_id, t.tag, de.filename, de.event_type, de.previous_hash, de.current_hash, de.severity, de.detected_at
+		FROM drift_events de
+		JOIN modules m ON de.module_id = m.id
+		JOIN tags t ON de.tag_id = t.id
+		WHERE de.acknowledged = false
+		ORDER BY de.detected_at DESC
 	`)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -331,7 +334,7 @@ func (d *driftRepo) GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.D
 	for rows.Next() {
 		var event model.DriftEvent
 		var previousHash, currentHash *string
-		if err := rows.Scan(&event.ID, &event.ModuleID, &event.TagID, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.ModuleID, &event.ModuleName, &event.TagID, &event.TagName, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt); err != nil {
 			d.logger.Errorf("error scanning drift event: %v", err)
 			return nil, err
 		}
@@ -365,15 +368,27 @@ func (d *driftRepo) AcknowledgeDriftEvent(ctx context.Context, eventID string, a
 	return nil
 }
 
-func (d *driftRepo) GetDriftEventsForModule(ctx context.Context, moduleID string) ([]model.DriftEvent, error) {
+func (d *driftRepo) GetDriftEventsForModule(ctx context.Context, moduleName string, tagName string) ([]model.DriftEvent, error) {
 	var events []model.DriftEvent
 
-	rows, err := d.pool.Query(ctx, `
-		SELECT id, module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at, acknowledged, acknowledged_at, acknowledged_by
-		FROM drift_events
-		WHERE module_id = $1
-		ORDER BY detected_at DESC
-	`, moduleID)
+	query := `
+		SELECT de.id, de.module_id, m.name, de.tag_id, t.tag, de.filename, de.event_type, de.previous_hash, de.current_hash, de.severity, de.detected_at, de.acknowledged, de.acknowledged_at, de.acknowledged_by
+		FROM drift_events de
+		JOIN modules m ON de.module_id = m.id
+		JOIN tags t ON de.tag_id = t.id
+		WHERE m.name = $1`
+
+	var args []interface{}
+	args = append(args, moduleName)
+
+	if tagName != "" {
+		query += ` AND t.tag = $2`
+		args = append(args, tagName)
+	}
+
+	query += ` ORDER BY de.detected_at DESC`
+
+	rows, err := d.pool.Query(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return events, nil
@@ -387,7 +402,7 @@ func (d *driftRepo) GetDriftEventsForModule(ctx context.Context, moduleID string
 		var event model.DriftEvent
 		var previousHash, currentHash, acknowledgedBy *string
 		var acknowledgedAt *time.Time
-		if err := rows.Scan(&event.ID, &event.ModuleID, &event.TagID, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt, &event.Acknowledged, &acknowledgedAt, &acknowledgedBy); err != nil {
+		if err := rows.Scan(&event.ID, &event.ModuleID, &event.ModuleName, &event.TagID, &event.TagName, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt, &event.Acknowledged, &acknowledgedAt, &acknowledgedBy); err != nil {
 			d.logger.Errorf("error scanning drift event: %v", err)
 			return nil, err
 		}

@@ -176,7 +176,9 @@ func TestDriftServer_GetModuleDriftEvents_GRPC(t *testing.T) {
 			{
 				ID:             "event-1",
 				ModuleID:       "module-1",
+				ModuleName:     "buf.build/test/module",
 				TagID:          "tag-1",
+				TagName:        "v1.0.0",
 				Filename:       "test.proto",
 				EventType:      model.DriftEventTypeDeleted,
 				PreviousHash:   "hash1",
@@ -188,17 +190,17 @@ func TestDriftServer_GetModuleDriftEvents_GRPC(t *testing.T) {
 			},
 		}
 
-		driftRepo.On("GetDriftEventsForModule", mock.Anything, "module-1").Return(events, nil).Once()
+		driftRepo.On("GetDriftEventsForModule", mock.Anything, "buf.build/test/module", "").Return(events, nil).Once()
 
-		resp, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "module-1"})
+		resp, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "buf.build/test/module"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(resp.GetEvents()) != 1 {
 			t.Fatalf("expected 1 event, got %d", len(resp.GetEvents()))
 		}
-		if resp.GetEvents()[0].GetModuleId() != "module-1" {
-			t.Fatalf("expected module id module-1, got %s", resp.GetEvents()[0].GetModuleId())
+		if resp.GetEvents()[0].GetModuleName() != "buf.build/test/module" {
+			t.Fatalf("expected module name buf.build/test/module, got %s", resp.GetEvents()[0].GetModuleName())
 		}
 		if resp.GetEvents()[0].GetEventType() != v1.DriftEventType_DRIFT_EVENT_TYPE_DELETED {
 			t.Fatalf("expected event type DELETED, got %v", resp.GetEvents()[0].GetEventType())
@@ -217,12 +219,12 @@ func TestDriftServer_GetModuleDriftEvents_GRPC(t *testing.T) {
 		}
 	})
 
-	t.Run("empty module_id", func(t *testing.T) {
+	t.Run("empty module_name", func(t *testing.T) {
 		driftRepo := mocks.NewDriftRepository(t)
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		_, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: ""})
+		_, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: ""})
 		requireStatusCode(t, err, codes.InvalidArgument)
 	})
 
@@ -231,9 +233,9 @@ func TestDriftServer_GetModuleDriftEvents_GRPC(t *testing.T) {
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("GetDriftEventsForModule", mock.Anything, "module-1").Return(nil, errors.New("db")).Once()
+		driftRepo.On("GetDriftEventsForModule", mock.Anything, "buf.build/test/module", "").Return(nil, errors.New("db")).Once()
 
-		_, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleId: "module-1"})
+		_, err := client.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "buf.build/test/module"})
 		requireStatusCode(t, err, codes.Internal)
 	})
 }
@@ -319,7 +321,9 @@ func TestDriftServer_toV1DriftEvent(t *testing.T) {
 		event := &model.DriftEvent{
 			ID:             "event-1",
 			ModuleID:       "module-1",
+			ModuleName:     "buf.build/test/module",
 			TagID:          "tag-1",
+			TagName:        "v1.0.0",
 			Filename:       "test.proto",
 			EventType:      model.DriftEventTypeModified,
 			PreviousHash:   "hash1",
@@ -336,11 +340,11 @@ func TestDriftServer_toV1DriftEvent(t *testing.T) {
 		if v1Event.GetId() != "event-1" {
 			t.Fatalf("expected id event-1, got %s", v1Event.GetId())
 		}
-		if v1Event.GetModuleId() != "module-1" {
-			t.Fatalf("expected module_id module-1, got %s", v1Event.GetModuleId())
+		if v1Event.GetModuleName() != "buf.build/test/module" {
+			t.Fatalf("expected module_name buf.build/test/module, got %s", v1Event.GetModuleName())
 		}
-		if v1Event.GetTagId() != "tag-1" {
-			t.Fatalf("expected tag_id tag-1, got %s", v1Event.GetTagId())
+		if v1Event.GetTagName() != "v1.0.0" {
+			t.Fatalf("expected tag_name v1.0.0, got %s", v1Event.GetTagName())
 		}
 		if v1Event.GetFilename() != "test.proto" {
 			t.Fatalf("expected filename test.proto, got %s", v1Event.GetFilename())
@@ -372,7 +376,9 @@ func TestDriftServer_toV1DriftEvent(t *testing.T) {
 		event := &model.DriftEvent{
 			ID:             "event-1",
 			ModuleID:       "module-1",
+			ModuleName:     "buf.build/test/module",
 			TagID:          "tag-1",
+			TagName:        "v1.0.0",
 			Filename:       "test.proto",
 			EventType:      model.DriftEventTypeAdded,
 			CurrentHash:    "hash1",

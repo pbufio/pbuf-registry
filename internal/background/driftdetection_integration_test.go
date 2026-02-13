@@ -147,7 +147,7 @@ message OldMessage {
 	_, err = suite.registryRepository.PushModule(ctx, moduleName, tag1Name, tag1Files)
 	require.NoError(t, err)
 
-	tag1ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, tag1Name)
+	_, err = suite.registryRepository.GetModuleTagId(ctx, moduleName, tag1Name)
 	require.NoError(t, err)
 
 	// Small delay to ensure different timestamps
@@ -228,10 +228,7 @@ message NewFeature {
 	require.NoError(t, err)
 
 	// === VALIDATE RESULTS ===
-	moduleID, _, err := suite.driftRepository.GetTagInfo(ctx, tag1ID)
-	require.NoError(t, err)
-
-	events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID)
+	events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
 	require.NoError(t, err)
 
 	// We should have drift events for tag2 (comparing to tag1)
@@ -493,10 +490,7 @@ service FooService {
 			require.NoError(t, err)
 
 			// Get events for the module
-			moduleID, _, err := suite.driftRepository.GetTagInfo(ctx, tag2ID)
-			require.NoError(t, err)
-
-			events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID)
+			events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
 			require.NoError(t, err)
 
 			// Find the event for tag2
@@ -556,10 +550,7 @@ func TestDriftDetection_MultipleFilesScenario(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get events
-	moduleID, _, err := suite.driftRepository.GetTagInfo(ctx, tag2ID)
-	require.NoError(t, err)
-
-	events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID)
+	events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
 	require.NoError(t, err)
 
 	// Filter for tag2
