@@ -60,24 +60,98 @@ More information about the chart can be found in [the chart repository](https://
 
 Once the registry is running, try these commands to see it in action:
 
-**Prerequisites:** Install [pbuf](https://github.com/pbufio/pbuf-cli)
+### 1. Install pbuf CLI
+
+Install the latest version with a single command:
 
 ```shell
-# 1. Configure pbuf to point to your registry
-export PBUF_REGISTRY_URL=https://localhost:6777
-export PBUF_REGISTRY_TOKEN=${SERVER_STATIC_TOKEN}
+# Linux/macOS
+curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-cli/main/install.sh | sh
 
-# 2. Register a new module (module name comes from pbuf.yaml)
-pbuf modules register
+# Or using wget
+wget -qO- https://raw.githubusercontent.com/pbufio/pbuf-cli/main/install.sh | sh
+```
 
-# 3. Push your first tag (from a directory with .proto files and pbuf.yaml)
+For Windows or other installation methods, see the [pbuf CLI documentation](https://github.com/pbufio/pbuf-cli).
+
+### 2. Initialize Your Project
+
+```shell
+# Initialize a new module (interactive)
+pbuf init
+
+# Or non-interactively
+pbuf init my-module https://localhost:6777
+
+# Authenticate with the registry
+pbuf auth ${SERVER_STATIC_TOKEN}
+```
+
+### 3. Push Your First Module
+
+```shell
+# Create a proto file (or use existing ones)
+mkdir -p api/v1
+cat > api/v1/service.proto << 'EOF'
+syntax = "proto3";
+package mycompany.mymodule.v1;
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloResponse {
+  string message = 1;
+}
+EOF
+
+# Push your first tag
 pbuf modules push v1.0.0
+```
 
-# 4. Pull dependencies (add module to pbuf.yaml's modules section, then run)
+### 4. Vendor Dependencies
+
+```shell
+# In another project, add the module to pbuf.yaml's modules section
+# Then pull dependencies
 pbuf vendor
 ```
 
 **New to pbuf?** Check out the [examples/](examples/) directory for a complete walkthrough with sample protobuf files.
+
+## Web UI
+
+The registry includes a modern web interface for browsing and managing your protobuf modules.
+
+### Features
+
+- 🎨 **Modern Dark Theme** - Developer-first aesthetic with high contrast
+- 📦 **Module Browsing** - Browse and search all registered protobuf modules
+- 🏷️ **Version Management** - View and manage module tags and versions
+- 📄 **Proto File Viewer** - Inspect proto file contents and structure
+- 🔍 **Metadata Explorer** - Browse parsed protobuf messages, services, and fields
+- 🔗 **Dependency Tracking** - View module dependencies and their relationships
+- 📱 **Fully Responsive** - Optimized for desktop, tablet, and mobile devices
+
+### Deployment
+
+The UI is available as a separate project at [pbuf-registry-ui](https://github.com/pbufio/pbuf-registry-ui).
+
+#### Docker Deployment
+
+```shell
+docker run -d \
+  -p 8080:80 \
+  -e API_BASE_URL=https://localhost:6777 \
+  -e API_TOKEN=${SERVER_STATIC_TOKEN} \
+  -e PUBLIC_ENABLED=true \
+  --name pbuf-ui \
+  pbufio/pbuf-registry-ui:latest
+```
+
+The UI will be available at `http://localhost:8080`.
+
+For more information and configuration options, see the [pbuf-registry-ui documentation](https://github.com/pbufio/pbuf-registry-ui).
 
 ## Access Control (ACL)
 
@@ -182,7 +256,34 @@ For more details, see [ACL.md](ACL.md).
 
 ### CLI
 
-We recommend to use the [pbuf CLI](https://github.com/pbufio/pbuf-cli) to interact with the registry.
+We recommend using the [pbuf CLI](https://github.com/pbufio/pbuf-cli) to interact with the registry.
+
+#### Installation
+
+**Linux/macOS:**
+```shell
+curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-cli/main/install.sh | sh
+```
+
+**Windows:**
+Download the latest release from [pbuf-cli releases](https://github.com/pbufio/pbuf-cli/releases) and add to your PATH.
+
+**From Source:**
+```shell
+go install github.com/pbufio/pbuf-cli@latest
+```
+
+#### Key Commands
+
+- `pbuf init` - Initialize a new module with pbuf.yaml
+- `pbuf auth <token>` - Authenticate with the registry
+- `pbuf modules register` - Register a new module
+- `pbuf modules push <tag>` - Push a module version
+- `pbuf modules list` - List all available modules
+- `pbuf modules get <module>` - Get module information
+- `pbuf vendor` - Vendor module dependencies
+
+For complete documentation and examples, see the [pbuf CLI repository](https://github.com/pbufio/pbuf-cli).
 
 ### API
 
