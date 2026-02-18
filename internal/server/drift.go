@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
@@ -77,6 +78,37 @@ func (s *DriftServer) GetModuleDriftEvents(ctx context.Context, request *v1.GetM
 
 	return &v1.GetModuleDriftEventsResponse{
 		Events: v1Events,
+	}, nil
+}
+
+// GetModuleDependencyDriftStatus returns dependency drift status for a specific module.
+func (s *DriftServer) GetModuleDependencyDriftStatus(ctx context.Context, request *v1.GetModuleDependencyDriftStatusRequest) (*v1.GetModuleDependencyDriftStatusResponse, error) {
+	if request == nil || request.ModuleName == "" {
+		return nil, ErrInvalidRequest
+	}
+
+	tagName := ""
+	if request.TagName != nil {
+		tagName = *request.TagName
+	}
+
+	statuses, err := s.driftRepo.GetModuleDependencyDriftStatuses(ctx, request.ModuleName, tagName)
+	if err != nil {
+		if errors.Is(err, data.ErrTagNotFound) {
+			return nil, kerrors.NotFound("MODULE_TAG_NOT_FOUND", "module tag not found")
+		}
+
+		s.logger.Errorf("failed to get dependency drift status for module %s: %v", request.ModuleName, err)
+		return nil, kerrors.InternalServer("DEPENDENCY_DRIFT_STATUS_FETCH_FAILED", "failed to fetch dependency drift status")
+	}
+
+	v1Statuses := make([]*v1.DependencyDriftStatus, 0, len(statuses))
+	for _, status := range statuses {
+		v1Statuses = append(v1Statuses, toV1DependencyDriftStatus(&status))
+	}
+
+	return &v1.GetModuleDependencyDriftStatusResponse{
+		Statuses: v1Statuses,
 	}, nil
 }
 
@@ -157,5 +189,27 @@ func driftSeverityToV1(severity model.DriftSeverity) v1.DriftSeverity {
 		return v1.DriftSeverity_DRIFT_SEVERITY_CRITICAL
 	default:
 		return v1.DriftSeverity_DRIFT_SEVERITY_UNSPECIFIED
+	}
+}
+
+// toV1DependencyDriftStatus converts model.DependencyDriftStatus to v1.DependencyDriftStatus.
+func toV1DependencyDriftStatus(status *model.DependencyDriftStatus) *v1.DependencyDriftStatus {
+	return &v1.DependencyDriftStatus{
+		DependencyName: status.DependencyName,
+		CurrentTag:     status.CurrentTag,
+		TargetTag:      status.TargetTag,
+		Severity:       driftSeverityToV1(status.Severity),
+		Recommendation: dependencyRecommendationToV1(status.Recommendation),
+	}
+}
+
+func dependencyRecommendationToV1(recommendation model.DependencyDriftRecommendation) v1.DependencyDriftRecommendation {
+	switch recommendation {
+	case model.DependencyDriftRecommendationSuggestUpdate:
+		return v1.DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE
+	case model.DependencyDriftRecommendationAlertReview:
+		return v1.DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW
+	default:
+		return v1.DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED
 	}
 }

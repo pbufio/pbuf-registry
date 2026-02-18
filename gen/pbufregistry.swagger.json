@@ -97,6 +97,40 @@
         ]
       }
     },
+    "/v1/drift/modules/dependencies/status": {
+      "post": {
+        "summary": "Get dependency drift status for a specific module",
+        "operationId": "DriftService_GetModuleDependencyDriftStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependencyDriftStatusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetModuleDependencyDriftStatusRequest is the request for dependency drift status.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetModuleDependencyDriftStatusRequest"
+            }
+          }
+        ],
+        "tags": [
+          "DriftService"
+        ]
+      }
+    },
     "/v1/drift/modules/events": {
       "post": {
         "summary": "Get drift events for a specific module",
@@ -968,6 +1002,42 @@
       },
       "description": "Dependency is a dependency registered in the registry."
     },
+    "v1DependencyDriftRecommendation": {
+      "type": "string",
+      "enum": [
+        "DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED",
+        "DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE",
+        "DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW"
+      ],
+      "default": "DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED",
+      "description": "DependencyDriftRecommendation indicates what action should be taken."
+    },
+    "v1DependencyDriftStatus": {
+      "type": "object",
+      "properties": {
+        "dependencyName": {
+          "type": "string",
+          "title": "Dependency module name"
+        },
+        "currentTag": {
+          "type": "string",
+          "title": "Currently pinned dependency tag"
+        },
+        "targetTag": {
+          "type": "string",
+          "title": "Newer dependency tag to evaluate"
+        },
+        "severity": {
+          "$ref": "#/definitions/v1DriftSeverity",
+          "title": "Maximum drift severity found on target tag"
+        },
+        "recommendation": {
+          "$ref": "#/definitions/v1DependencyDriftRecommendation",
+          "title": "Suggested action for this dependency update candidate"
+        }
+      },
+      "description": "DependencyDriftStatus represents dependency update status for a module."
+    },
     "v1DriftEvent": {
       "type": "object",
       "properties": {
@@ -1193,6 +1263,34 @@
         }
       },
       "description": "GetModuleDependenciesResponse is the response message for GetModuleDependencies."
+    },
+    "v1GetModuleDependencyDriftStatusRequest": {
+      "type": "object",
+      "properties": {
+        "moduleName": {
+          "type": "string",
+          "title": "The module name to evaluate dependencies for"
+        },
+        "tagName": {
+          "type": "string",
+          "title": "Optional: module tag to evaluate (latest stable tag when omitted)"
+        }
+      },
+      "description": "GetModuleDependencyDriftStatusRequest is the request for dependency drift status."
+    },
+    "v1GetModuleDependencyDriftStatusResponse": {
+      "type": "object",
+      "properties": {
+        "statuses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1DependencyDriftStatus"
+          },
+          "title": "Dependency drift statuses for newer dependency tags"
+        }
+      },
+      "description": "GetModuleDependencyDriftStatusResponse is the response for dependency drift status."
     },
     "v1GetModuleDriftEventsRequest": {
       "type": "object",

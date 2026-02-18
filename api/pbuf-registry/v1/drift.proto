@@ -24,6 +24,14 @@ service DriftService {
     };
   }
 
+  // Get dependency drift status for a specific module
+  rpc GetModuleDependencyDriftStatus(GetModuleDependencyDriftStatusRequest) returns (GetModuleDependencyDriftStatusResponse) {
+    option (google.api.http) = {
+      post: "/v1/drift/modules/dependencies/status"
+      body: "*"
+    };
+  }
+
   // Acknowledge a drift event
   rpc AcknowledgeDriftEvent(AcknowledgeDriftEventRequest) returns (AcknowledgeDriftEventResponse) {
     option (google.api.http) = {
@@ -47,6 +55,13 @@ enum DriftSeverity {
   DRIFT_SEVERITY_INFO = 1;
   DRIFT_SEVERITY_WARNING = 2;
   DRIFT_SEVERITY_CRITICAL = 3;
+}
+
+// DependencyDriftRecommendation indicates what action should be taken.
+enum DependencyDriftRecommendation {
+  DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED = 0;
+  DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE = 1;
+  DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW = 2;
 }
 
 // DriftEvent represents a detected change in a proto file
@@ -113,6 +128,39 @@ message GetModuleDriftEventsRequest {
 message GetModuleDriftEventsResponse {
   // The list of drift events for the module
   repeated DriftEvent events = 1;
+}
+
+// DependencyDriftStatus represents dependency update status for a module.
+message DependencyDriftStatus {
+  // Dependency module name
+  string dependency_name = 1;
+
+  // Currently pinned dependency tag
+  string current_tag = 2;
+
+  // Newer dependency tag to evaluate
+  string target_tag = 3;
+
+  // Maximum drift severity found on target tag
+  DriftSeverity severity = 4;
+
+  // Suggested action for this dependency update candidate
+  DependencyDriftRecommendation recommendation = 5;
+}
+
+// GetModuleDependencyDriftStatusRequest is the request for dependency drift status.
+message GetModuleDependencyDriftStatusRequest {
+  // The module name to evaluate dependencies for
+  string module_name = 1;
+
+  // Optional: module tag to evaluate (latest stable tag when omitted)
+  optional string tag_name = 2;
+}
+
+// GetModuleDependencyDriftStatusResponse is the response for dependency drift status.
+message GetModuleDependencyDriftStatusResponse {
+  // Dependency drift statuses for newer dependency tags
+  repeated DependencyDriftStatus statuses = 1;
 }
 
 // AcknowledgeDriftEventRequest is the request message for AcknowledgeDriftEvent

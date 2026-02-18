@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DriftService_ListDriftEvents_FullMethodName       = "/pbufregistry.v1.DriftService/ListDriftEvents"
-	DriftService_GetModuleDriftEvents_FullMethodName  = "/pbufregistry.v1.DriftService/GetModuleDriftEvents"
-	DriftService_AcknowledgeDriftEvent_FullMethodName = "/pbufregistry.v1.DriftService/AcknowledgeDriftEvent"
+	DriftService_ListDriftEvents_FullMethodName                = "/pbufregistry.v1.DriftService/ListDriftEvents"
+	DriftService_GetModuleDriftEvents_FullMethodName           = "/pbufregistry.v1.DriftService/GetModuleDriftEvents"
+	DriftService_GetModuleDependencyDriftStatus_FullMethodName = "/pbufregistry.v1.DriftService/GetModuleDependencyDriftStatus"
+	DriftService_AcknowledgeDriftEvent_FullMethodName          = "/pbufregistry.v1.DriftService/AcknowledgeDriftEvent"
 )
 
 // DriftServiceClient is the client API for DriftService service.
@@ -34,6 +35,8 @@ type DriftServiceClient interface {
 	ListDriftEvents(ctx context.Context, in *ListDriftEventsRequest, opts ...grpc.CallOption) (*ListDriftEventsResponse, error)
 	// Get drift events for a specific module
 	GetModuleDriftEvents(ctx context.Context, in *GetModuleDriftEventsRequest, opts ...grpc.CallOption) (*GetModuleDriftEventsResponse, error)
+	// Get dependency drift status for a specific module
+	GetModuleDependencyDriftStatus(ctx context.Context, in *GetModuleDependencyDriftStatusRequest, opts ...grpc.CallOption) (*GetModuleDependencyDriftStatusResponse, error)
 	// Acknowledge a drift event
 	AcknowledgeDriftEvent(ctx context.Context, in *AcknowledgeDriftEventRequest, opts ...grpc.CallOption) (*AcknowledgeDriftEventResponse, error)
 }
@@ -66,6 +69,16 @@ func (c *driftServiceClient) GetModuleDriftEvents(ctx context.Context, in *GetMo
 	return out, nil
 }
 
+func (c *driftServiceClient) GetModuleDependencyDriftStatus(ctx context.Context, in *GetModuleDependencyDriftStatusRequest, opts ...grpc.CallOption) (*GetModuleDependencyDriftStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModuleDependencyDriftStatusResponse)
+	err := c.cc.Invoke(ctx, DriftService_GetModuleDependencyDriftStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *driftServiceClient) AcknowledgeDriftEvent(ctx context.Context, in *AcknowledgeDriftEventRequest, opts ...grpc.CallOption) (*AcknowledgeDriftEventResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AcknowledgeDriftEventResponse)
@@ -86,6 +99,8 @@ type DriftServiceServer interface {
 	ListDriftEvents(context.Context, *ListDriftEventsRequest) (*ListDriftEventsResponse, error)
 	// Get drift events for a specific module
 	GetModuleDriftEvents(context.Context, *GetModuleDriftEventsRequest) (*GetModuleDriftEventsResponse, error)
+	// Get dependency drift status for a specific module
+	GetModuleDependencyDriftStatus(context.Context, *GetModuleDependencyDriftStatusRequest) (*GetModuleDependencyDriftStatusResponse, error)
 	// Acknowledge a drift event
 	AcknowledgeDriftEvent(context.Context, *AcknowledgeDriftEventRequest) (*AcknowledgeDriftEventResponse, error)
 	mustEmbedUnimplementedDriftServiceServer()
@@ -103,6 +118,9 @@ func (UnimplementedDriftServiceServer) ListDriftEvents(context.Context, *ListDri
 }
 func (UnimplementedDriftServiceServer) GetModuleDriftEvents(context.Context, *GetModuleDriftEventsRequest) (*GetModuleDriftEventsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetModuleDriftEvents not implemented")
+}
+func (UnimplementedDriftServiceServer) GetModuleDependencyDriftStatus(context.Context, *GetModuleDependencyDriftStatusRequest) (*GetModuleDependencyDriftStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetModuleDependencyDriftStatus not implemented")
 }
 func (UnimplementedDriftServiceServer) AcknowledgeDriftEvent(context.Context, *AcknowledgeDriftEventRequest) (*AcknowledgeDriftEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AcknowledgeDriftEvent not implemented")
@@ -164,6 +182,24 @@ func _DriftService_GetModuleDriftEvents_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DriftService_GetModuleDependencyDriftStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModuleDependencyDriftStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DriftServiceServer).GetModuleDependencyDriftStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DriftService_GetModuleDependencyDriftStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DriftServiceServer).GetModuleDependencyDriftStatus(ctx, req.(*GetModuleDependencyDriftStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DriftService_AcknowledgeDriftEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AcknowledgeDriftEventRequest)
 	if err := dec(in); err != nil {
@@ -196,6 +232,10 @@ var DriftService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetModuleDriftEvents",
 			Handler:    _DriftService_GetModuleDriftEvents_Handler,
+		},
+		{
+			MethodName: "GetModuleDependencyDriftStatus",
+			Handler:    _DriftService_GetModuleDependencyDriftStatus_Handler,
 		},
 		{
 			MethodName: "AcknowledgeDriftEvent",

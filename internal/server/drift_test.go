@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
+	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/stretchr/testify/mock"
@@ -73,6 +74,12 @@ func TestDriftServer_NilRequest_ReturnsInvalidRequest(t *testing.T) {
 	})
 	t.Run("AcknowledgeDriftEvent", func(t *testing.T) {
 		_, err := s.AcknowledgeDriftEvent(ctx, nil)
+		if err != ErrInvalidRequest {
+			t.Fatalf("expected ErrInvalidRequest, got %v", err)
+		}
+	})
+	t.Run("GetModuleDependencyDriftStatus", func(t *testing.T) {
+		_, err := s.GetModuleDependencyDriftStatus(ctx, nil)
 		if err != ErrInvalidRequest {
 			t.Fatalf("expected ErrInvalidRequest, got %v", err)
 		}
@@ -313,6 +320,87 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 	})
 }
 
+func TestDriftServer_GetModuleDependencyDriftStatus_GRPC(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("success", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		statuses := []model.DependencyDriftStatus{
+			{
+				DependencyName: "buf.build/test/dependency",
+				CurrentTag:     "v1.0.0",
+				TargetTag:      "v1.1.0",
+				Severity:       model.DriftSeverityInfo,
+				Recommendation: model.DependencyDriftRecommendationSuggestUpdate,
+			},
+			{
+				DependencyName: "buf.build/test/dependency",
+				CurrentTag:     "v1.0.0",
+				TargetTag:      "v2.0.0",
+				Severity:       model.DriftSeverityCritical,
+				Recommendation: model.DependencyDriftRecommendationAlertReview,
+			},
+		}
+
+		driftRepo.On("GetModuleDependencyDriftStatuses", mock.Anything, "buf.build/test/module", "").Return(statuses, nil).Once()
+
+		resp, err := client.GetModuleDependencyDriftStatus(ctx, &v1.GetModuleDependencyDriftStatusRequest{ModuleName: "buf.build/test/module"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(resp.GetStatuses()) != 2 {
+			t.Fatalf("expected 2 statuses, got %d", len(resp.GetStatuses()))
+		}
+
+		if resp.GetStatuses()[0].GetRecommendation() != v1.DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE {
+			t.Fatalf("expected SUGGEST_UPDATE recommendation, got %v", resp.GetStatuses()[0].GetRecommendation())
+		}
+		if resp.GetStatuses()[1].GetRecommendation() != v1.DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW {
+			t.Fatalf("expected ALERT_REVIEW recommendation, got %v", resp.GetStatuses()[1].GetRecommendation())
+		}
+	})
+
+	t.Run("empty module_name", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		_, err := client.GetModuleDependencyDriftStatus(ctx, &v1.GetModuleDependencyDriftStatusRequest{})
+		requireStatusCode(t, err, codes.InvalidArgument)
+	})
+
+	t.Run("tag not found", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		driftRepo.On("GetModuleDependencyDriftStatuses", mock.Anything, "buf.build/test/module", "v9.9.9").Return(nil, data.ErrTagNotFound).Once()
+
+		_, err := client.GetModuleDependencyDriftStatus(ctx, &v1.GetModuleDependencyDriftStatusRequest{
+			ModuleName: "buf.build/test/module",
+			TagName:    ptr("v9.9.9"),
+		})
+		requireStatusCode(t, err, codes.NotFound)
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		driftRepo.On("GetModuleDependencyDriftStatuses", mock.Anything, "buf.build/test/module", "").Return(nil, errors.New("db")).Once()
+
+		_, err := client.GetModuleDependencyDriftStatus(ctx, &v1.GetModuleDependencyDriftStatusRequest{
+			ModuleName: "buf.build/test/module",
+		})
+		requireStatusCode(t, err, codes.Internal)
+	})
+}
+
 func TestDriftServer_toV1DriftEvent(t *testing.T) {
 	t.Run("converts all fields", func(t *testing.T) {
 		detectedAt := time.Now().UTC().Truncate(time.Second)
@@ -436,4 +524,8 @@ func TestDriftServer_driftSeverityToV1(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ptr(value string) *string {
+	return &value
 }
