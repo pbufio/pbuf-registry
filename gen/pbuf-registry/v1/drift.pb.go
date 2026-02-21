@@ -129,6 +129,56 @@ func (DriftSeverity) EnumDescriptor() ([]byte, []int) {
 	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{1}
 }
 
+// DependencyDriftRecommendation indicates what action should be taken.
+type DependencyDriftRecommendation int32
+
+const (
+	DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED    DependencyDriftRecommendation = 0
+	DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE DependencyDriftRecommendation = 1
+	DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW   DependencyDriftRecommendation = 2
+)
+
+// Enum value maps for DependencyDriftRecommendation.
+var (
+	DependencyDriftRecommendation_name = map[int32]string{
+		0: "DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED",
+		1: "DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE",
+		2: "DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW",
+	}
+	DependencyDriftRecommendation_value = map[string]int32{
+		"DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED":    0,
+		"DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE": 1,
+		"DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW":   2,
+	}
+)
+
+func (x DependencyDriftRecommendation) Enum() *DependencyDriftRecommendation {
+	p := new(DependencyDriftRecommendation)
+	*p = x
+	return p
+}
+
+func (x DependencyDriftRecommendation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DependencyDriftRecommendation) Descriptor() protoreflect.EnumDescriptor {
+	return file_pbuf_registry_v1_drift_proto_enumTypes[2].Descriptor()
+}
+
+func (DependencyDriftRecommendation) Type() protoreflect.EnumType {
+	return &file_pbuf_registry_v1_drift_proto_enumTypes[2]
+}
+
+func (x DependencyDriftRecommendation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DependencyDriftRecommendation.Descriptor instead.
+func (DependencyDriftRecommendation) EnumDescriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{2}
+}
+
 // DriftEvent represents a detected change in a proto file
 type DriftEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -467,6 +517,189 @@ func (x *GetModuleDriftEventsResponse) GetEvents() []*DriftEvent {
 	return nil
 }
 
+// DependencyDriftStatus represents dependency update status for a module.
+type DependencyDriftStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Dependency module name
+	DependencyName string `protobuf:"bytes,1,opt,name=dependency_name,json=dependencyName,proto3" json:"dependency_name,omitempty"`
+	// Currently pinned dependency tag
+	CurrentTag string `protobuf:"bytes,2,opt,name=current_tag,json=currentTag,proto3" json:"current_tag,omitempty"`
+	// Newer dependency tag to evaluate
+	TargetTag string `protobuf:"bytes,3,opt,name=target_tag,json=targetTag,proto3" json:"target_tag,omitempty"`
+	// Maximum drift severity found on target tag
+	Severity DriftSeverity `protobuf:"varint,4,opt,name=severity,proto3,enum=pbufregistry.v1.DriftSeverity" json:"severity,omitempty"`
+	// Suggested action for this dependency update candidate
+	Recommendation DependencyDriftRecommendation `protobuf:"varint,5,opt,name=recommendation,proto3,enum=pbufregistry.v1.DependencyDriftRecommendation" json:"recommendation,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DependencyDriftStatus) Reset() {
+	*x = DependencyDriftStatus{}
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DependencyDriftStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DependencyDriftStatus) ProtoMessage() {}
+
+func (x *DependencyDriftStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DependencyDriftStatus.ProtoReflect.Descriptor instead.
+func (*DependencyDriftStatus) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DependencyDriftStatus) GetDependencyName() string {
+	if x != nil {
+		return x.DependencyName
+	}
+	return ""
+}
+
+func (x *DependencyDriftStatus) GetCurrentTag() string {
+	if x != nil {
+		return x.CurrentTag
+	}
+	return ""
+}
+
+func (x *DependencyDriftStatus) GetTargetTag() string {
+	if x != nil {
+		return x.TargetTag
+	}
+	return ""
+}
+
+func (x *DependencyDriftStatus) GetSeverity() DriftSeverity {
+	if x != nil {
+		return x.Severity
+	}
+	return DriftSeverity_DRIFT_SEVERITY_UNSPECIFIED
+}
+
+func (x *DependencyDriftStatus) GetRecommendation() DependencyDriftRecommendation {
+	if x != nil {
+		return x.Recommendation
+	}
+	return DependencyDriftRecommendation_DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED
+}
+
+// GetModuleDependencyDriftStatusRequest is the request for dependency drift status.
+type GetModuleDependencyDriftStatusRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The module name to evaluate dependencies for
+	ModuleName string `protobuf:"bytes,1,opt,name=module_name,json=moduleName,proto3" json:"module_name,omitempty"`
+	// Optional: module tag to evaluate (latest stable tag when omitted)
+	TagName       *string `protobuf:"bytes,2,opt,name=tag_name,json=tagName,proto3,oneof" json:"tag_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModuleDependencyDriftStatusRequest) Reset() {
+	*x = GetModuleDependencyDriftStatusRequest{}
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModuleDependencyDriftStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModuleDependencyDriftStatusRequest) ProtoMessage() {}
+
+func (x *GetModuleDependencyDriftStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModuleDependencyDriftStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetModuleDependencyDriftStatusRequest) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetModuleDependencyDriftStatusRequest) GetModuleName() string {
+	if x != nil {
+		return x.ModuleName
+	}
+	return ""
+}
+
+func (x *GetModuleDependencyDriftStatusRequest) GetTagName() string {
+	if x != nil && x.TagName != nil {
+		return *x.TagName
+	}
+	return ""
+}
+
+// GetModuleDependencyDriftStatusResponse is the response for dependency drift status.
+type GetModuleDependencyDriftStatusResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Dependency drift statuses for newer dependency tags
+	Statuses      []*DependencyDriftStatus `protobuf:"bytes,1,rep,name=statuses,proto3" json:"statuses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModuleDependencyDriftStatusResponse) Reset() {
+	*x = GetModuleDependencyDriftStatusResponse{}
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModuleDependencyDriftStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModuleDependencyDriftStatusResponse) ProtoMessage() {}
+
+func (x *GetModuleDependencyDriftStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModuleDependencyDriftStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetModuleDependencyDriftStatusResponse) Descriptor() ([]byte, []int) {
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetModuleDependencyDriftStatusResponse) GetStatuses() []*DependencyDriftStatus {
+	if x != nil {
+		return x.Statuses
+	}
+	return nil
+}
+
 // AcknowledgeDriftEventRequest is the request message for AcknowledgeDriftEvent
 type AcknowledgeDriftEventRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -480,7 +713,7 @@ type AcknowledgeDriftEventRequest struct {
 
 func (x *AcknowledgeDriftEventRequest) Reset() {
 	*x = AcknowledgeDriftEventRequest{}
-	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[5]
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -492,7 +725,7 @@ func (x *AcknowledgeDriftEventRequest) String() string {
 func (*AcknowledgeDriftEventRequest) ProtoMessage() {}
 
 func (x *AcknowledgeDriftEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[5]
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +738,7 @@ func (x *AcknowledgeDriftEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeDriftEventRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeDriftEventRequest) Descriptor() ([]byte, []int) {
-	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{5}
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AcknowledgeDriftEventRequest) GetEventId() string {
@@ -533,7 +766,7 @@ type AcknowledgeDriftEventResponse struct {
 
 func (x *AcknowledgeDriftEventResponse) Reset() {
 	*x = AcknowledgeDriftEventResponse{}
-	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[6]
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +778,7 @@ func (x *AcknowledgeDriftEventResponse) String() string {
 func (*AcknowledgeDriftEventResponse) ProtoMessage() {}
 
 func (x *AcknowledgeDriftEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[6]
+	mi := &file_pbuf_registry_v1_drift_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +791,7 @@ func (x *AcknowledgeDriftEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeDriftEventResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeDriftEventResponse) Descriptor() ([]byte, []int) {
-	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{6}
+	return file_pbuf_registry_v1_drift_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AcknowledgeDriftEventResponse) GetEvent() *DriftEvent {
@@ -601,7 +834,22 @@ const file_pbuf_registry_v1_drift_proto_rawDesc = "" +
 	"\btag_name\x18\x02 \x01(\tH\x00R\atagName\x88\x01\x01B\v\n" +
 	"\t_tag_name\"S\n" +
 	"\x1cGetModuleDriftEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DriftEventR\x06events\"b\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DriftEventR\x06events\"\x94\x02\n" +
+	"\x15DependencyDriftStatus\x12'\n" +
+	"\x0fdependency_name\x18\x01 \x01(\tR\x0edependencyName\x12\x1f\n" +
+	"\vcurrent_tag\x18\x02 \x01(\tR\n" +
+	"currentTag\x12\x1d\n" +
+	"\n" +
+	"target_tag\x18\x03 \x01(\tR\ttargetTag\x12:\n" +
+	"\bseverity\x18\x04 \x01(\x0e2\x1e.pbufregistry.v1.DriftSeverityR\bseverity\x12V\n" +
+	"\x0erecommendation\x18\x05 \x01(\x0e2..pbufregistry.v1.DependencyDriftRecommendationR\x0erecommendation\"u\n" +
+	"%GetModuleDependencyDriftStatusRequest\x12\x1f\n" +
+	"\vmodule_name\x18\x01 \x01(\tR\n" +
+	"moduleName\x12\x1e\n" +
+	"\btag_name\x18\x02 \x01(\tH\x00R\atagName\x88\x01\x01B\v\n" +
+	"\t_tag_name\"l\n" +
+	"&GetModuleDependencyDriftStatusResponse\x12B\n" +
+	"\bstatuses\x18\x01 \x03(\v2&.pbufregistry.v1.DependencyDriftStatusR\bstatuses\"b\n" +
 	"\x1cAcknowledgeDriftEventRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12'\n" +
 	"\x0facknowledged_by\x18\x02 \x01(\tR\x0eacknowledgedBy\"R\n" +
@@ -616,10 +864,15 @@ const file_pbuf_registry_v1_drift_proto_rawDesc = "" +
 	"\x1aDRIFT_SEVERITY_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13DRIFT_SEVERITY_INFO\x10\x01\x12\x1a\n" +
 	"\x16DRIFT_SEVERITY_WARNING\x10\x02\x12\x1b\n" +
-	"\x17DRIFT_SEVERITY_CRITICAL\x10\x032\xd6\x03\n" +
+	"\x17DRIFT_SEVERITY_CRITICAL\x10\x03*\xb6\x01\n" +
+	"\x1dDependencyDriftRecommendation\x12/\n" +
+	"+DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED\x10\x00\x122\n" +
+	".DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE\x10\x01\x120\n" +
+	",DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW\x10\x022\x9c\x05\n" +
 	"\fDriftService\x12~\n" +
 	"\x0fListDriftEvents\x12'.pbufregistry.v1.ListDriftEventsRequest\x1a(.pbufregistry.v1.ListDriftEventsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/drift/events\x12\x98\x01\n" +
-	"\x14GetModuleDriftEvents\x12,.pbufregistry.v1.GetModuleDriftEventsRequest\x1a-.pbufregistry.v1.GetModuleDriftEventsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/drift/modules/events\x12\xaa\x01\n" +
+	"\x14GetModuleDriftEvents\x12,.pbufregistry.v1.GetModuleDriftEventsRequest\x1a-.pbufregistry.v1.GetModuleDriftEventsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/drift/modules/events\x12\xc3\x01\n" +
+	"\x1eGetModuleDependencyDriftStatus\x126.pbufregistry.v1.GetModuleDependencyDriftStatusRequest\x1a7.pbufregistry.v1.GetModuleDependencyDriftStatusResponse\"0\x82\xd3\xe4\x93\x02*:\x01*\"%/v1/drift/modules/dependencies/status\x12\xaa\x01\n" +
 	"\x15AcknowledgeDriftEvent\x12-.pbufregistry.v1.AcknowledgeDriftEventRequest\x1a..pbufregistry.v1.AcknowledgeDriftEventResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/drift/events/{event_id}/acknowledgeB\x18Z\x16pbufregistry/api/v1;v1b\x06proto3"
 
 var (
@@ -634,39 +887,48 @@ func file_pbuf_registry_v1_drift_proto_rawDescGZIP() []byte {
 	return file_pbuf_registry_v1_drift_proto_rawDescData
 }
 
-var file_pbuf_registry_v1_drift_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pbuf_registry_v1_drift_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_pbuf_registry_v1_drift_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_pbuf_registry_v1_drift_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_pbuf_registry_v1_drift_proto_goTypes = []any{
-	(DriftEventType)(0),                   // 0: pbufregistry.v1.DriftEventType
-	(DriftSeverity)(0),                    // 1: pbufregistry.v1.DriftSeverity
-	(*DriftEvent)(nil),                    // 2: pbufregistry.v1.DriftEvent
-	(*ListDriftEventsRequest)(nil),        // 3: pbufregistry.v1.ListDriftEventsRequest
-	(*ListDriftEventsResponse)(nil),       // 4: pbufregistry.v1.ListDriftEventsResponse
-	(*GetModuleDriftEventsRequest)(nil),   // 5: pbufregistry.v1.GetModuleDriftEventsRequest
-	(*GetModuleDriftEventsResponse)(nil),  // 6: pbufregistry.v1.GetModuleDriftEventsResponse
-	(*AcknowledgeDriftEventRequest)(nil),  // 7: pbufregistry.v1.AcknowledgeDriftEventRequest
-	(*AcknowledgeDriftEventResponse)(nil), // 8: pbufregistry.v1.AcknowledgeDriftEventResponse
-	(*timestamppb.Timestamp)(nil),         // 9: google.protobuf.Timestamp
+	(DriftEventType)(0),                            // 0: pbufregistry.v1.DriftEventType
+	(DriftSeverity)(0),                             // 1: pbufregistry.v1.DriftSeverity
+	(DependencyDriftRecommendation)(0),             // 2: pbufregistry.v1.DependencyDriftRecommendation
+	(*DriftEvent)(nil),                             // 3: pbufregistry.v1.DriftEvent
+	(*ListDriftEventsRequest)(nil),                 // 4: pbufregistry.v1.ListDriftEventsRequest
+	(*ListDriftEventsResponse)(nil),                // 5: pbufregistry.v1.ListDriftEventsResponse
+	(*GetModuleDriftEventsRequest)(nil),            // 6: pbufregistry.v1.GetModuleDriftEventsRequest
+	(*GetModuleDriftEventsResponse)(nil),           // 7: pbufregistry.v1.GetModuleDriftEventsResponse
+	(*DependencyDriftStatus)(nil),                  // 8: pbufregistry.v1.DependencyDriftStatus
+	(*GetModuleDependencyDriftStatusRequest)(nil),  // 9: pbufregistry.v1.GetModuleDependencyDriftStatusRequest
+	(*GetModuleDependencyDriftStatusResponse)(nil), // 10: pbufregistry.v1.GetModuleDependencyDriftStatusResponse
+	(*AcknowledgeDriftEventRequest)(nil),           // 11: pbufregistry.v1.AcknowledgeDriftEventRequest
+	(*AcknowledgeDriftEventResponse)(nil),          // 12: pbufregistry.v1.AcknowledgeDriftEventResponse
+	(*timestamppb.Timestamp)(nil),                  // 13: google.protobuf.Timestamp
 }
 var file_pbuf_registry_v1_drift_proto_depIdxs = []int32{
 	0,  // 0: pbufregistry.v1.DriftEvent.event_type:type_name -> pbufregistry.v1.DriftEventType
 	1,  // 1: pbufregistry.v1.DriftEvent.severity:type_name -> pbufregistry.v1.DriftSeverity
-	9,  // 2: pbufregistry.v1.DriftEvent.detected_at:type_name -> google.protobuf.Timestamp
-	9,  // 3: pbufregistry.v1.DriftEvent.acknowledged_at:type_name -> google.protobuf.Timestamp
-	2,  // 4: pbufregistry.v1.ListDriftEventsResponse.events:type_name -> pbufregistry.v1.DriftEvent
-	2,  // 5: pbufregistry.v1.GetModuleDriftEventsResponse.events:type_name -> pbufregistry.v1.DriftEvent
-	2,  // 6: pbufregistry.v1.AcknowledgeDriftEventResponse.event:type_name -> pbufregistry.v1.DriftEvent
-	3,  // 7: pbufregistry.v1.DriftService.ListDriftEvents:input_type -> pbufregistry.v1.ListDriftEventsRequest
-	5,  // 8: pbufregistry.v1.DriftService.GetModuleDriftEvents:input_type -> pbufregistry.v1.GetModuleDriftEventsRequest
-	7,  // 9: pbufregistry.v1.DriftService.AcknowledgeDriftEvent:input_type -> pbufregistry.v1.AcknowledgeDriftEventRequest
-	4,  // 10: pbufregistry.v1.DriftService.ListDriftEvents:output_type -> pbufregistry.v1.ListDriftEventsResponse
-	6,  // 11: pbufregistry.v1.DriftService.GetModuleDriftEvents:output_type -> pbufregistry.v1.GetModuleDriftEventsResponse
-	8,  // 12: pbufregistry.v1.DriftService.AcknowledgeDriftEvent:output_type -> pbufregistry.v1.AcknowledgeDriftEventResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	13, // 2: pbufregistry.v1.DriftEvent.detected_at:type_name -> google.protobuf.Timestamp
+	13, // 3: pbufregistry.v1.DriftEvent.acknowledged_at:type_name -> google.protobuf.Timestamp
+	3,  // 4: pbufregistry.v1.ListDriftEventsResponse.events:type_name -> pbufregistry.v1.DriftEvent
+	3,  // 5: pbufregistry.v1.GetModuleDriftEventsResponse.events:type_name -> pbufregistry.v1.DriftEvent
+	1,  // 6: pbufregistry.v1.DependencyDriftStatus.severity:type_name -> pbufregistry.v1.DriftSeverity
+	2,  // 7: pbufregistry.v1.DependencyDriftStatus.recommendation:type_name -> pbufregistry.v1.DependencyDriftRecommendation
+	8,  // 8: pbufregistry.v1.GetModuleDependencyDriftStatusResponse.statuses:type_name -> pbufregistry.v1.DependencyDriftStatus
+	3,  // 9: pbufregistry.v1.AcknowledgeDriftEventResponse.event:type_name -> pbufregistry.v1.DriftEvent
+	4,  // 10: pbufregistry.v1.DriftService.ListDriftEvents:input_type -> pbufregistry.v1.ListDriftEventsRequest
+	6,  // 11: pbufregistry.v1.DriftService.GetModuleDriftEvents:input_type -> pbufregistry.v1.GetModuleDriftEventsRequest
+	9,  // 12: pbufregistry.v1.DriftService.GetModuleDependencyDriftStatus:input_type -> pbufregistry.v1.GetModuleDependencyDriftStatusRequest
+	11, // 13: pbufregistry.v1.DriftService.AcknowledgeDriftEvent:input_type -> pbufregistry.v1.AcknowledgeDriftEventRequest
+	5,  // 14: pbufregistry.v1.DriftService.ListDriftEvents:output_type -> pbufregistry.v1.ListDriftEventsResponse
+	7,  // 15: pbufregistry.v1.DriftService.GetModuleDriftEvents:output_type -> pbufregistry.v1.GetModuleDriftEventsResponse
+	10, // 16: pbufregistry.v1.DriftService.GetModuleDependencyDriftStatus:output_type -> pbufregistry.v1.GetModuleDependencyDriftStatusResponse
+	12, // 17: pbufregistry.v1.DriftService.AcknowledgeDriftEvent:output_type -> pbufregistry.v1.AcknowledgeDriftEventResponse
+	14, // [14:18] is the sub-list for method output_type
+	10, // [10:14] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pbuf_registry_v1_drift_proto_init() }
@@ -675,13 +937,14 @@ func file_pbuf_registry_v1_drift_proto_init() {
 		return
 	}
 	file_pbuf_registry_v1_drift_proto_msgTypes[3].OneofWrappers = []any{}
+	file_pbuf_registry_v1_drift_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pbuf_registry_v1_drift_proto_rawDesc), len(file_pbuf_registry_v1_drift_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   7,
+			NumEnums:      3,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

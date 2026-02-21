@@ -81,6 +81,36 @@ func (_m *DriftRepository) GetDriftEventsForModule(ctx context.Context, moduleNa
 	return r0, r1
 }
 
+// GetModuleDependencyDriftStatuses provides a mock function with given fields: ctx, moduleName, tagName
+func (_m *DriftRepository) GetModuleDependencyDriftStatuses(ctx context.Context, moduleName string, tagName string) ([]model.DependencyDriftStatus, error) {
+	ret := _m.Called(ctx, moduleName, tagName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetModuleDependencyDriftStatuses")
+	}
+
+	var r0 []model.DependencyDriftStatus
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]model.DependencyDriftStatus, error)); ok {
+		return rf(ctx, moduleName, tagName)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []model.DependencyDriftStatus); ok {
+		r0 = rf(ctx, moduleName, tagName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]model.DependencyDriftStatus)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, moduleName, tagName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetFileHashesForTag provides a mock function with given fields: ctx, tagID
 func (_m *DriftRepository) GetFileHashesForTag(ctx context.Context, tagID string) (map[string]string, error) {
 	ret := _m.Called(ctx, tagID)

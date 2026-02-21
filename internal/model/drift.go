@@ -55,6 +55,23 @@ type DriftDetectionResult struct {
 	Deleted  []DriftEvent
 }
 
+// DependencyDriftRecommendation describes the suggested action for dependency updates.
+type DependencyDriftRecommendation string
+
+const (
+	DependencyDriftRecommendationSuggestUpdate DependencyDriftRecommendation = "suggest_update"
+	DependencyDriftRecommendationAlertReview   DependencyDriftRecommendation = "alert_review"
+)
+
+// DependencyDriftStatus describes drift status for a dependency update candidate.
+type DependencyDriftStatus struct {
+	DependencyName string
+	CurrentTag     string
+	TargetTag      string
+	Severity       DriftSeverity
+	Recommendation DependencyDriftRecommendation
+}
+
 // HasDrift returns true if any drift was detected
 func (r *DriftDetectionResult) HasDrift() bool {
 	return len(r.Added) > 0 || len(r.Modified) > 0 || len(r.Deleted) > 0

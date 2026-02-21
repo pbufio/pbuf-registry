@@ -1,21 +1,23 @@
-package background_test
+package background
 
 import (
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
-	"github.com/pbufio/pbuf-registry/internal/background"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/pbufio/pbuf-registry/migrations"
 	"github.com/pbufio/pbuf-registry/test_utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -221,7 +223,7 @@ message NewFeature {
 
 	// === RUN DRIFT DETECTION ===
 	// The proto parsing daemon will compute hashes for both tags and then detect drift
-	daemon := background.NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
+	daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
 
 	// Run the daemon (it will detect drift for tags that were processed)
 	err = daemon.Run()
@@ -298,6 +300,7 @@ func TestDriftDetection_BreakingChanges(t *testing.T) {
 		previousContent  string
 		currentContent   string
 		expectedSeverity model.DriftSeverity
+		insertedElement  string
 		description      string
 	}{
 		{
@@ -390,8 +393,9 @@ message Foo {
   int32 id = 1;
 }
 `,
-			expectedSeverity: model.DriftSeverityWarning,
-			description:      "Changing a field type is potentially breaking",
+			expectedSeverity: model.DriftSeverityCritical,
+			insertedElement:  "Foo.id field type",
+			description:      "Changing a field type is a breaking change",
 		},
 		{
 			name: "package_changed",
@@ -403,8 +407,9 @@ message Foo { string id = 1; }
 package test.v2;
 message Foo { string id = 1; }
 `,
-			expectedSeverity: model.DriftSeverityWarning,
-			description:      "Changing package is potentially breaking",
+			expectedSeverity: model.DriftSeverityCritical,
+			insertedElement:  "package declaration",
+			description:      "Changing package is a breaking change",
 		},
 		{
 			name: "field_added",
@@ -460,6 +465,133 @@ service FooService {
 			expectedSeverity: model.DriftSeverityInfo,
 			description:      "Adding an RPC is non-breaking",
 		},
+		{
+			name: "rpc_inserted_in_middle",
+			previousContent: `syntax = "proto3";
+package test;
+message Req { string id = 1; }
+message Res { string data = 1; }
+service FooService {
+  rpc Get(Req) returns (Res);
+  rpc Delete(Req) returns (Res);
+}
+`,
+			currentContent: `syntax = "proto3";
+package test;
+message Req { string id = 1; }
+message Res { string data = 1; }
+service FooService {
+  rpc Get(Req) returns (Res);
+  rpc List(Req) returns (Res);
+  rpc Delete(Req) returns (Res);
+}
+`,
+			expectedSeverity: model.DriftSeverityInfo,
+			insertedElement:  "FooService.List RPC",
+			description:      "Inserting an RPC in the middle should not be treated as a deletion",
+		},
+		{
+			name: "message_inserted_before_existing_messages",
+			previousContent: `syntax = "proto3";
+package test;
+message User { string id = 1; }
+message Account { string id = 1; }
+`,
+			currentContent: `syntax = "proto3";
+package test;
+message NewMessage { string id = 1; }
+message User { string id = 1; }
+message Account { string id = 1; }
+`,
+			expectedSeverity: model.DriftSeverityInfo,
+			insertedElement:  "NewMessage message",
+			description:      "Inserting a message before existing ones should be non-breaking",
+		},
+		{
+			name: "enum_value_inserted_before_existing_values",
+			previousContent: `syntax = "proto3";
+package test;
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_INACTIVE = 2;
+}
+`,
+			currentContent: `syntax = "proto3";
+package test;
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_PENDING = 3;
+  STATUS_INACTIVE = 2;
+}
+`,
+			expectedSeverity: model.DriftSeverityInfo,
+			insertedElement:  "Status.STATUS_PENDING enum value",
+			description:      "Inserting an enum value in the middle with a new number should be non-breaking",
+		},
+		{
+			name: "field_added_before_last_field_by_number",
+			previousContent: `syntax = "proto3";
+package test;
+message Foo {
+  string id = 1;
+  string tail = 3;
+}
+`,
+			currentContent: `syntax = "proto3";
+package test;
+message Foo {
+  string id = 1;
+  string middle = 2;
+  string tail = 3;
+}
+`,
+			expectedSeverity: model.DriftSeverityInfo,
+			insertedElement:  "Foo.middle field #2",
+			description:      "Adding a field with a lower number than an existing field should be non-breaking",
+		},
+		{
+			name: "combined_mid_file_insertions_should_be_info",
+			previousContent: `syntax = "proto3";
+package test;
+
+message Req { string id = 1; }
+message Res { string id = 1; }
+message Existing { string name = 1; }
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+}
+
+service FooService {
+  rpc Get(Req) returns (Res);
+}
+`,
+			currentContent: `syntax = "proto3";
+package test;
+
+message Req { string id = 1; }
+message Res { string id = 1; }
+message Inserted { string id = 1; }
+message Existing { string name = 1; }
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_PENDING = 2;
+  STATUS_ACTIVE = 1;
+}
+
+service FooService {
+  rpc InsertedRpc(Req) returns (Res);
+  rpc Get(Req) returns (Res);
+}
+`,
+			expectedSeverity: model.DriftSeverityInfo,
+			insertedElement:  "Inserted message/enum/RPC in one diff",
+			description:      "Insertion-only changes should produce a single info drift event",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -485,7 +617,7 @@ service FooService {
 			require.NoError(t, err)
 
 			// Run drift detection (daemon will parse proto files and detect drift)
-			daemon := background.NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
+			daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
 			err = daemon.Run()
 			require.NoError(t, err)
 
@@ -503,8 +635,9 @@ service FooService {
 			}
 
 			require.NotNil(t, foundEvent, "Should have a drift event for test.proto")
-			assert.Equal(t, model.DriftEventTypeModified, foundEvent.EventType)
-			assert.Equal(t, tc.expectedSeverity, foundEvent.Severity, tc.description)
+			t.Logf("case=%s element=%s event_type=%s severity=%s", tc.name, tc.insertedElement, foundEvent.EventType, foundEvent.Severity)
+			assert.Equal(t, model.DriftEventTypeModified, foundEvent.EventType, "unexpected event type for element %s", tc.insertedElement)
+			assert.Equal(t, tc.expectedSeverity, foundEvent.Severity, "%s (element: %s)", tc.description, tc.insertedElement)
 		})
 	}
 }
@@ -545,7 +678,7 @@ func TestDriftDetection_MultipleFilesScenario(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run drift detection (daemon will parse proto files and detect drift)
-	daemon := background.NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
+	daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
 	err = daemon.Run()
 	require.NoError(t, err)
 
@@ -597,4 +730,46 @@ func TestDriftDetection_MultipleFilesScenario(t *testing.T) {
 		assert.Equal(t, model.DriftEventTypeAdded, dEvent.EventType)
 		assert.Equal(t, model.DriftSeverityInfo, dEvent.Severity)
 	}
+}
+
+func TestDetermineSeverityFromParsed_FixtureVersions(t *testing.T) {
+	testCases := []struct {
+		name             string
+		previousFixture  string
+		currentFixture   string
+		expectedSeverity model.DriftSeverity
+		description      string
+	}{
+		{
+			name:             "v2_to_v1_contract_change_is_critical",
+			previousFixture:  "drift_v2.proto",
+			currentFixture:   "drift_v1.proto",
+			expectedSeverity: model.DriftSeverityCritical,
+			description:      "v2 to v1 removes API surface and should be critical",
+		},
+		{
+			name:             "v2_to_v3_additive_change_is_info",
+			previousFixture:  "drift_v2.proto",
+			currentFixture:   "drift_v3.proto",
+			expectedSeverity: model.DriftSeverityInfo,
+			description:      "v3 only adds methods and entities over v2",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			previous := parseProtoFile(t, tc.previousFixture)
+			current := parseProtoFile(t, tc.currentFixture)
+
+			severity := determineSeverityFromParsed(previous, current)
+			assert.Equal(t, tc.expectedSeverity, severity, tc.description)
+		})
+	}
+}
+
+func parseProtoFile(t *testing.T, filename string) *unordered.Proto {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join("testdata", filename))
+	require.NoError(t, err, "failed to read proto fixture")
+	return parseProtoString(t, string(content))
 }

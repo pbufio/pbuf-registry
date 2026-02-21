@@ -332,3 +332,94 @@ func TestDriftRepository_AcknowledgeDriftEvent(t *testing.T) {
 		}
 	}
 }
+
+func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {
+	ctx := context.Background()
+
+	moduleA := "test-module-a-dep-drift-" + time.Now().Format("20060102150405")
+	moduleB := "test-module-b-dep-drift-" + time.Now().Format("20060102150405")
+
+	err := suite.registryRepository.RegisterModule(ctx, moduleA)
+	require.NoError(t, err)
+	err = suite.registryRepository.RegisterModule(ctx, moduleB)
+	require.NoError(t, err)
+
+	// Dependency module baseline tag.
+	_, err = suite.registryRepository.PushModule(ctx, moduleB, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "dep.proto", Content: `syntax = "proto3"; message DepV1 { string id = 1; }`},
+	})
+	require.NoError(t, err)
+	tagBV1ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleB, "v1.0.0")
+	require.NoError(t, err)
+	moduleBID, _, err := suite.driftRepository.GetTagInfo(ctx, tagBV1ID)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Dependency module newer tag with non-breaking drift.
+	_, err = suite.registryRepository.PushModule(ctx, moduleB, "v1.1.0", []*v1.ProtoFile{
+		{Filename: "dep.proto", Content: `syntax = "proto3"; message DepV1 { string id = 1; string name = 2; }`},
+	})
+	require.NoError(t, err)
+	tagBV11ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleB, "v1.1.0")
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Dependency module newer tag with breaking drift.
+	_, err = suite.registryRepository.PushModule(ctx, moduleB, "v2.0.0", []*v1.ProtoFile{
+		{Filename: "dep.proto", Content: `syntax = "proto3"; message DepV2 {}`},
+	})
+	require.NoError(t, err)
+	tagBV2ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleB, "v2.0.0")
+	require.NoError(t, err)
+
+	// Dependent module pinned to B@v1.0.0.
+	_, err = suite.registryRepository.PushModule(ctx, moduleA, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "main.proto", Content: `syntax = "proto3"; message Main { string id = 1; }`},
+	})
+	require.NoError(t, err)
+	err = suite.registryRepository.AddModuleDependencies(ctx, moduleA, "v1.0.0", []*v1.Dependency{
+		{Name: moduleB, Tag: "v1.0.0"},
+	})
+	require.NoError(t, err)
+
+	// Seed drift events for newer dependency tags.
+	err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
+		{
+			ModuleID:    moduleBID,
+			TagID:       tagBV11ID,
+			Filename:    "dep.proto",
+			EventType:   model.DriftEventTypeModified,
+			Severity:    model.DriftSeverityInfo,
+			CurrentHash: "infohash",
+			DetectedAt:  time.Now(),
+		},
+		{
+			ModuleID:    moduleBID,
+			TagID:       tagBV2ID,
+			Filename:    "dep.proto",
+			EventType:   model.DriftEventTypeModified,
+			Severity:    model.DriftSeverityCritical,
+			CurrentHash: "crithash",
+			DetectedAt:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	statuses, err := suite.driftRepository.GetModuleDependencyDriftStatuses(ctx, moduleA, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, statuses, 2)
+
+	assert.Equal(t, moduleB, statuses[0].DependencyName)
+	assert.Equal(t, "v1.0.0", statuses[0].CurrentTag)
+	assert.Equal(t, "v1.1.0", statuses[0].TargetTag)
+	assert.Equal(t, model.DriftSeverityInfo, statuses[0].Severity)
+	assert.Equal(t, model.DependencyDriftRecommendationSuggestUpdate, statuses[0].Recommendation)
+
+	assert.Equal(t, moduleB, statuses[1].DependencyName)
+	assert.Equal(t, "v1.0.0", statuses[1].CurrentTag)
+	assert.Equal(t, "v2.0.0", statuses[1].TargetTag)
+	assert.Equal(t, model.DriftSeverityCritical, statuses[1].Severity)
+	assert.Equal(t, model.DependencyDriftRecommendationAlertReview, statuses[1].Recommendation)
+}

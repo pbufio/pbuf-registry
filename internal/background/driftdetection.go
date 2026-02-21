@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -170,6 +171,13 @@ func hasBreakingChangesFromParsed(previous, current *unordered.Proto) bool {
 		return false
 	}
 
+	// Package changes alter fully-qualified type references and are breaking.
+	prevPackage := extractPackageFromParsed(prevBody.Packages)
+	currPackage := extractPackageFromParsed(currBody.Packages)
+	if prevPackage != currPackage {
+		return true
+	}
+
 	// Check for removed messages
 	prevMessages := extractMessagesFromParsed(prevBody.Messages)
 	currMessages := extractMessagesFromParsed(currBody.Messages)
@@ -197,35 +205,42 @@ func hasBreakingChangesFromParsed(previous, current *unordered.Proto) bool {
 		}
 	}
 
-	// Check for removed fields in messages
-	prevFields := extractFieldsFromMessages(prevBody.Messages)
-	currFields := extractFieldsFromMessages(currBody.Messages)
-	for fieldKey, fieldNum := range prevFields {
-		if currFieldNum, exists := currFields[fieldKey]; exists {
-			// Field number changed - breaking
-			if fieldNum != currFieldNum {
-				return true
-			}
-		} else {
-			// Field removed - breaking
+	// Check for removed fields in messages and type changes on the same field number
+	prevFields := extractFieldsByNumberFromMessages(prevBody.Messages)
+	currFields := extractFieldsByNumberFromMessages(currBody.Messages)
+	for fieldKey, prevField := range prevFields {
+		currField, exists := currFields[fieldKey]
+		if !exists {
+			// Field removed (or number changed) - breaking
+			return true
+		}
+		if prevField.Type != currField.Type {
+			// Same field number with different wire type - breaking
 			return true
 		}
 	}
 
-	// Check for removed RPCs in services
-	prevRPCs := extractRPCsFromParsed(prevBody.Services)
-	currRPCs := extractRPCsFromParsed(currBody.Services)
-	for rpc := range prevRPCs {
-		if _, exists := currRPCs[rpc]; !exists {
+	// Check for removed RPCs in services and signature changes
+	prevRPCs := extractRPCDetailsFromParsed(prevBody.Services)
+	currRPCs := extractRPCDetailsFromParsed(currBody.Services)
+	for rpcKey, prevRPC := range prevRPCs {
+		currRPC, exists := currRPCs[rpcKey]
+		if !exists {
+			return true
+		}
+		if prevRPC.RequestType != currRPC.RequestType ||
+			prevRPC.ResponseType != currRPC.ResponseType ||
+			prevRPC.RequestStream != currRPC.RequestStream ||
+			prevRPC.ResponseStream != currRPC.ResponseStream {
 			return true
 		}
 	}
 
-	// Check for removed enum values
-	prevEnumValues := extractEnumValuesFromParsed(prevBody.Enums)
-	currEnumValues := extractEnumValuesFromParsed(currBody.Enums)
-	for enumVal := range prevEnumValues {
-		if _, exists := currEnumValues[enumVal]; !exists {
+	// Check for removed enum value numbers
+	prevEnumValues := extractEnumValuesByNumberFromParsed(prevBody.Enums)
+	currEnumValues := extractEnumValuesByNumberFromParsed(currBody.Enums)
+	for enumValueKey := range prevEnumValues {
+		if _, exists := currEnumValues[enumValueKey]; !exists {
 			return true
 		}
 	}
@@ -249,22 +264,16 @@ func hasPotentiallyBreakingChangesFromParsed(previous, current *unordered.Proto)
 		return true
 	}
 
-	// Check for field type changes
-	prevFieldTypes := extractFieldTypesFromMessages(prevBody.Messages)
-	currFieldTypes := extractFieldTypesFromMessages(currBody.Messages)
-	for fieldKey, prevType := range prevFieldTypes {
-		if currType, exists := currFieldTypes[fieldKey]; exists {
-			if prevType != currType {
-				return true
-			}
+	// Field rename on the same number can break generated code but keeps wire compatibility.
+	prevFields := extractFieldsByNumberFromMessages(prevBody.Messages)
+	currFields := extractFieldsByNumberFromMessages(currBody.Messages)
+	for fieldKey, prevField := range prevFields {
+		if currField, exists := currFields[fieldKey]; exists && prevField.Name != currField.Name {
+			return true
 		}
 	}
 
-	// Check for package changes
-	prevPackage := extractPackageFromParsed(prevBody.Packages)
-	currPackage := extractPackageFromParsed(currBody.Packages)
-
-	return prevPackage != currPackage
+	return false
 }
 
 // Helper functions to extract proto elements from parsed structures
@@ -330,6 +339,67 @@ func extractFieldsFromMessages(messages []*unordered.Message) map[string]string 
 	return result
 }
 
+type parsedField struct {
+	Name string
+	Type string
+}
+
+func extractFieldsByNumberFromMessages(messages []*unordered.Message) map[string]parsedField {
+	result := make(map[string]parsedField)
+	extractFieldsByNumberFromMessagesWithPrefix(messages, "", result)
+	return result
+}
+
+func extractFieldsByNumberFromMessagesWithPrefix(messages []*unordered.Message, prefix string, result map[string]parsedField) {
+	for _, msg := range messages {
+		messageName := msg.MessageName
+		if prefix != "" {
+			messageName = prefix + "." + msg.MessageName
+		}
+
+		if msg.MessageBody == nil {
+			continue
+		}
+
+		for _, field := range msg.MessageBody.Fields {
+			fieldNum, ok := parseProtoNumber(field.FieldNumber)
+			if !ok {
+				continue
+			}
+			result[fieldKey(messageName, fieldNum)] = parsedField{
+				Name: field.FieldName,
+				Type: field.Type,
+			}
+		}
+
+		for _, mapField := range msg.MessageBody.Maps {
+			fieldNum, ok := parseProtoNumber(mapField.FieldNumber)
+			if !ok {
+				continue
+			}
+			result[fieldKey(messageName, fieldNum)] = parsedField{
+				Name: mapField.MapName,
+				Type: "map<" + mapField.KeyType + "," + mapField.Type + ">",
+			}
+		}
+
+		for _, oneof := range msg.MessageBody.Oneofs {
+			for _, oneofField := range oneof.OneofFields {
+				fieldNum, ok := parseProtoNumber(oneofField.FieldNumber)
+				if !ok {
+					continue
+				}
+				result[fieldKey(messageName, fieldNum)] = parsedField{
+					Name: oneofField.FieldName,
+					Type: oneofField.Type,
+				}
+			}
+		}
+
+		extractFieldsByNumberFromMessagesWithPrefix(msg.MessageBody.Messages, messageName, result)
+	}
+}
+
 func extractRPCsFromParsed(services []*unordered.Service) map[string]bool {
 	result := make(map[string]bool)
 	for _, svc := range services {
@@ -339,6 +409,43 @@ func extractRPCsFromParsed(services []*unordered.Service) map[string]bool {
 		for _, rpc := range svc.ServiceBody.RPCs {
 			key := svc.ServiceName + "." + rpc.RPCName
 			result[key] = true
+		}
+	}
+	return result
+}
+
+type parsedRPC struct {
+	RequestType    string
+	ResponseType   string
+	RequestStream  bool
+	ResponseStream bool
+}
+
+func extractRPCDetailsFromParsed(services []*unordered.Service) map[string]parsedRPC {
+	result := make(map[string]parsedRPC)
+	for _, svc := range services {
+		if svc.ServiceBody == nil {
+			continue
+		}
+		for _, rpc := range svc.ServiceBody.RPCs {
+			requestType := ""
+			requestStream := false
+			if rpc.RPCRequest != nil {
+				requestType = rpc.RPCRequest.MessageType
+				requestStream = rpc.RPCRequest.IsStream
+			}
+			responseType := ""
+			responseStream := false
+			if rpc.RPCResponse != nil {
+				responseType = rpc.RPCResponse.MessageType
+				responseStream = rpc.RPCResponse.IsStream
+			}
+			result[svc.ServiceName+"."+rpc.RPCName] = parsedRPC{
+				RequestType:    requestType,
+				ResponseType:   responseType,
+				RequestStream:  requestStream,
+				ResponseStream: responseStream,
+			}
 		}
 	}
 	return result
@@ -356,6 +463,45 @@ func extractEnumValuesFromParsed(enums []*unordered.Enum) map[string]bool {
 		}
 	}
 	return result
+}
+
+type parsedEnumValue struct {
+	Name string
+}
+
+func extractEnumValuesByNumberFromParsed(enums []*unordered.Enum) map[string]parsedEnumValue {
+	result := make(map[string]parsedEnumValue)
+	for _, enum := range enums {
+		if enum.EnumBody == nil {
+			continue
+		}
+		for _, field := range enum.EnumBody.EnumFields {
+			enumValueNum, ok := parseProtoNumber(field.Number)
+			if !ok {
+				continue
+			}
+			result[enumValueKey(enum.EnumName, enumValueNum)] = parsedEnumValue{
+				Name: field.Ident,
+			}
+		}
+	}
+	return result
+}
+
+func parseProtoNumber(number string) (int32, bool) {
+	parsed, err := strconv.ParseInt(number, 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return int32(parsed), true
+}
+
+func fieldKey(messageName string, fieldNumber int32) string {
+	return messageName + "#" + strconv.FormatInt(int64(fieldNumber), 10)
+}
+
+func enumValueKey(enumName string, enumValueNumber int32) string {
+	return enumName + "#" + strconv.FormatInt(int64(enumValueNumber), 10)
 }
 
 func extractPackageFromParsed(packages []*parser.Package) string {

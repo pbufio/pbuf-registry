@@ -20,12 +20,15 @@ var _ = binding.EncodeURL
 const _ = http.SupportPackageIsVersion1
 
 const OperationDriftServiceAcknowledgeDriftEvent = "/pbufregistry.v1.DriftService/AcknowledgeDriftEvent"
+const OperationDriftServiceGetModuleDependencyDriftStatus = "/pbufregistry.v1.DriftService/GetModuleDependencyDriftStatus"
 const OperationDriftServiceGetModuleDriftEvents = "/pbufregistry.v1.DriftService/GetModuleDriftEvents"
 const OperationDriftServiceListDriftEvents = "/pbufregistry.v1.DriftService/ListDriftEvents"
 
 type DriftServiceHTTPServer interface {
 	// AcknowledgeDriftEvent Acknowledge a drift event
 	AcknowledgeDriftEvent(context.Context, *AcknowledgeDriftEventRequest) (*AcknowledgeDriftEventResponse, error)
+	// GetModuleDependencyDriftStatus Get dependency drift status for a specific module
+	GetModuleDependencyDriftStatus(context.Context, *GetModuleDependencyDriftStatusRequest) (*GetModuleDependencyDriftStatusResponse, error)
 	// GetModuleDriftEvents Get drift events for a specific module
 	GetModuleDriftEvents(context.Context, *GetModuleDriftEventsRequest) (*GetModuleDriftEventsResponse, error)
 	// ListDriftEvents List all unacknowledged drift events
@@ -36,6 +39,7 @@ func RegisterDriftServiceHTTPServer(s *http.Server, srv DriftServiceHTTPServer) 
 	r := s.Route("/")
 	r.GET("/v1/drift/events", _DriftService_ListDriftEvents0_HTTP_Handler(srv))
 	r.POST("/v1/drift/modules/events", _DriftService_GetModuleDriftEvents0_HTTP_Handler(srv))
+	r.POST("/v1/drift/modules/dependencies/status", _DriftService_GetModuleDependencyDriftStatus0_HTTP_Handler(srv))
 	r.POST("/v1/drift/events/{event_id}/acknowledge", _DriftService_AcknowledgeDriftEvent0_HTTP_Handler(srv))
 }
 
@@ -80,6 +84,28 @@ func _DriftService_GetModuleDriftEvents0_HTTP_Handler(srv DriftServiceHTTPServer
 	}
 }
 
+func _DriftService_GetModuleDependencyDriftStatus0_HTTP_Handler(srv DriftServiceHTTPServer) func(ctx http.Context) error {
+	return func(ctx http.Context) error {
+		var in GetModuleDependencyDriftStatusRequest
+		if err := ctx.Bind(&in); err != nil {
+			return err
+		}
+		if err := ctx.BindQuery(&in); err != nil {
+			return err
+		}
+		http.SetOperation(ctx, OperationDriftServiceGetModuleDependencyDriftStatus)
+		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
+			return srv.GetModuleDependencyDriftStatus(ctx, req.(*GetModuleDependencyDriftStatusRequest))
+		})
+		out, err := h(ctx, &in)
+		if err != nil {
+			return err
+		}
+		reply := out.(*GetModuleDependencyDriftStatusResponse)
+		return ctx.Result(200, reply)
+	}
+}
+
 func _DriftService_AcknowledgeDriftEvent0_HTTP_Handler(srv DriftServiceHTTPServer) func(ctx http.Context) error {
 	return func(ctx http.Context) error {
 		var in AcknowledgeDriftEventRequest
@@ -108,6 +134,8 @@ func _DriftService_AcknowledgeDriftEvent0_HTTP_Handler(srv DriftServiceHTTPServe
 type DriftServiceHTTPClient interface {
 	// AcknowledgeDriftEvent Acknowledge a drift event
 	AcknowledgeDriftEvent(ctx context.Context, req *AcknowledgeDriftEventRequest, opts ...http.CallOption) (rsp *AcknowledgeDriftEventResponse, err error)
+	// GetModuleDependencyDriftStatus Get dependency drift status for a specific module
+	GetModuleDependencyDriftStatus(ctx context.Context, req *GetModuleDependencyDriftStatusRequest, opts ...http.CallOption) (rsp *GetModuleDependencyDriftStatusResponse, err error)
 	// GetModuleDriftEvents Get drift events for a specific module
 	GetModuleDriftEvents(ctx context.Context, req *GetModuleDriftEventsRequest, opts ...http.CallOption) (rsp *GetModuleDriftEventsResponse, err error)
 	// ListDriftEvents List all unacknowledged drift events
@@ -128,6 +156,20 @@ func (c *DriftServiceHTTPClientImpl) AcknowledgeDriftEvent(ctx context.Context, 
 	pattern := "/v1/drift/events/{event_id}/acknowledge"
 	path := binding.EncodeURL(pattern, in, false)
 	opts = append(opts, http.Operation(OperationDriftServiceAcknowledgeDriftEvent))
+	opts = append(opts, http.PathTemplate(pattern))
+	err := c.cc.Invoke(ctx, "POST", path, in, &out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetModuleDependencyDriftStatus Get dependency drift status for a specific module
+func (c *DriftServiceHTTPClientImpl) GetModuleDependencyDriftStatus(ctx context.Context, in *GetModuleDependencyDriftStatusRequest, opts ...http.CallOption) (*GetModuleDependencyDriftStatusResponse, error) {
+	var out GetModuleDependencyDriftStatusResponse
+	pattern := "/v1/drift/modules/dependencies/status"
+	path := binding.EncodeURL(pattern, in, false)
+	opts = append(opts, http.Operation(OperationDriftServiceGetModuleDependencyDriftStatus))
 	opts = append(opts, http.PathTemplate(pattern))
 	err := c.cc.Invoke(ctx, "POST", path, in, &out, opts...)
 	if err != nil {

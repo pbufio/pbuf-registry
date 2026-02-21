@@ -97,6 +97,10 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 			// Read operations
 			moduleID := extractModuleID(req)
 			return model.PermissionRead, moduleID
+		case strings.Contains(operation, "/GetModuleDependencyDriftStatus"):
+			// Read operations
+			moduleName := extractModuleName(req)
+			return model.PermissionRead, moduleName
 		case strings.Contains(operation, "/AcknowledgeDriftEvent"):
 			// Write operation - acknowledging drift events
 			return model.PermissionWrite, "*"

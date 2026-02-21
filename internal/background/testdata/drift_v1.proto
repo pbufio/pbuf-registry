@@ -19,16 +19,7 @@ service DriftService {
   // Get drift events for a specific module
   rpc GetModuleDriftEvents(GetModuleDriftEventsRequest) returns (GetModuleDriftEventsResponse) {
     option (google.api.http) = {
-      post: "/v1/drift/modules/events"
-      body: "*"
-    };
-  }
-
-  // Get dependency drift status for a specific module
-  rpc GetModuleDependencyDriftStatus(GetModuleDependencyDriftStatusRequest) returns (GetModuleDependencyDriftStatusResponse) {
-    option (google.api.http) = {
-      post: "/v1/drift/modules/dependencies/status"
-      body: "*"
+      get: "/v1/drift/modules/{module_id}/events"
     };
   }
 
@@ -57,23 +48,16 @@ enum DriftSeverity {
   DRIFT_SEVERITY_CRITICAL = 3;
 }
 
-// DependencyDriftRecommendation indicates what action should be taken.
-enum DependencyDriftRecommendation {
-  DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED = 0;
-  DEPENDENCY_DRIFT_RECOMMENDATION_SUGGEST_UPDATE = 1;
-  DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW = 2;
-}
-
 // DriftEvent represents a detected change in a proto file
 message DriftEvent {
   // The unique identifier of the drift event
   string id = 1;
 
-  // The module name where the drift was detected
-  string module_name = 2;
+  // The module ID where the drift was detected
+  string module_id = 2;
 
-  // The tag name where the drift was detected
-  string tag_name = 3;
+  // The tag ID where the drift was detected
+  string tag_id = 3;
 
   // The filename of the proto file that changed
   string filename = 4;
@@ -117,50 +101,14 @@ message ListDriftEventsResponse {
 
 // GetModuleDriftEventsRequest is the request message for GetModuleDriftEvents
 message GetModuleDriftEventsRequest {
-  // The module name to get drift events for
-  string module_name = 1;
-
-  // Optional: filter drift events by tag name
-  optional string tag_name = 2;
+  // The module ID to get drift events for
+  string module_id = 1;
 }
 
 // GetModuleDriftEventsResponse is the response message for GetModuleDriftEvents
 message GetModuleDriftEventsResponse {
   // The list of drift events for the module
   repeated DriftEvent events = 1;
-}
-
-// DependencyDriftStatus represents dependency update status for a module.
-message DependencyDriftStatus {
-  // Dependency module name
-  string dependency_name = 1;
-
-  // Currently pinned dependency tag
-  string current_tag = 2;
-
-  // Newer dependency tag to evaluate
-  string target_tag = 3;
-
-  // Maximum drift severity found on target tag
-  DriftSeverity severity = 4;
-
-  // Suggested action for this dependency update candidate
-  DependencyDriftRecommendation recommendation = 5;
-}
-
-// GetModuleDependencyDriftStatusRequest is the request for dependency drift status.
-message GetModuleDependencyDriftStatusRequest {
-  // The module name to evaluate dependencies for
-  string module_name = 1;
-
-  // Optional: module tag to evaluate (latest stable tag when omitted)
-  optional string tag_name = 2;
-}
-
-// GetModuleDependencyDriftStatusResponse is the response for dependency drift status.
-message GetModuleDependencyDriftStatusResponse {
-  // Dependency drift statuses for newer dependency tags
-  repeated DependencyDriftStatus statuses = 1;
 }
 
 // AcknowledgeDriftEventRequest is the request message for AcknowledgeDriftEvent

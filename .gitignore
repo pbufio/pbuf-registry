@@ -30,3 +30,6 @@ go.work
 # SSL Certificates
 gen/certs/
 .srl
+
+# examples/vendor
+examples/api
