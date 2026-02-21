@@ -216,7 +216,7 @@ func TestDetermineSeverityFromParsed_FieldTypeChange(t *testing.T) {
 	`)
 
 	severity := determineSeverityFromParsed(previous, current)
-	assert.Equal(t, model.DriftSeverityWarning, severity, "changing a field type should be warning")
+	assert.Equal(t, model.DriftSeverityCritical, severity, "changing a field type should be critical")
 }
 
 func TestDetermineSeverityFromParsed_PackageChange(t *testing.T) {
@@ -232,7 +232,7 @@ func TestDetermineSeverityFromParsed_PackageChange(t *testing.T) {
 	`)
 
 	severity := determineSeverityFromParsed(previous, current)
-	assert.Equal(t, model.DriftSeverityWarning, severity, "changing package should be warning")
+	assert.Equal(t, model.DriftSeverityCritical, severity, "changing package should be critical")
 }
 
 func TestDetermineSeverityFromParsed_AddOptionalField(t *testing.T) {
@@ -422,7 +422,23 @@ func TestHasPotentiallyBreakingChangesFromParsed(t *testing.T) {
 		expectPotentiallyBreaking bool
 	}{
 		{
-			name: "field type change",
+			name: "field rename on same number",
+			previousProto: `
+				syntax = "proto3";
+				message Foo {
+					string original_name = 1;
+				}
+			`,
+			currentProto: `
+				syntax = "proto3";
+				message Foo {
+					string renamed_name = 1;
+				}
+			`,
+			expectPotentiallyBreaking: true,
+		},
+		{
+			name: "field type change is critical, not warning",
 			previousProto: `
 				syntax = "proto3";
 				message Foo {
@@ -435,10 +451,10 @@ func TestHasPotentiallyBreakingChangesFromParsed(t *testing.T) {
 					int32 name = 1;
 				}
 			`,
-			expectPotentiallyBreaking: true,
+			expectPotentiallyBreaking: false,
 		},
 		{
-			name: "package change",
+			name: "package change is critical, not warning",
 			previousProto: `
 				syntax = "proto3";
 				package v1;
@@ -449,7 +465,7 @@ func TestHasPotentiallyBreakingChangesFromParsed(t *testing.T) {
 				package v2;
 				message Foo {}
 			`,
-			expectPotentiallyBreaking: true,
+			expectPotentiallyBreaking: false,
 		},
 		{
 			name: "no potentially breaking changes",
