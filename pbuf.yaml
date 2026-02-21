@@ -1,8 +1,7 @@
 version: v1
 name: pbufio/pbuf-registry
 registry:
-  addr: localhost:6777
-  insecure: true
+  addr: pbuf.cloud
 export:
   paths:
     - api
