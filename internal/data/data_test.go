@@ -1142,7 +1142,7 @@ func Test_metadataRepo_GetParsedProtoFiles(t *testing.T) {
 	assert.NotNil(t, result[0].Proto)
 
 	// Test: non-existing tag returns empty
-	result, err = suite.metadataRepository.GetParsedProtoFiles(ctx, "00000000-0000-0000-0000-000000000000")
+	result, err = suite.metadataRepository.GetParsedProtoFiles(ctx, fakeUUID)
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }

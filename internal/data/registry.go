@@ -595,7 +595,7 @@ func (r *registryRepo) GetTransitiveDependencies(ctx context.Context, name strin
 	}
 
 	// Mark all direct dependencies
-	var result []*v1.Dependency
+	result := make([]*v1.Dependency, 0, len(directDeps))
 	for _, dep := range directDeps {
 		result = append(result, &v1.Dependency{
 			Name:           dep.Name,
