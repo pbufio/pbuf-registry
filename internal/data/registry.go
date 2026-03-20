@@ -580,6 +580,13 @@ func (r *registryRepo) GetModuleTagId(ctx context.Context, moduleName string, ta
 	return tagId, nil
 }
 
+// depKey is a struct used as a map key to track visited dependencies,
+// avoiding string concatenation collision risks.
+type depKey struct {
+	name string
+	tag  string
+}
+
 func (r *registryRepo) GetTransitiveDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
 	// Get direct dependencies first
 	directDeps, err := r.GetModuleDependencies(ctx, name, tag)
@@ -598,11 +605,10 @@ func (r *registryRepo) GetTransitiveDependencies(ctx context.Context, name strin
 	}
 
 	// Track visited modules to avoid cycles and duplicates
-	// Key is "moduleName:tag"
-	visited := make(map[string]bool)
-	visited[name+":"+tag] = true
+	visited := make(map[depKey]bool)
+	visited[depKey{name: name, tag: tag}] = true
 	for _, dep := range directDeps {
-		visited[dep.Name+":"+dep.Tag] = true
+		visited[depKey{name: dep.Name, tag: dep.Tag}] = true
 	}
 
 	// BFS to resolve transitive dependencies
@@ -621,7 +627,7 @@ func (r *registryRepo) GetTransitiveDependencies(ctx context.Context, name strin
 		}
 
 		for _, dep := range transitiveDeps {
-			key := dep.Name + ":" + dep.Tag
+			key := depKey{name: dep.Name, tag: dep.Tag}
 			if !visited[key] {
 				visited[key] = true
 				result = append(result, &v1.Dependency{
