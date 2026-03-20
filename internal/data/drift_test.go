@@ -423,3 +423,172 @@ func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {
 	assert.Equal(t, model.DriftSeverityCritical, statuses[1].Severity)
 	assert.Equal(t, model.DependencyDriftRecommendationAlertReview, statuses[1].Recommendation)
 }
+
+func TestDriftRepository_GetTagsWithoutHashes(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test module with protofiles (protofiles start without hashes)
+	moduleName := "test-tags-without-hashes-" + time.Now().Format("20060102150405")
+	err := suite.registryRepository.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	_, err = suite.registryRepository.PushModule(ctx, moduleName, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message Test {}`},
+	})
+	require.NoError(t, err)
+
+	tagID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+
+	// Tag should appear in the "without hashes" list
+	tagsWithoutHashes, err := suite.driftRepository.GetTagsWithoutHashes(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, tagsWithoutHashes, tagID)
+
+	// After computing hashes, tag should no longer appear
+	err = suite.driftRepository.ComputeAndStoreHashes(ctx, tagID)
+	require.NoError(t, err)
+
+	tagsWithoutHashes, err = suite.driftRepository.GetTagsWithoutHashes(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, tagsWithoutHashes, tagID)
+}
+
+func TestDriftRepository_GetUnacknowledgedDriftEvents(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a module with a tag
+	moduleName := "test-unacked-events-" + time.Now().Format("20060102150405")
+	err := suite.registryRepository.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	_, err = suite.registryRepository.PushModule(ctx, moduleName, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message Test {}`},
+	})
+	require.NoError(t, err)
+
+	tagID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+
+	moduleID, _, err := suite.driftRepository.GetTagInfo(ctx, tagID)
+	require.NoError(t, err)
+
+	// Save some drift events
+	events := []model.DriftEvent{
+		{
+			ModuleID:    moduleID,
+			TagID:       tagID,
+			Filename:    "unacked-file-1.proto",
+			EventType:   model.DriftEventTypeAdded,
+			CurrentHash: "hash1",
+			Severity:    model.DriftSeverityInfo,
+			DetectedAt:  time.Now(),
+		},
+		{
+			ModuleID:    moduleID,
+			TagID:       tagID,
+			Filename:    "unacked-file-2.proto",
+			EventType:   model.DriftEventTypeModified,
+			PreviousHash: "oldhash",
+			CurrentHash:  "newhash",
+			Severity:     model.DriftSeverityWarning,
+			DetectedAt:   time.Now(),
+		},
+	}
+	err = suite.driftRepository.SaveDriftEvents(ctx, events)
+	require.NoError(t, err)
+
+	// Get unacknowledged events - our events should be in the list
+	unackedEvents, err := suite.driftRepository.GetUnacknowledgedDriftEvents(ctx)
+	require.NoError(t, err)
+
+	foundCount := 0
+	for _, e := range unackedEvents {
+		if e.TagID == tagID && (e.Filename == "unacked-file-1.proto" || e.Filename == "unacked-file-2.proto") {
+			foundCount++
+			assert.False(t, e.Acknowledged)
+			assert.Equal(t, moduleName, e.ModuleName)
+			assert.Equal(t, "v1.0.0", e.TagName)
+		}
+	}
+	assert.Equal(t, 2, foundCount, "should find both unacknowledged events")
+}
+
+func TestDriftRepository_GetDriftEventsForModule(t *testing.T) {
+	ctx := context.Background()
+
+	// Create module with two tags
+	moduleName := "test-events-for-module-" + time.Now().Format("20060102150405")
+	err := suite.registryRepository.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	_, err = suite.registryRepository.PushModule(ctx, moduleName, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message V1 {}`},
+	})
+	require.NoError(t, err)
+
+	tag1ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	_, err = suite.registryRepository.PushModule(ctx, moduleName, "v2.0.0", []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message V2 {}`},
+	})
+	require.NoError(t, err)
+
+	tag2ID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v2.0.0")
+	require.NoError(t, err)
+
+	moduleID, _, err := suite.driftRepository.GetTagInfo(ctx, tag1ID)
+	require.NoError(t, err)
+
+	// Save events for both tags
+	err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
+		{
+			ModuleID:    moduleID,
+			TagID:       tag1ID,
+			Filename:    "test.proto",
+			EventType:   model.DriftEventTypeAdded,
+			CurrentHash: "hash1",
+			Severity:    model.DriftSeverityInfo,
+			DetectedAt:  time.Now(),
+		},
+		{
+			ModuleID:     moduleID,
+			TagID:        tag2ID,
+			Filename:     "test.proto",
+			EventType:    model.DriftEventTypeModified,
+			PreviousHash: "hash1",
+			CurrentHash:  "hash2",
+			Severity:     model.DriftSeverityWarning,
+			DetectedAt:   time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	// Test: get all events for module (no tag filter)
+	allEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(allEvents), 2)
+
+	// Test: get events filtered by specific tag name
+	tag1Events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+
+	for _, e := range tag1Events {
+		assert.Equal(t, "v1.0.0", e.TagName, "all events should be for v1.0.0 tag")
+	}
+
+	tag2Events, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "v2.0.0")
+	require.NoError(t, err)
+
+	for _, e := range tag2Events {
+		assert.Equal(t, "v2.0.0", e.TagName, "all events should be for v2.0.0 tag")
+	}
+
+	// Test: events for non-existing module returns empty
+	noEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, "nonexistent-module", "")
+	require.NoError(t, err)
+	assert.Empty(t, noEvents)
+}

@@ -998,6 +998,10 @@
         "tag": {
           "type": "string",
           "description": "The tag of the dependency."
+        },
+        "dependencyType": {
+          "type": "string",
+          "description": "The type of the dependency (direct or transitive)."
         }
       },
       "description": "Dependency is a dependency registered in the registry."
@@ -1246,6 +1250,10 @@
         "tag": {
           "type": "string",
           "title": "The tag of the module to retrieve"
+        },
+        "resolveTransitive": {
+          "type": "boolean",
+          "title": "Whether to resolve transitive dependencies"
         }
       },
       "description": "GetModuleDependenciesRequest is the request message for GetModuleDependencies."

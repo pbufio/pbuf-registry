@@ -28,6 +28,7 @@ type RegistryRepository interface {
 	DeleteModuleTag(ctx context.Context, name string, tag string) error
 	AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error
 	GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
+	GetTransitiveDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
 	DeleteObsoleteDraftTags(ctx context.Context) error
 }
 
@@ -577,6 +578,69 @@ func (r *registryRepo) GetModuleTagId(ctx context.Context, moduleName string, ta
 	}
 
 	return tagId, nil
+}
+
+// depKey is a struct used as a map key to track visited dependencies,
+// avoiding string concatenation collision risks.
+type depKey struct {
+	name string
+	tag  string
+}
+
+func (r *registryRepo) GetTransitiveDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
+	// Get direct dependencies first
+	directDeps, err := r.GetModuleDependencies(ctx, name, tag)
+	if err != nil {
+		return nil, fmt.Errorf("could not get direct dependencies: %w", err)
+	}
+
+	// Mark all direct dependencies
+	result := make([]*v1.Dependency, 0, len(directDeps))
+	for _, dep := range directDeps {
+		result = append(result, &v1.Dependency{
+			Name:           dep.Name,
+			Tag:            dep.Tag,
+			DependencyType: "direct",
+		})
+	}
+
+	// Track visited modules to avoid cycles and duplicates
+	visited := make(map[depKey]bool)
+	visited[depKey{name: name, tag: tag}] = true
+	for _, dep := range directDeps {
+		visited[depKey{name: dep.Name, tag: dep.Tag}] = true
+	}
+
+	// BFS to resolve transitive dependencies
+	queue := make([]*v1.Dependency, len(directDeps))
+	copy(queue, directDeps)
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		// Get dependencies of the current dependency
+		transitiveDeps, err := r.GetModuleDependencies(ctx, current.Name, current.Tag)
+		if err != nil {
+			r.logger.Warnf("could not get dependencies for %s:%s: %v", current.Name, current.Tag, err)
+			continue
+		}
+
+		for _, dep := range transitiveDeps {
+			key := depKey{name: dep.Name, tag: dep.Tag}
+			if !visited[key] {
+				visited[key] = true
+				result = append(result, &v1.Dependency{
+					Name:           dep.Name,
+					Tag:            dep.Tag,
+					DependencyType: "transitive",
+				})
+				queue = append(queue, dep)
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // DeleteObsoleteDraftTags deletes all draft tags

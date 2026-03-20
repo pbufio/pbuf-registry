@@ -6,6 +6,7 @@ require (
 	github.com/docker/go-connections v0.6.0
 	github.com/go-co-op/gocron/v2 v2.18.2
 	github.com/go-kratos/kratos/v2 v2.9.1
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/lib/pq v1.10.9
 	github.com/pressly/goose/v3 v3.26.0
@@ -44,7 +45,6 @@ require (
 	github.com/go-playground/form/v4 v4.2.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

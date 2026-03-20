@@ -38,6 +38,9 @@ message Dependency {
 
   // The tag of the dependency.
   string tag = 2;
+
+  // The type of the dependency (direct or transitive).
+  string dependency_type = 3;
 }
 
 // Package is a proto file package used in a module

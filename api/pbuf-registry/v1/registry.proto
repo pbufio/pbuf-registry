@@ -187,6 +187,9 @@ message GetModuleDependenciesRequest {
 
   // The tag of the module to retrieve
   string tag = 2;
+
+  // Whether to resolve transitive dependencies
+  bool resolve_transitive = 3;
 }
 
 // GetModuleDependenciesResponse is the response message for GetModuleDependencies.
