@@ -233,7 +233,15 @@ func (r *RegistryServer) GetModuleDependencies(ctx context.Context, request *v1.
 		return nil, errors.New("name cannot be empty")
 	}
 
-	dependencies, err := r.registryRepository.GetModuleDependencies(ctx, name, request.Tag)
+	var dependencies []*v1.Dependency
+	var err error
+
+	if request.ResolveTransitive {
+		dependencies, err = r.registryRepository.GetTransitiveDependencies(ctx, name, request.Tag)
+	} else {
+		dependencies, err = r.registryRepository.GetModuleDependencies(ctx, name, request.Tag)
+	}
+
 	if err != nil {
 		r.logger.Infof("error getting module dependencies: %v", err)
 		return nil, err

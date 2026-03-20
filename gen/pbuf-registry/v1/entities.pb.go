@@ -164,9 +164,11 @@ type Dependency struct {
 	// The name of the dependency.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The tag of the dependency.
-	Tag           string `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Tag string `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+	// The type of the dependency (direct or transitive).
+	DependencyType string `protobuf:"bytes,3,opt,name=dependency_type,json=dependencyType,proto3" json:"dependency_type,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Dependency) Reset() {
@@ -209,6 +211,13 @@ func (x *Dependency) GetName() string {
 func (x *Dependency) GetTag() string {
 	if x != nil {
 		return x.Tag
+	}
+	return ""
+}
+
+func (x *Dependency) GetDependencyType() string {
+	if x != nil {
+		return x.DependencyType
 	}
 	return ""
 }
@@ -849,11 +858,12 @@ const file_pbuf_registry_v1_entities_proto_rawDesc = "" +
 	"\bpackages\x18\x05 \x03(\tR\bpackages\"A\n" +
 	"\tProtoFile\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\tR\acontent\"2\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\"[\n" +
 	"\n" +
 	"Dependency\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03tag\x18\x02 \x01(\tR\x03tag\"\xa8\x01\n" +
+	"\x03tag\x18\x02 \x01(\tR\x03tag\x12'\n" +
+	"\x0fdependency_type\x18\x03 \x01(\tR\x0edependencyType\"\xa8\x01\n" +
 	"\aPackage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12A\n" +
 	"\vproto_files\x18\x02 \x03(\v2 .pbufregistry.v1.ParsedProtoFileR\n" +

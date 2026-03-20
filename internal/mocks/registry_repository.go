@@ -147,6 +147,36 @@ func (_m *RegistryRepository) GetModuleDependencies(ctx context.Context, name st
 	return r0, r1
 }
 
+// GetTransitiveDependencies provides a mock function with given fields: ctx, name, tag
+func (_m *RegistryRepository) GetTransitiveDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
+	ret := _m.Called(ctx, name, tag)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTransitiveDependencies")
+	}
+
+	var r0 []*v1.Dependency
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]*v1.Dependency, error)); ok {
+		return rf(ctx, name, tag)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []*v1.Dependency); ok {
+		r0 = rf(ctx, name, tag)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*v1.Dependency)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, name, tag)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetModuleTagId provides a mock function with given fields: ctx, moduleName, tag
 func (_m *RegistryRepository) GetModuleTagId(ctx context.Context, moduleName string, tag string) (string, error) {
 	ret := _m.Called(ctx, moduleName, tag)

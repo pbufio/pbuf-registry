@@ -641,9 +641,11 @@ type GetModuleDependenciesRequest struct {
 	// The name of the module to retrieve
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The tag of the module to retrieve
-	Tag           string `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Tag string `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+	// Whether to resolve transitive dependencies
+	ResolveTransitive bool `protobuf:"varint,3,opt,name=resolve_transitive,json=resolveTransitive,proto3" json:"resolve_transitive,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetModuleDependenciesRequest) Reset() {
@@ -688,6 +690,13 @@ func (x *GetModuleDependenciesRequest) GetTag() string {
 		return x.Tag
 	}
 	return ""
+}
+
+func (x *GetModuleDependenciesRequest) GetResolveTransitive() bool {
+	if x != nil {
+		return x.ResolveTransitive
+	}
+	return false
 }
 
 // GetModuleDependenciesResponse is the response message for GetModuleDependencies.
@@ -779,10 +788,11 @@ const file_pbuf_registry_v1_registry_proto_rawDesc = "" +
 	"\x03tag\x18\x02 \x01(\tR\x03tag\"?\n" +
 	"\x17DeleteModuleTagResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03tag\x18\x02 \x01(\tR\x03tag\"D\n" +
+	"\x03tag\x18\x02 \x01(\tR\x03tag\"s\n" +
 	"\x1cGetModuleDependenciesRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03tag\x18\x02 \x01(\tR\x03tag\"`\n" +
+	"\x03tag\x18\x02 \x01(\tR\x03tag\x12-\n" +
+	"\x12resolve_transitive\x18\x03 \x01(\bR\x11resolveTransitive\"`\n" +
 	"\x1dGetModuleDependenciesResponse\x12?\n" +
 	"\fdependencies\x18\x01 \x03(\v2\x1b.pbufregistry.v1.DependencyR\fdependencies2\xca\a\n" +
 	"\bRegistry\x12m\n" +
