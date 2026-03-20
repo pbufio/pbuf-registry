@@ -4,6 +4,10 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/model"
@@ -965,4 +969,180 @@ func Test_metadataRepo_GetTagMeta(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_registryRepository_GetModuleTagId(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	moduleName := "test-get-tag-id-" + time.Now().Format("20060102150405")
+	err := r.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	tagName := "v1.0.0"
+	_, err = r.PushModule(ctx, moduleName, tagName, []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message Test {}`},
+	})
+	require.NoError(t, err)
+
+	// Test: get existing tag ID
+	tagId, err := r.GetModuleTagId(ctx, moduleName, tagName)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tagId)
+
+	// Test: get non-existing tag ID returns empty
+	tagId, err = r.GetModuleTagId(ctx, moduleName, "v999.0.0")
+	require.NoError(t, err)
+	assert.Empty(t, tagId)
+
+	// Test: get tag for non-existing module returns empty
+	tagId, err = r.GetModuleTagId(ctx, "nonexistent-module", tagName)
+	require.NoError(t, err)
+	assert.Empty(t, tagId)
+}
+
+func Test_registryRepository_GetTransitiveDependencies(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	ts := time.Now().Format("20060102150405")
+	moduleA := "test-transitive-a-" + ts
+	moduleB := "test-transitive-b-" + ts
+	moduleC := "test-transitive-c-" + ts
+
+	// Register all modules
+	for _, m := range []string{moduleA, moduleB, moduleC} {
+		err := r.RegisterModule(ctx, m)
+		require.NoError(t, err)
+	}
+
+	// Create module C (leaf dependency, no dependencies)
+	_, err := r.PushModule(ctx, moduleC, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "c.proto", Content: `syntax = "proto3"; message C {}`},
+	})
+	require.NoError(t, err)
+
+	// Create module B (depends on C)
+	_, err = r.PushModule(ctx, moduleB, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "b.proto", Content: `syntax = "proto3"; message B {}`},
+	})
+	require.NoError(t, err)
+	err = r.AddModuleDependencies(ctx, moduleB, "v1.0.0", []*v1.Dependency{
+		{Name: moduleC, Tag: "v1.0.0"},
+	})
+	require.NoError(t, err)
+
+	// Create module A (depends on B)
+	_, err = r.PushModule(ctx, moduleA, "v1.0.0", []*v1.ProtoFile{
+		{Filename: "a.proto", Content: `syntax = "proto3"; message A {}`},
+	})
+	require.NoError(t, err)
+	err = r.AddModuleDependencies(ctx, moduleA, "v1.0.0", []*v1.Dependency{
+		{Name: moduleB, Tag: "v1.0.0"},
+	})
+	require.NoError(t, err)
+
+	// Test: get transitive dependencies for A should return B (direct) and C (transitive)
+	deps, err := r.GetTransitiveDependencies(ctx, moduleA, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, deps, 2)
+
+	// Verify B is direct
+	assert.Equal(t, moduleB, deps[0].Name)
+	assert.Equal(t, "v1.0.0", deps[0].Tag)
+	assert.Equal(t, "direct", deps[0].DependencyType)
+
+	// Verify C is transitive
+	assert.Equal(t, moduleC, deps[1].Name)
+	assert.Equal(t, "v1.0.0", deps[1].Tag)
+	assert.Equal(t, "transitive", deps[1].DependencyType)
+
+	// Test: module with no dependencies returns empty
+	deps, err = r.GetTransitiveDependencies(ctx, moduleC, "v1.0.0")
+	require.NoError(t, err)
+	assert.Empty(t, deps)
+}
+
+func Test_registryRepository_DeleteObsoleteDraftTags(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	moduleName := "test-obsolete-drafts-" + time.Now().Format("20060102150405")
+	err := r.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	// Push a draft module
+	_, err = r.PushDraftModule(ctx, moduleName, "v0.0.1-rc.1", []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; message Test {}`},
+	}, nil)
+	require.NoError(t, err)
+
+	// Verify draft tag exists
+	module, err := r.GetModule(ctx, moduleName)
+	require.NoError(t, err)
+	assert.Contains(t, module.DraftTags, "v0.0.1-rc.1")
+
+	// DeleteObsoleteDraftTags should NOT delete recent draft tags (they are < 7 days old)
+	err = r.DeleteObsoleteDraftTags(ctx)
+	require.NoError(t, err)
+
+	// Verify draft tag still exists (it's recent)
+	module, err = r.GetModule(ctx, moduleName)
+	require.NoError(t, err)
+	assert.Contains(t, module.DraftTags, "v0.0.1-rc.1")
+
+	// Manually age the draft tag to make it obsolete (> 7 days old)
+	_, err = suite.pool.Exec(ctx,
+		"UPDATE draft_tags SET updated_at = NOW() - INTERVAL '8 days' WHERE module_id = $1 AND tag = $2",
+		module.Id, "v0.0.1-rc.1")
+	require.NoError(t, err)
+
+	// Now DeleteObsoleteDraftTags should remove it
+	err = r.DeleteObsoleteDraftTags(ctx)
+	require.NoError(t, err)
+
+	// Verify draft tag has been deleted
+	module, err = r.GetModule(ctx, moduleName)
+	require.NoError(t, err)
+	assert.NotContains(t, module.DraftTags, "v0.0.1-rc.1")
+}
+
+func Test_metadataRepo_GetParsedProtoFiles(t *testing.T) {
+	ctx := context.Background()
+
+	moduleName := "test-get-parsed-" + time.Now().Format("20060102150405")
+	err := suite.registryRepository.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	testProtofiles := []*v1.ProtoFile{
+		{
+			Filename: "hello/test.proto",
+			Content:  "syntax = \"proto3\"; package hello; message Hello {}",
+		},
+	}
+
+	_, err = suite.registryRepository.PushModule(ctx, moduleName, "v1.0.0", testProtofiles)
+	require.NoError(t, err)
+
+	tagId, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+
+	// Parse proto files and save them
+	parsedProtoFiles, err := utils.ParseProtoFilesContents(testProtofiles)
+	require.NoError(t, err)
+
+	err = suite.metadataRepository.SaveParsedProtoFiles(ctx, tagId, parsedProtoFiles)
+	require.NoError(t, err)
+
+	// Now test GetParsedProtoFiles
+	result, err := suite.metadataRepository.GetParsedProtoFiles(ctx, tagId)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "hello/test.proto", result[0].Filename)
+	assert.NotNil(t, result[0].Proto)
+
+	// Test: non-existing tag returns empty
+	result, err = suite.metadataRepository.GetParsedProtoFiles(ctx, "00000000-0000-0000-0000-000000000000")
+	require.NoError(t, err)
+	assert.Empty(t, result)
 }
