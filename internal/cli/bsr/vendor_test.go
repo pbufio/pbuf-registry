@@ -121,3 +121,18 @@ message ValidateRules {
 	_, err = os.Stat(filepath.Join(outDir, "README.md"))
 	assert.True(t, os.IsNotExist(err))
 }
+
+func TestFilterAndMapPath(t *testing.T) {
+	// Reject path traversal
+	_, ok := filterAndMapPath("../../etc/passwd.proto", "", "third_party")
+	assert.False(t, ok)
+
+	// Sibling directory prefix ("google/api" must not match "google/apiv2/a.proto")
+	_, ok = filterAndMapPath("google/apiv2/a.proto", "google/api", "third_party")
+	assert.False(t, ok)
+
+	// Exact directory prefix match
+	target, ok := filterAndMapPath("google/api/annotations.proto", "google/api", "third_party/google/api")
+	assert.True(t, ok)
+	assert.Equal(t, filepath.Join("third_party/google/api", "annotations.proto"), target)
+}

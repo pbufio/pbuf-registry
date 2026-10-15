@@ -16,7 +16,10 @@ func CollectProtoFilesInDirs(dirs []string) ([]*v1.ProtoFile, error) {
 
 	for _, dir := range dirs {
 		fs := osfs.New(".")
-		err := util.Walk(fs, dir, func(path string, info os.FileInfo, err error) error {
+		err := util.Walk(fs, dir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
 			if !info.IsDir() && strings.HasSuffix(path, ".proto") {
 				file, err := fs.Open(path)
 				if err != nil {
@@ -25,6 +28,7 @@ func CollectProtoFilesInDirs(dirs []string) ([]*v1.ProtoFile, error) {
 				}
 
 				fileContents, err := io.ReadAll(file)
+				_ = file.Close()
 				if err != nil {
 					log.Printf("failed to read file contents in repository: %s", path)
 					return err

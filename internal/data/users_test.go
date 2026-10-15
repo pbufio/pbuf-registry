@@ -378,6 +378,16 @@ func Test_userRepository_UpdateUser(t *testing.T) {
 		user, err := r.GetUserByToken(context.Background(), "pbuf_user_new-token")
 		require.NoError(t, err)
 		assert.Equal(t, testUser.ID, user.ID)
+
+		// Updating a user fetched via GetUser (where Token is a bcrypt hash) must preserve their token
+		fetched, err := r.GetUser(context.Background(), testUser.ID)
+		require.NoError(t, err)
+		fetched.Name = "renamed-after-get"
+		require.NoError(t, r.UpdateUser(context.Background(), fetched))
+
+		stillValid, err := r.GetUserByToken(context.Background(), "pbuf_user_new-token")
+		require.NoError(t, err)
+		assert.Equal(t, "renamed-after-get", stillValid.Name)
 	})
 }
 

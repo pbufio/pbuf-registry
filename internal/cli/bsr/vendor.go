@@ -43,17 +43,11 @@ type bsrRefName struct {
 
 type bsrDownloadResponse struct {
 	Contents []bsrModuleContent `json:"contents"`
-	// v1beta1 single-module fallback shape
-	Manifest *bsrManifest `json:"manifest,omitempty"`
-	Files    []bsrFile    `json:"files,omitempty"`
+	Files    []bsrFile          `json:"files,omitempty"`
 }
 
 type bsrModuleContent struct {
 	Files []bsrFile `json:"files"`
-}
-
-type bsrManifest struct {
-	Paths []bsrFile `json:"paths"`
 }
 
 type bsrFile struct {
@@ -272,8 +266,11 @@ func downloadBSRFiles(ctx context.Context, baseURL, owner, repo, ref, token stri
 }
 
 func filterAndMapPath(filePath, filterPath, outputRoot string) (string, bool) {
-	filePath = filepath.ToSlash(filePath)
-	filterPath = filepath.ToSlash(strings.TrimSpace(filterPath))
+	filePath = filepath.ToSlash(filepath.Clean(filePath))
+	if filePath == "." || strings.HasPrefix(filePath, "..") || strings.HasPrefix(filePath, "/") {
+		return "", false
+	}
+	filterPath = strings.Trim(filepath.ToSlash(strings.TrimSpace(filterPath)), "/")
 
 	if filterPath == "" {
 		return filepath.Join(outputRoot, filePath), true
@@ -283,12 +280,10 @@ func filterAndMapPath(filePath, filterPath, outputRoot string) (string, bool) {
 		if filePath != filterPath {
 			return "", false
 		}
-		baseDir := filepath.ToSlash(filepath.Dir(filterPath))
-		mapped := strings.TrimPrefix(strings.TrimPrefix(filePath, baseDir), "/")
-		return filepath.Join(outputRoot, mapped), true
+		return filepath.Join(outputRoot, filepath.Base(filePath)), true
 	}
 
-	if !strings.HasPrefix(filePath, filterPath) {
+	if filePath != filterPath && !strings.HasPrefix(filePath, filterPath+"/") {
 		return "", false
 	}
 

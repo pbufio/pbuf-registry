@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -185,10 +187,15 @@ func (a *aclAuth) authenticateOIDC(ctx context.Context, req interface{}, handler
 			return nil, jwt.ErrTokenInvalid
 		}
 
-		// Auto-provision active user on first OIDC login
+		// Auto-provision active user on first OIDC login with an unguessable random token
+		randomBytes := make([]byte, 32)
+		if _, err := rand.Read(randomBytes); err != nil {
+			a.logger.Errorf("failed to generate random token for oidc user %s: %v", claims.Username, err)
+			return nil, jwt.ErrTokenInvalid
+		}
 		user = &model.User{
 			Name:     claims.Username,
-			Token:    "oidc:" + claims.Subject + ":" + claims.Username,
+			Token:    "pbuf_user_" + base64.RawURLEncoding.EncodeToString(randomBytes),
 			Type:     model.UserTypeUser,
 			IsActive: true,
 		}

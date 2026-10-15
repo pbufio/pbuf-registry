@@ -173,7 +173,17 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 		assert.Equal(t, "ok", resp)
 		require.NotNil(t, capturedUser)
 		assert.Equal(t, "alice@example.com", capturedUser.Name)
+		assert.Contains(t, capturedUser.Token, "pbuf_user_")
+		assert.GreaterOrEqual(t, len(capturedUser.Token), 50)
 		assert.False(t, capturedAdmin)
+
+		// Predictable forged token oidc:<sub>:<email> must be rejected
+		forgedCtx := transport.NewServerContext(
+			context.Background(),
+			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer oidc:user-sub-123:alice@example.com")},
+		)
+		_, err = handler(forgedCtx, nil)
+		require.Error(t, err)
 	})
 
 	t.Run("OIDC user in admin group gets admin privileges", func(t *testing.T) {

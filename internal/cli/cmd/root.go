@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"log"
-	"net"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -90,42 +89,17 @@ func NewRootCmd() *cobra.Command {
 }
 
 func NewAuthCmd(config *model.Config, usr *user.User, auth *netrc.Netrc) *cobra.Command {
-	// create login command
-	authCmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "auth [token]",
 		Short: "Auth",
 		Long:  "Auth is a command to setup .netrc file with auth token",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if auth == nil {
-				auth = &netrc.Netrc{
-					Path: filepath.Join(usr.HomeDir, ".netrc"),
-				}
-			}
-
-			token := args[0]
-
-			machine := config.Registry.Addr
-			machine, _, err := net.SplitHostPort(machine)
-			if err != nil {
-				machine = config.Registry.Addr
-			}
-
-			m := auth.Machine(machine)
-			if m == nil {
-				auth.AddMachine(machine, "unused", "unused")
-				m = auth.Machine(machine)
-			}
-			m.Set("token", token)
-
-			err = auth.Save()
-			if err != nil {
+			if err := saveTokenToNetrc(config, usr, auth, args[0]); err != nil {
 				log.Fatalf("failed to save .netrc file: %v", err)
 			}
 		},
 	}
-
-	return authCmd
 }
 
 func NewModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {

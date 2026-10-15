@@ -4,18 +4,26 @@ kind: Deployment
 metadata:
   name: {{ include "pbuf-registry.fullname" . }}-ui
   labels:
-    {{- include "pbuf-registry.labels" . | nindent 4 }}
+    helm.sh/chart: {{ include "pbuf-registry.chart" . }}
+    {{- if .Chart.AppVersion }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "pbuf-registry.name" . }}-ui
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: ui
 spec:
   replicas: {{ .Values.ui.replicaCount | default 1 }}
   selector:
     matchLabels:
-      {{- include "pbuf-registry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ include "pbuf-registry.name" . }}-ui
+      app.kubernetes.io/instance: {{ .Release.Name }}
       app.kubernetes.io/component: ui
   template:
     metadata:
       labels:
-        {{- include "pbuf-registry.labels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ include "pbuf-registry.name" . }}-ui
+        app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: ui
     spec:
       {{- with .Values.imagePullSecrets }}

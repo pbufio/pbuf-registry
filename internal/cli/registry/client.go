@@ -8,53 +8,15 @@ import (
 	"net"
 
 	"github.com/jdx/go-netrc"
-	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// NewInsecureClient generates insecure grpc client
-func NewInsecureClient(config *model.Config, netrcAuth *netrc.Netrc) v1.RegistryClient {
-	return v1.NewRegistryClient(NewInsecureConn(config, netrcAuth))
-}
-
-// NewSecureClient generates secure grpc client
-// Should use TLS to secure the connection
-func NewSecureClient(config *model.Config, netrcAuth *netrc.Netrc) v1.RegistryClient {
-	return v1.NewRegistryClient(NewSecureConn(config, netrcAuth))
-}
-
-// NewInsecureUserServiceClient generates insecure grpc client for UserService.
-func NewInsecureUserServiceClient(config *model.Config, netrcAuth *netrc.Netrc) v1.UserServiceClient {
-	return v1.NewUserServiceClient(NewInsecureConn(config, netrcAuth))
-}
-
-// NewSecureUserServiceClient generates secure grpc client for UserService.
-func NewSecureUserServiceClient(config *model.Config, netrcAuth *netrc.Netrc) v1.UserServiceClient {
-	return v1.NewUserServiceClient(NewSecureConn(config, netrcAuth))
-}
-
 // NewInsecureConn creates an insecure gRPC connection to registry.
 func NewInsecureConn(config *model.Config, netrcAuth *netrc.Netrc) *grpc.ClientConn {
-	addr := canonicalizeAddr(config.Registry.Addr)
-
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-
-	perRPCCredentials := credentialsFromNetrc(getRegistryHost(addr), netrcAuth)
-	if perRPCCredentials != nil {
-		opts = append(opts, grpc.WithPerRPCCredentials(perRPCCredentials))
-	}
-
-	grpcClient, err := grpc.NewClient(addr, opts...)
-	if err != nil {
-		log.Fatalf("failed to create grpc client: %v", err)
-	}
-
-	return grpcClient
+	return newConn(config, netrcAuth, insecure.NewCredentials())
 }
 
 // NewSecureConn creates a secure (TLS) gRPC connection to registry.
@@ -63,27 +25,19 @@ func NewSecureConn(config *model.Config, netrcAuth *netrc.Netrc) *grpc.ClientCon
 	if err != nil {
 		log.Fatalf("failed to load system cert pool: %v", err)
 	}
+	return newConn(config, netrcAuth, credentials.NewTLS(&tls.Config{RootCAs: certPool}))
+}
 
+func newConn(config *model.Config, netrcAuth *netrc.Netrc, creds credentials.TransportCredentials) *grpc.ClientConn {
 	addr := canonicalizeAddr(config.Registry.Addr)
-
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(
-			credentials.NewTLS(&tls.Config{
-				RootCAs: certPool,
-			}),
-		),
-	}
-
-	perRPCCredentials := credentialsFromNetrc(getRegistryHost(addr), netrcAuth)
-	if perRPCCredentials != nil {
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+	if perRPCCredentials := credentialsFromNetrc(getRegistryHost(addr), netrcAuth); perRPCCredentials != nil {
 		opts = append(opts, grpc.WithPerRPCCredentials(perRPCCredentials))
 	}
-
 	grpcClient, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		log.Fatalf("failed to create grpc client: %v", err)
 	}
-
 	return grpcClient
 }
 

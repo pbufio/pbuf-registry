@@ -49,17 +49,18 @@ func (c *Config) HasRegistry() bool {
 
 func (c *Config) Save() error {
 	// encode to yaml and save to file PbufConfigFilename
-	pbufYamlFile, err := os.OpenFile(PbufConfigFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	pbufYamlFile, err := os.OpenFile(PbufConfigFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = pbufYamlFile.Close() }()
 
 	encoder := yaml.NewEncoder(pbufYamlFile)
 	encoder.SetIndent(2)
-	err = encoder.Encode(c)
-	if err != nil {
+	if err := encoder.Encode(c); err != nil {
+		_ = encoder.Close()
 		return err
 	}
 
-	return nil
+	return encoder.Close()
 }

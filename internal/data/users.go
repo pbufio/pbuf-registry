@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
@@ -126,11 +127,18 @@ func (r *userRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*mod
 }
 
 func (r *userRepo) UpdateUser(ctx context.Context, user *model.User) error {
-	result, err := r.pool.Exec(ctx,
-		`UPDATE users SET name = $1, token = crypt($2, gen_salt('bf')), token_lookup = encode(digest($2, 'sha256'), 'hex'), type = $3, is_active = $4, updated_at = NOW()
-		WHERE id = $5`,
-		user.Name, user.Token, user.Type, user.IsActive, user.ID,
+	var (
+		query string
+		args  []any
 	)
+	if user.Token == "" || strings.HasPrefix(user.Token, "$2") {
+		query = `UPDATE users SET name = $1, type = $2, is_active = $3, updated_at = NOW() WHERE id = $4`
+		args = []any{user.Name, user.Type, user.IsActive, user.ID}
+	} else {
+		query = `UPDATE users SET name = $1, token = crypt($2, gen_salt('bf')), token_lookup = encode(digest($2, 'sha256'), 'hex'), type = $3, is_active = $4, updated_at = NOW() WHERE id = $5`
+		args = []any{user.Name, user.Token, user.Type, user.IsActive, user.ID}
+	}
+	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("could not update user in database: %w", err)
 	}

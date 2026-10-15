@@ -222,7 +222,7 @@ func saveTokenToNetrc(config *model.Config, usr *user.User, auth *netrc.Netrc, t
 
 	m := auth.Machine(machine)
 	if m == nil {
-		auth.AddMachine(machine, "unused", "unused")
+		auth.AddMachine(machine, "unused", token)
 		m = auth.Machine(machine)
 	}
 	m.Set("token", token)
@@ -231,5 +231,6 @@ func saveTokenToNetrc(config *model.Config, usr *user.User, auth *netrc.Netrc, t
 		log.Printf("failed to save .netrc file: %v", err)
 		return err
 	}
+	_ = os.Chmod(auth.Path, 0o600)
 	return nil
 }

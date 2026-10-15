@@ -62,6 +62,11 @@ build-ui:
 lint-charts:
 	./scripts/lint-charts.sh
 
+.PHONY: test-e2e
+# run E2E tests against local postgres
+test-e2e: build build-cli build-migrations
+	bash ./scripts/e2e-test.sh
+
 .PHONY: build
 # build server
 build:

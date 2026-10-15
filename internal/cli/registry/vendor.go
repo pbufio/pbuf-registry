@@ -2,11 +2,11 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
@@ -27,84 +27,61 @@ func VendorRegistryModule(module *model.Module, client v1.RegistryClient, patche
 		Name: module.Name,
 		Tag:  module.Tag,
 	})
-
 	if err != nil {
 		log.Printf("failed to pull module: %v", err)
 		return err
 	}
 
-	var wg = &sync.WaitGroup{}
-
 	for _, protoFile := range response.Protofiles {
-		originalFilename := protoFile.Filename
+		originalFilename := filepath.Clean(protoFile.Filename)
+		if originalFilename == "." || strings.HasPrefix(originalFilename, "..") || filepath.IsAbs(originalFilename) {
+			continue
+		}
 		protoFileContent := protoFile.Content
 		outputPath := module.OutputFolder
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		if module.Path != "" {
+			modulePath := strings.TrimSuffix(module.Path, "/")
 
-			if module.Path != "" {
-				modulePath := module.Path
-
-				if strings.HasSuffix(module.Path, ".proto") {
-					// skip if the file is not in the module path
-					if originalFilename != module.Path {
-						return
-					}
-
-					// get directory
-					modulePath = filepath.Dir(module.Path)
-				} else {
-					// skip if the file is not in the module path
-					if !strings.HasPrefix(originalFilename, modulePath) {
-						return
-					}
+			if strings.HasSuffix(modulePath, ".proto") {
+				if originalFilename != modulePath {
+					continue
 				}
+				modulePath = filepath.Dir(modulePath)
+			} else if originalFilename != modulePath && !strings.HasPrefix(originalFilename, modulePath+"/") {
+				continue
+			}
 
-				if outputPath != "" {
-					originalFilename = strings.Replace(originalFilename, modulePath, outputPath, 1)
-				}
+			if outputPath != "" {
+				originalFilename = strings.Replace(originalFilename, modulePath, outputPath, 1)
+			}
+		} else if outputPath != "" {
+			originalFilename = filepath.Join(outputPath, originalFilename)
+		}
+
+		content := protoFileContent
+		outputDir := filepath.Dir(originalFilename)
+
+		if module.GenerateOutputFolder != "" {
+			patched, patchErr := patcher.ApplyPatchers(
+				patchers,
+				strings.Replace(outputDir, module.OutputFolder, module.GenerateOutputFolder, 1),
+				protoFileContent,
+			)
+			if patchErr != nil {
+				log.Printf("failed to patch file %s: %v", originalFilename, patchErr)
 			} else {
-				if outputPath != "" {
-					originalFilename = filepath.Join(outputPath, originalFilename)
-				}
+				content = patched
 			}
+		}
 
-			var content string
-			outputDir := filepath.Dir(originalFilename)
-
-			if module.GenerateOutputFolder != "" {
-				content, err = patcher.ApplyPatchers(
-					patchers,
-					strings.Replace(outputDir, module.OutputFolder, module.GenerateOutputFolder, 1),
-					protoFileContent,
-				)
-				if err != nil {
-					log.Printf("failed to patch file %s: %v", originalFilename, err)
-				}
-			} else {
-				content = protoFileContent
-			}
-
-			err = os.MkdirAll(outputDir, os.ModePerm)
-			if err != nil {
-				log.Fatalf("failed to create directory: %s", outputPath)
-			}
-
-			copiedFile, err := os.Create(originalFilename)
-			if err != nil {
-				log.Fatalf("failed to create file: %s", outputPath)
-			}
-
-			_, err = copiedFile.Write([]byte(content))
-			if err != nil {
-				log.Fatalf("failed to write file contents: %s", outputPath)
-			}
-		}()
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", outputDir, err)
+		}
+		if err := os.WriteFile(originalFilename, []byte(content), 0o644); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", originalFilename, err)
+		}
 	}
-
-	wg.Wait()
 
 	log.Printf("successfully vendoring .proto files. module name: %s, path: %s", module.Name, module.Path)
 

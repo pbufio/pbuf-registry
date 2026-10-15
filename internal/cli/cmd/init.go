@@ -43,7 +43,7 @@ func CreateInitCmd() *cobra.Command {
 			if len(args) > 0 {
 				moduleName = args[0]
 				if len(args) > 1 {
-					registryURL = args[0]
+					registryURL = args[1]
 				} else {
 					registryURL = "pbuf.cloud"
 				}
