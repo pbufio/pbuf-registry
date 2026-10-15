@@ -27,19 +27,24 @@ Key features include:
 ```
 pbuf-registry/
 ├── cmd/                    # Application entrypoints
-│   ├── main.go            # Main entry point
-│   └── root.go            # CLI commands (server, compaction, proto-parsing)
+│   ├── main.go            # Registry server entry point
+│   ├── root.go            # Server CLI commands (server, compaction, proto-parsing)
+│   └── pbuf/              # pbuf CLI entrypoint (main.go)
 ├── internal/              # Private application code
 │   ├── background/        # Background job workers
 │   │   ├── driftdetection.go  # Detects breaking changes in protos
 │   │   └── protoparsing.go    # Parses and indexes proto files
+│   ├── cli/               # pbuf CLI implementation (cmd, bsr, git, model, modules, patcher, registry)
 │   ├── config/            # Configuration loading
 │   ├── data/              # Data layer (repositories, database)
-│   ├── middleware/        # HTTP/gRPC middleware (auth, logging)
+│   ├── middleware/        # HTTP/gRPC middleware (ACL, static-token, OIDC/OAuth2 auth)
 │   ├── model/             # Domain models and entities
 │   ├── server/            # Server setup (gRPC, HTTP)
 │   ├── mocks/             # Generated test mocks
 │   └── utils/             # Utility functions
+├── ui/                    # Vue 3 + Vite + Tailwind Web UI
+├── charts/                # Kubernetes Helm charts
+│   └── pbuf-registry/     # Main pbuf-registry Helm chart
 ├── api/pbuf-registry/v1/  # Proto API definitions
 ├── gen/                   # Generated code (proto, certs)
 ├── migrations/            # SQL database migrations
@@ -54,9 +59,12 @@ pbuf-registry/
 make init              # Install required Go tools (protoc plugins, mockery, linter)
 
 # Building
-make build             # Build main binary to bin/pbuf-registry
+make build             # Build server binary to bin/pbuf-registry
+make build-cli         # Build pbuf CLI binary to bin/pbuf
 make build-migrations  # Build migrations binary to bin/pbuf-migrations
-make build-docker      # Build Docker image
+make build-ui          # Build Web UI assets in ui/dist
+make build-docker      # Build server Docker image
+make build-docker-ui   # Build Web UI Docker image
 
 # Code generation
 make api               # Generate Go code from API proto files
@@ -65,8 +73,10 @@ make vendor-gen        # Generate Go code from vendored protos
 make mocks             # Generate test mocks with mockery
 
 # Quality
-make test              # Run tests with coverage and race detection
+make test              # Run Go tests (server + CLI) with coverage and race detection
+make test-ui           # Run Web UI unit tests
 make lint              # Run golangci-lint
+make lint-charts       # Lint Helm charts in charts/pbuf-registry/
 
 # Running locally
 make run               # Start dev environment (docker-compose.dev.yml)
@@ -89,7 +99,9 @@ Proto files are in `api/pbuf-registry/v1/`. After modifying, run `make api` to r
 Key environment variables (override config.yaml):
 - `DATA_DATABASE_DSN` - PostgreSQL connection string
 - `SERVER_GRPC_TLS_ENABLED/CERTFILE/KEYFILE` - TLS settings
-- `SERVER_GRPC_AUTH_ENABLED/TYPE` - gRPC auth (acl, token)
+- `SERVER_GRPC_AUTH_ENABLED/TYPE` - gRPC auth (`acl`, `static-token`, `token`, `oidc`)
+- `SERVER_HTTP_AUTH_ENABLED/TYPE` - HTTP auth (`acl`, `static-token`, `token`, `oidc`)
+- `SERVER_GRPC_AUTH_OIDC_ISSUERURL/CLIENTID` - OIDC SSO issuer and client ID
 - `SERVER_STATIC_TOKEN` - Admin token for full access
 
 ## Code Guidelines

@@ -5,6 +5,14 @@ server:
     auth:
       enabled: false
       type:
+      oidc:
+        issuerUrl:
+        clientId:
+        jwksUrl:
+        usernameClaim: email
+        groupsClaim: groups
+        adminGroups: []
+        autoProvision: true
   grpc:
     addr: 0.0.0.0:6777
     timeout: 30s
@@ -15,6 +23,14 @@ server:
     auth:
       enabled: false
       type:
+      oidc:
+        issuerUrl:
+        clientId:
+        jwksUrl:
+        usernameClaim: email
+        groupsClaim: groups
+        adminGroups: []
+        autoProvision: true
   debug:
     addr: 0.0.0.0:8082
     timeout: 10s

@@ -92,13 +92,12 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 	// DriftService operations
 	if strings.Contains(operation, "DriftService/") {
 		switch {
-		case strings.Contains(operation, "/ListDriftEvents"),
-			strings.Contains(operation, "/GetModuleDriftEvents"):
-			// Read operations
-			moduleID := extractModuleID(req)
-			return model.PermissionRead, moduleID
-		case strings.Contains(operation, "/GetModuleDependencyDriftStatus"):
-			// Read operations
+		case strings.Contains(operation, "/ListDriftEvents"):
+			// Global read operation
+			return model.PermissionRead, "*"
+		case strings.Contains(operation, "/GetModuleDriftEvents"),
+			strings.Contains(operation, "/GetModuleDependencyDriftStatus"):
+			// Module-scoped read operations
 			moduleName := extractModuleName(req)
 			return model.PermissionRead, moduleName
 		case strings.Contains(operation, "/AcknowledgeDriftEvent"):
@@ -139,11 +138,6 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 
 // extractModuleName attempts to extract module name from the request
 func extractModuleName(req interface{}) string {
-	// Use reflection or type assertions to extract module name from request
-	// For now, return "*" to check global permissions
-	// In a full implementation, we would extract the actual module name from the request
-
-	// Type assertions for known request types
 	type moduleNameGetter interface {
 		GetModuleName() string
 	}
@@ -161,22 +155,6 @@ func extractModuleName(req interface{}) string {
 	if r, ok := req.(nameGetter); ok {
 		if name := r.GetName(); name != "" {
 			return name
-		}
-	}
-
-	// Default to wildcard - checks global permissions
-	return "*"
-}
-
-// extractModuleID attempts to extract module ID from the request (used by DriftService)
-func extractModuleID(req interface{}) string {
-	type moduleIDGetter interface {
-		GetModuleId() string
-	}
-
-	if r, ok := req.(moduleIDGetter); ok {
-		if id := r.GetModuleId(); id != "" {
-			return id
 		}
 	}
 

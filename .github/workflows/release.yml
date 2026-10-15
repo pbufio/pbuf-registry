@@ -62,6 +62,48 @@ jobs:
       - name: Docker Push GHCR
         run: docker push ghcr.io/pbufio/registry:${{ github.ref_name }}
 
+      - name: Build and Push Web UI Image
+        env:
+          REGISTRY_VERSION: ${{ github.ref_name }}
+        run: |
+          make build-docker-ui
+          docker push ghcr.io/pbufio/pbuf-registry-ui:${{ github.ref_name }}
+          docker tag ghcr.io/pbufio/pbuf-registry-ui:${{ github.ref_name }} ghcr.io/pbufio/registry-ui:${{ github.ref_name }}
+          docker push ghcr.io/pbufio/registry-ui:${{ github.ref_name }}
+
+      - name: Release CLI Binaries with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release_charts:
+    runs-on: ubuntu-latest
+    if: "!contains(github.ref_name, 'rc') && !contains(github.ref_name, 'wip')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: charts
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
   upload_proto:
     runs-on: ubuntu-latest
     steps:

@@ -29,11 +29,23 @@ jobs:
         with:
           version: v2.7
 
-      - name: Test
+      - name: Test Go (Server + CLI)
         run: make test
 
+      - name: Build Server and CLI
+        run: make build && make build-cli
+
+      - name: Test Web UI
+        run: make test-ui
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm Chart
+        run: helm lint charts/pbuf-registry/
+
       - name: Docker build
-        run: make docker
+        run: make docker && make build-docker-ui
 
   upload_proto_test:
     runs-on: ubuntu-latest
@@ -45,7 +57,7 @@ jobs:
 
       - name: Setup pbuf cli
         id: pbuf-setup
-        uses: pbufio/pbuf-setup-action@v1.1.0
+        uses: pbufio/pbuf-setup-action@v1.2.0
         with:
           pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
 
@@ -58,4 +70,4 @@ jobs:
 
       - name: Register Module
         id: pbuf-register
-        run: pbuf-cli modules register
+        run: pbuf modules register

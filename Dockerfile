@@ -6,7 +6,7 @@ WORKDIR /app
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o ./pbuf-migrations ./.
-RUN CGO_ENABLED=0 GOOS=linux go build -o ./pbuf-registry ./cmd/...
+RUN CGO_ENABLED=0 GOOS=linux go build -o ./pbuf-registry ./cmd
 
 # 2. run stage
 FROM bash:alpine3.23

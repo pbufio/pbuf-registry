@@ -47,10 +47,30 @@ mocks:
 test:
 	go test -cover --race ./...
 
+.PHONY: test-ui
+# run UI unit tests
+test-ui:
+	cd ui && for f in test/authUtils.test.mjs test/loginValidationUtils.test.mjs test/oidcAuth.test.mjs; do node "$$f"; done
+
+.PHONY: build-ui
+# build UI assets
+build-ui:
+	cd ui && npm ci && npm run build
+
+.PHONY: lint-charts
+# lint Helm charts
+lint-charts:
+	./scripts/lint-charts.sh
+
 .PHONY: build
-# build
+# build server
 build:
-	mkdir -p bin/ && go build -o ./bin/pbuf-registry ./cmd/...
+	mkdir -p bin/ && go build -o ./bin/pbuf-registry ./cmd
+
+.PHONY: build-cli
+# build pbuf CLI
+build-cli:
+	mkdir -p bin/ && go build -o ./bin/pbuf ./cmd/pbuf
 
 .PHONY: build-migrations
 # build migrations
@@ -66,7 +86,7 @@ build-in-docker:
       -v "${HOME}/.netrc:/root/.netrc" \
       -w /app \
       golang:1.25 \
-      sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-migrations"
+      sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-cli && CGO_ENABLED=0 GOOS=linux make build-migrations"
 
 .PHONY: docker
 # docker
@@ -77,6 +97,11 @@ docker:
 # build-docker
 build-docker:
 	docker build -t ghcr.io/pbufio/registry:${REGISTRY_VERSION} .
+
+.PHONY: build-docker-ui
+# build UI docker image
+build-docker-ui:
+	docker build -t ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ./ui
 
 .PHONY: run
 # run

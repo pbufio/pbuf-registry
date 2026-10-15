@@ -1,0 +1,10 @@
+apiVersion: v2
+name: pbuf-registry
+description: A Helm chart for PBUF Registry
+type: application
+version: 0.9.0
+appVersion: "v0.9.0"
+
+maintainers:
+  - name: aatarasoff
+    email: aatarasoff@gmail.com

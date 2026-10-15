@@ -78,9 +78,13 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	integrationSuite.SetupSuite()
+	if !testing.Short() {
+		integrationSuite.SetupSuite()
+	}
 	code := m.Run()
-	integrationSuite.TearDownSuite()
+	if !testing.Short() {
+		integrationSuite.TearDownSuite()
+	}
 	os.Exit(code)
 }
 

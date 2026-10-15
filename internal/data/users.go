@@ -39,8 +39,8 @@ func NewUserRepository(pool *pgxpool.Pool, logger log.Logger) UserRepository {
 
 func (r *userRepo) CreateUser(ctx context.Context, user *model.User) error {
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO users (name, token, type, is_active, created_at, updated_at)
-		VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, NOW(), NOW())
+		`INSERT INTO users (name, token, token_lookup, type, is_active, created_at, updated_at)
+		VALUES ($1, crypt($2, gen_salt('bf')), encode(digest($2, 'sha256'), 'hex'), $3, $4, NOW(), NOW())
 		RETURNING id, created_at, updated_at`,
 		user.Name, user.Token, user.Type, user.IsActive,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
@@ -86,7 +86,10 @@ func (r *userRepo) GetUserByToken(ctx context.Context, token string) (*model.Use
 	var user model.User
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, name, token, type, is_active, created_at, updated_at
-		FROM users WHERE (token = crypt($1, token)) = true AND is_active = true`,
+		FROM users
+		WHERE (token_lookup = encode(digest($1, 'sha256'), 'hex') OR token_lookup IS NULL)
+		  AND (token = crypt($1, token)) = true
+		  AND is_active = true`,
 		token,
 	).Scan(&user.ID, &user.Name, &user.Token, &user.Type, &user.IsActive, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
@@ -124,7 +127,7 @@ func (r *userRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*mod
 
 func (r *userRepo) UpdateUser(ctx context.Context, user *model.User) error {
 	result, err := r.pool.Exec(ctx,
-		`UPDATE users SET name = $1, token = crypt($2, gen_salt('bf')), type = $3, is_active = $4, updated_at = NOW()
+		`UPDATE users SET name = $1, token = crypt($2, gen_salt('bf')), token_lookup = encode(digest($2, 'sha256'), 'hex'), type = $3, is_active = $4, updated_at = NOW()
 		WHERE id = $5`,
 		user.Name, user.Token, user.Type, user.IsActive, user.ID,
 	)

@@ -1,0 +1,97 @@
+# Create background deployments helm template with 1 replica
+{{- range $name, $spec := $.Values.background }}
+{{- if $spec.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pbuf-registry.fullname" $ }}-{{ $name }}
+  labels:
+    helm.sh/chart: {{ include "pbuf-registry.chart" $ }}
+    {{- if $.Chart.AppVersion }}
+    app.kubernetes.io/version: {{ $.Chart.AppVersion | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "pbuf-registry.name" $ }}-{{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "pbuf-registry.name" $ }}-{{ $name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        helm.sh/chart: {{ include "pbuf-registry.chart" $ }}
+        {{- if $.Chart.AppVersion }}
+        app.kubernetes.io/version: {{ $.Chart.AppVersion | quote }}
+        {{- end }}
+        app.kubernetes.io/managed-by: {{ $.Release.Service }}
+        app.kubernetes.io/name: {{ include "pbuf-registry.name" $ }}-{{ $name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+     {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        date: "{{ now | unixEpoch }}"
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "pbuf-registry.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $.Chart.Name }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            {{- toYaml $spec.command | nindent 12 }}
+          args:
+            {{- toYaml $spec.args | nindent 12 }}
+          env:
+            {{- include "pbuf-registry.env" $ | nindent 12 }}
+          ports:
+            - name: debug
+              containerPort: 8082
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: debug
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: debug
+          resources:
+            {{- toYaml $spec.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "pbuf-registry.volumeMounts" $ | nindent 12 }}
+      {{- with $.Values.customSidecarContainers }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: secret
+          secret:
+            secretName: {{ include "pbuf-registry.fullname" $ }}
+{{- end }}
+  {{- end }}

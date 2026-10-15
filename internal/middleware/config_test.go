@@ -71,4 +71,23 @@ func Test_CreateAuthMiddleware(t *testing.T) {
 		_, ok := mw.(*aclAuth)
 		assert.True(t, ok)
 	})
+
+	t.Run("oidc -> requires issuerUrl", func(t *testing.T) {
+		_, err := CreateAuthMiddleware(&config.Auth{Enabled: true, Type: "oidc"}, &noopUserRepo{}, log.DefaultLogger)
+		require.Error(t, err)
+	})
+
+	t.Run("oidc -> returns OIDC auth", func(t *testing.T) {
+		mw, err := CreateAuthMiddleware(&config.Auth{
+			Enabled: true,
+			Type:    "oidc",
+			OIDC: config.OIDCConfig{
+				IssuerURL: "https://idp.example.com",
+				ClientID:  "pbuf-registry",
+			},
+		}, &noopUserRepo{}, log.DefaultLogger)
+		require.NoError(t, err)
+		_, ok := mw.(*aclAuth)
+		assert.True(t, ok)
+	})
 }
