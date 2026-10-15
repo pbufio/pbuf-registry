@@ -236,6 +236,21 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, capturedUser)
 		assert.Equal(t, "ci-bot", capturedUser.Name)
+
+		// OIDC JWT claiming the name of a bot account must be rejected
+		botJWT := signTestJWT(t, privKey, kid, jwtv5.MapClaims{
+			"iss":   issuerURL,
+			"sub":   "bot-impersonator",
+			"aud":   "pbuf-registry",
+			"email": "ci-bot",
+			"exp":   time.Now().Add(10 * time.Minute).Unix(),
+		})
+		impersonateCtx := transport.NewServerContext(
+			context.Background(),
+			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer "+botJWT)},
+		)
+		_, err = handler(impersonateCtx, nil)
+		require.Error(t, err)
 	})
 
 	t.Run("wrong audience is rejected", func(t *testing.T) {

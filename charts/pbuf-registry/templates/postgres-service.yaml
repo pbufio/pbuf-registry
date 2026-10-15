@@ -18,5 +18,6 @@ spec:
       protocol: TCP
   selector:
     app.kubernetes.io/name: {{ include "pbuf-registry.name" $ }}-postgresql
+    app.kubernetes.io/instance: {{ $.Release.Name }}
     app.kubernetes.io/component: database
 {{- end }}

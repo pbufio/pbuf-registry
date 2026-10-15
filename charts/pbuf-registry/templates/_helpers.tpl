@@ -83,6 +83,7 @@ Environment variables helper
     secretKeyRef:
       name: {{ include "pbuf-registry.fullname" . }}
       key: SERVER_STATIC_TOKEN
+      optional: true
 - name: SERVER_GRPC_TLS_ENABLED
   value: "{{ .Values.service.grpc.tls.enabled }}"
 - name: SERVER_GRPC_TLS_CERTFILE

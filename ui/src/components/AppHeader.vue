@@ -77,6 +77,8 @@ const logout = async () => {
         <!-- Mobile Menu Button -->
         <button 
           @click="toggleMobileMenu"
+          aria-label="Toggle navigation menu"
+          :aria-expanded="mobileMenuOpen"
           class="md:hidden text-zinc-300 hover:text-zinc-50 p-2 rounded-lg cursor-pointer hover:bg-zinc-800/50 transition-colors"
         >
           <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

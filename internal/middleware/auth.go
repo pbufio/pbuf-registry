@@ -209,7 +209,7 @@ func (a *aclAuth) authenticateOIDC(ctx context.Context, req interface{}, handler
 		}
 	}
 
-	if !user.IsActive {
+	if !user.IsActive || user.Type != model.UserTypeUser {
 		return nil, jwt.ErrTokenInvalid
 	}
 

@@ -50,7 +50,7 @@ test:
 .PHONY: test-ui
 # run UI unit tests
 test-ui:
-	cd ui && for f in test/authUtils.test.mjs test/loginValidationUtils.test.mjs test/oidcAuth.test.mjs; do node "$$f"; done
+	cd ui && (test -d node_modules || npm ci) && npm test
 
 .PHONY: build-ui
 # build UI assets

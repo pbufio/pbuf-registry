@@ -38,7 +38,7 @@ const loadModules = async () => {
       })
     )
     
-    modules.value = modulesWithDetails
+    modules.value = pageToken.value ? [...modules.value, ...modulesWithDetails] : modulesWithDetails
     nextPageToken.value = response.next_page_token || ''
   } catch (error) {
     console.error('Failed to load modules:', error)
@@ -105,7 +105,10 @@ const filteredModules = computed(() => {
           v-for="module in filteredModules" 
           :key="module.id"
           hoverable
+          role="link"
+          tabindex="0"
           @click="goToModule(module.name)"
+          @keydown.enter="goToModule(module.name)"
         >
           <div class="flex items-start justify-between">
             <div class="flex-1">

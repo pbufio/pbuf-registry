@@ -9,14 +9,19 @@ const runtimeConfigDevPlugin = (env) => {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use('/config.js', (req, res) => {
-        const publicEnabled = env.PUBLIC_ENABLED ?? env.VITE_PUBLIC_ENABLED ?? ''
+        const cfg = {
+          PUBLIC_ENABLED: env.PUBLIC_ENABLED ?? env.VITE_PUBLIC_ENABLED ?? '',
+          OIDC_ENABLED: env.OIDC_ENABLED ?? env.VITE_OIDC_ENABLED ?? '',
+          OIDC_ISSUER: env.OIDC_ISSUER ?? env.VITE_OIDC_ISSUER ?? '',
+          OIDC_CLIENT_ID: env.OIDC_CLIENT_ID ?? env.VITE_OIDC_CLIENT_ID ?? '',
+          OIDC_REDIRECT_URI: env.OIDC_REDIRECT_URI ?? env.VITE_OIDC_REDIRECT_URI ?? '',
+          OIDC_SCOPES: env.OIDC_SCOPES ?? env.VITE_OIDC_SCOPES ?? ''
+        }
 
         res.statusCode = 200
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store')
-        res.end(
-          `window.__APP_CONFIG__ = {\n  PUBLIC_ENABLED: ${JSON.stringify(publicEnabled)}\n};\n`
-        )
+        res.end(`window.__APP_CONFIG__ = ${JSON.stringify(cfg, null, 2)};\n`)
       })
     }
   }
