@@ -82,3 +82,33 @@ jobs:
 
       - name: Run E2E Tests (Migrations + Server + CLI + Examples)
         run: make test-e2e
+
+  ui-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for UI changes
+        id: ui-changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1...HEAD || echo "ui/")
+          fi
+          if echo "$CHANGED" | grep -qE '^(ui/|\.github/workflows/main\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install UI dependencies and Playwright Chromium
+        if: steps.ui-changes.outputs.changed == 'true'
+        run: cd ui && npm ci && npx playwright install --with-deps chromium
+
+      - name: Run Playwright UI E2E Tests
+        if: steps.ui-changes.outputs.changed == 'true'
+        run: make test-ui-e2e

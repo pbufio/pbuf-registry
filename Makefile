@@ -52,6 +52,11 @@ test:
 test-ui:
 	cd ui && (test -d node_modules || npm ci) && npm test
 
+.PHONY: test-ui-e2e
+# run UI Playwright E2E tests
+test-ui-e2e:
+	cd ui && (test -d node_modules || npm ci) && npm run test:e2e
+
 .PHONY: build-ui
 # build UI assets
 build-ui:
