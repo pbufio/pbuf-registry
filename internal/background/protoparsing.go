@@ -50,21 +50,21 @@ func (p protoParsingDaemon) Run() error {
 		// get all proto files for tag
 		protofiles, err := p.metadataRepository.GetProtoFilesForTagId(ctx, tagId)
 		if err != nil {
-			p.log.Errorf("GetProtoFilesForTagId error: %v", err)
+			p.log.Errorf("GetProtoFilesForTagId error for tag %s: %v", tagId, err)
 			continue
 		}
 		// parse proto files
 		parsedProtoFiles, err := utils.ParseProtoFilesContents(protofiles)
 		if err != nil {
-			p.log.Errorf("ParseProtoFilesContents error: %v", err)
-			return err
+			p.log.Errorf("ParseProtoFilesContents error for tag %s: %v", tagId, err)
+			continue
 		}
 
 		// save parsed proto files to database
 		err = p.metadataRepository.SaveParsedProtoFiles(ctx, tagId, parsedProtoFiles)
 		if err != nil {
-			p.log.Errorf("SaveParsedProtoFiles error: %v", err)
-			return err
+			p.log.Errorf("SaveParsedProtoFiles error for tag %s: %v", tagId, err)
+			continue
 		}
 
 		processedTagIds = append(processedTagIds, tagId)
