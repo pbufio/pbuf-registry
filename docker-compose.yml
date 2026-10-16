@@ -19,7 +19,7 @@ services:
       timeout: 10s
       retries: 5
   pbuf-registry:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.9.0}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
       - db
@@ -50,7 +50,7 @@ services:
     command: >
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"
   pbuf-registry-compaction:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.9.0}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
       - db
@@ -69,7 +69,7 @@ services:
     command: >
       sh -c "/app/pbuf-registry compaction"
   pbuf-registry-protoparser:
-    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-v0.9.0}
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
       - db
@@ -88,7 +88,7 @@ services:
     command: >
       sh -c "/app/pbuf-registry proto-parsing"
   pbuf-registry-ui:
-    image: ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_UI_VERSION:-v0.9.0}
+    image: ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_UI_VERSION:-latest}
     restart: always
     depends_on:
       - pbuf-registry
