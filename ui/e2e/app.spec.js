@@ -86,7 +86,7 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page.getByText('pbufio/pbuf-registry')).toHaveCount(0)
 
     // Keyboard Enter on card navigates to module detail view
-    const card = page.getByRole('link').first()
+    const card = page.getByRole('link', { name: /yourorg\/hello-proto/ })
     await card.focus()
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/modules\/yourorg\/hello-proto$/)
