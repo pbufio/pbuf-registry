@@ -1,0 +1,30 @@
+{{- if .Values.secrets.eso.create }}
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ include "pbuf-registry.fullname" . }}
+spec:
+  refreshInterval: "10m"
+  secretStoreRef:
+    name: {{ .Values.secrets.eso.secretStoreRefName }}
+    kind: ClusterSecretStore
+  target:
+    name: {{ include "pbuf-registry.fullname" . }}
+  data:
+    - secretKey: DATA_DATABASE_DSN
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.databaseDSNProperty }}
+    - secretKey: SERVER_STATIC_TOKEN
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.serverStaticTokenProperty }}
+    - secretKey: server-cert.pem
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.serverGrpcTlsCertFileProperty }}
+    - secretKey: server-key.pem
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.serverGrpcTlsKeyFileProperty }}
+{{- end }}

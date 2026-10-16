@@ -43,7 +43,7 @@ def require_schema(dsn: str, timeout_seconds: int) -> None:
                     cur.execute(
                         """
                         SELECT
-                          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users')
+                          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'token_lookup')
                           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'acl')
                         """
                     )
@@ -62,16 +62,17 @@ def upsert_user(conn: psycopg.Connection, name: str, token: str, user_type: str)
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO users (name, token, type, is_active, created_at, updated_at)
-            VALUES (%s, crypt(%s, gen_salt('bf')), %s, true, NOW(), NOW())
+            INSERT INTO users (name, token, token_lookup, type, is_active, created_at, updated_at)
+            VALUES (%s, crypt(%s, gen_salt('bf')), encode(digest(%s, 'sha256'), 'hex'), %s, true, NOW(), NOW())
             ON CONFLICT (name) DO UPDATE
               SET token = crypt(%s, gen_salt('bf')),
+                  token_lookup = encode(digest(%s, 'sha256'), 'hex'),
                   type = EXCLUDED.type,
                   is_active = true,
                   updated_at = NOW()
             RETURNING id
             """,
-            (name, token, user_type, token),
+            (name, token, token, user_type, token, token),
         )
         return str(cur.fetchone()[0])
 

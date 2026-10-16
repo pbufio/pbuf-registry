@@ -9,17 +9,19 @@ services:
       POSTGRES_PASSWORD: pbuf
       POSTGRES_DB: pbuf_registry
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready", "-d", "pbuf_registry" ]
+      test: [ "CMD-SHELL", "pg_isready -U pbuf -d pbuf_registry" ]
       interval: 5s
       timeout: 10s
       retries: 5
 
   pbuf-registry:
+    image: pbuf-registry-dev:local
     build:
       context: .
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8080:8080"
       - "6777:6777"
@@ -28,7 +30,7 @@ services:
       test: wget -O - http://localhost:8082/healthz || exit 1
       interval: 5s
       timeout: 10s
-      retries: 5
+      retries: 10
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
 
@@ -47,12 +49,11 @@ services:
       sh -c "/app/pbuf-migrations && /app/pbuf-registry"
 
   pbuf-registry-compaction:
-    build:
-      context: .
+    image: pbuf-registry-dev:local
     restart: always
     depends_on:
-      - db
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     healthcheck:
       test: wget -O - http://localhost:8082/healthz || exit 1
       interval: 5s
@@ -64,12 +65,11 @@ services:
       sh -c "/app/pbuf-registry compaction"
 
   pbuf-registry-protoparser:
-    build:
-      context: .
+    image: pbuf-registry-dev:local
     restart: always
     depends_on:
-      - db
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     healthcheck:
       test: wget -O - http://localhost:8082/healthz || exit 1
       interval: 5s
@@ -83,8 +83,8 @@ services:
   pbuf-registry-seed:
     image: python:3.12-slim
     depends_on:
-      - db
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     working_dir: /workspace
     volumes:
       - ./scripts:/workspace/scripts:ro
@@ -99,24 +99,19 @@ services:
     command: >
       sh -c "python -m pip install --no-cache-dir 'psycopg[binary]' && python scripts/seed_acl_dev.py"
 
-  registry-nginx:
-    image: nginx:alpine
-    restart: always
-    depends_on:
-      - pbuf-registry
-    expose:
-      - "80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-
   pbuf-registry-ui:
-    image: ui
+    build:
+      context: ./ui
     restart: always
     depends_on:
-      - registry-nginx
+      pbuf-registry:
+        condition: service_healthy
     ports:
-      - "80:80"
+      - "${UI_PORT:-80}:80"
     environment:
-      API_BASE_URL: http://registry-nginx
+      API_BASE_URL: http://pbuf-registry:8080
       API_TOKEN: ${SERVER_STATIC_TOKEN:-dev-admin-token}
       PUBLIC_ENABLED: "true"
+      OIDC_ENABLED: ${OIDC_ENABLED:-true}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://idp.example.com}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-pbuf-ui}

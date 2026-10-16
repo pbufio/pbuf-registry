@@ -78,13 +78,21 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	integrationSuite.SetupSuite()
+	if !testing.Short() {
+		integrationSuite.SetupSuite()
+	}
 	code := m.Run()
-	integrationSuite.TearDownSuite()
+	if !testing.Short() {
+		integrationSuite.TearDownSuite()
+	}
 	os.Exit(code)
 }
 
 func createTestUser(t *testing.T, name, token string) *model.User {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	user := &model.User{
 		Name:     name,
 		Token:    token,
@@ -228,6 +236,9 @@ func Test_aclAuth_UserToken(t *testing.T) {
 }
 
 func Test_aclAuth_InactiveUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	adminToken := "admin-secret-token-3"
 	plainToken := "pbuf_user_inactive-test-token"
 	
@@ -262,6 +273,9 @@ func Test_aclAuth_InactiveUser(t *testing.T) {
 }
 
 func Test_aclAuth_BotToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	adminToken := "admin-secret-token-4"
 	plainToken := "pbuf_bot_integration-test-token"
 	

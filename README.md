@@ -32,11 +32,12 @@ Protobuf schemas are shared contracts between services. In a monorepo, proximity
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-| Component | Description | Repo |
+| Component | Description | Path |
 |---|---|---|
-| **pbuf-registry** | Registry server — stores modules, enforces RBAC, exposes gRPC + REST | [pbufio/pbuf-registry](https://github.com/pbufio/pbuf-registry) |
-| **pbuf-cli** | CLI for pushing, pulling, vendoring, and managing modules and users | [pbufio/pbuf-cli](https://github.com/pbufio/pbuf-cli) |
-| **pbuf-registry-ui** | Web UI for browsing modules, inspecting proto files, and exploring metadata | [pbufio/pbuf-registry-ui](https://github.com/pbufio/pbuf-registry-ui) |
+| **pbuf-registry** | Registry server — stores modules, enforces RBAC & OIDC SSO, exposes gRPC + REST | [`cmd/`](cmd/), [`internal/`](internal/) |
+| **pbuf (CLI)** | CLI for pushing, pulling, vendoring (`pbuf-registry`, Git, and `buf.build` BSR), and managing modules/users | [`cmd/pbuf/`](cmd/pbuf/), [`internal/cli/`](internal/cli/) |
+| **pbuf-registry-ui** | Web UI for browsing modules, inspecting proto files, and exploring metadata | [`ui/`](ui/) |
+| **Helm Chart** | Kubernetes Helm chart for deploying the registry, PostgreSQL, background workers, and Web UI | [`charts/pbuf-registry/`](charts/pbuf-registry/) |
 
 ---
 
@@ -66,27 +67,36 @@ pbuf modules push v2.1.0-rc1 --draft   # Draft — expires in 7 days
 
 Consumers pin to an exact tag in `pbuf.yaml`. `pbuf modules update` bumps all dependencies to latest when you're ready.
 
-### Per-Module Access Control
+### Per-Module Access Control & OIDC / OAuth2 SSO
 
-CI pipelines and individual engineers get separate tokens with explicit permissions per module. A bot that pushes `payment-service` schemas has no write access to `user-service`. Tokens are bcrypt-encrypted in Postgres via `pgcrypto` and shown exactly once.
+CI pipelines and individual engineers can authenticate using OIDC/OAuth2 SSO (`pbuf login` or Web UI SSO) or scoped `pbuf_user_*` / `pbuf_bot_*` tokens with explicit permissions per module. A bot that pushes `payment-service` schemas has no write access to `user-service`. Tokens are indexed with SHA-256 lookup digests and bcrypt-hashed in Postgres via `pgcrypto`.
 
 ```shell
-pbuf users create ci-bot --type bot
-# → Returns a one-time token: pbuf_bot_
+# Authenticate via OIDC Device Authorization Flow
+pbuf login --issuer https://idp.example.com --client-id pbuf-cli
 
-pbuf users grant-permission  payment-service --permission write
-pbuf users grant-permission  "*" --permission read
+# Or create a CI bot token (shown once)
+pbuf users create ci-bot --type bot
+# → Returns a one-time token: pbuf_bot_...
+
+pbuf users grant-permission <user-id> payment-service --permission write
+pbuf users grant-permission <user-id> "*" --permission read
 ```
 
-### Vendor From Registry and Git in the Same Config
+### Vendor From Registry, Git, and Buf Schema Registry (`buf.build`) in the Same Config
 
-Consumer services can pull schemas from the registry (versioned, audited) and from a public Git repository in a single `pbuf.yaml`:
+Consumer services can pull schemas from `pbuf-registry` (versioned, audited), from a Git repository, and from the Buf Schema Registry (`buf.build`) in a single `pbuf.yaml`:
 
 ```yaml
 modules:
-  # From the registry — pinned, auditable, rollback-safe
+  # From pbuf-registry — pinned, auditable, rollback-safe
   - name: myorg/payment-service
     tag: v2.1.0
+    out: third_party
+
+  # From Buf Schema Registry (buf.build) — public or private (via BUF_TOKEN / ~/.netrc)
+  - name: buf.build/bufbuild/protovalidate
+    tag: v0.14.0
     out: third_party
 
   # From a public Git repo — open-source protos, pinned to a tag
@@ -100,7 +110,7 @@ modules:
 
 During an incident, the registry UI lets any engineer look up exactly which proto files were in a given module tag, inspect field-level metadata, and trace dependency relationships — without needing CLI access or digging through Git history.
 
-Deploy it as a read-only, unauthenticated interface for the whole org, or lock it down behind a token.
+Deploy it as a read-only, unauthenticated interface for the whole org, or lock it down behind a token or OIDC SSO.
 
 ---
 
@@ -111,22 +121,22 @@ Deploy it as a read-only, unauthenticated interface for the whole org, or lock i
 ```shell
 git clone https://github.com/pbufio/pbuf-registry.git
 cd pbuf-registry
-make certs-gen                        # Generates TLS certs in gen/certs/
-export SERVER_STATIC_TOKEN=
-make run-prod                         # Starts registry + postgres via Docker Compose
+make cert-gen                         # Generates TLS certs in gen/certs/
+export SERVER_STATIC_TOKEN=my-secret-token
+make run-prod                         # Starts registry + postgres + UI via Docker Compose
 ```
 
 ### Step 2 — Install the CLI
 
 ```shell
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh
 
 # From source (requires Go)
-go install github.com/pbufio/pbuf-cli@latest
+go install github.com/pbufio/pbuf-registry/cmd/pbuf@latest
 ```
 
-Windows: download a pre-built binary from [pbuf-cli releases](https://github.com/pbufio/pbuf-cli/releases).
+Windows: download a pre-built binary from [pbuf-registry releases](https://github.com/pbufio/pbuf-registry/releases).
 
 ### Step 3 — Push a Module
 
@@ -289,13 +299,14 @@ Full documentation: [pbufio/pbuf-cli](https://github.com/pbufio/pbuf-cli)
 |---|---|
 | `pbuf init [name] [registry-url]` | Initialize `pbuf.yaml` for a module |
 | `pbuf auth <token>` | Save registry token to `~/.netrc` |
+| `pbuf login --issuer <url> --client-id <id>` | Authenticate via OAuth2/OIDC Device Authorization Flow |
 | `pbuf modules register` | Register a new module in the registry |
 | `pbuf modules push <tag> [--draft]` | Push proto files with a version tag |
 | `pbuf modules list` | List all modules |
 | `pbuf modules get [module]` | Get module info and available tags |
 | `pbuf modules update` | Update `pbuf.yaml` deps to latest tags |
 | `pbuf modules delete-tag <tag>` | Delete a specific tag |
-| `pbuf vendor` | Pull all dependencies into `third_party/` |
+| `pbuf vendor` | Pull all dependencies (`pbuf-registry`, Git, `buf.build`) into `third_party/` |
 | `pbuf metadata get <module> <tag>` | Inspect parsed messages, services, and fields |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events |
 | `pbuf drift module <module> [--tag]` | Drift events for a specific module |
@@ -333,12 +344,17 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ### Build
 
-- Run `make build` to build the registry
+- Run `make build` to build the registry server (`bin/pbuf-registry`)
+- Run `make build-cli` to build the CLI (`bin/pbuf`)
+- Run `make build-ui` to build the Web UI (`ui/dist`)
 - Run `make build-in-docker` to build linux binaries in docker
 
-### Test
+### Test & Lint
 
-- Run `make test` to run the tests.
+- Run `make test` to run the Go tests (server + CLI)
+- Run `make test-ui` to run the Web UI unit tests
+- Run `make lint` to run `golangci-lint`
+- Run `make lint-charts` to lint the Helm chart (`charts/pbuf-registry/`)
 
 ### Test the Registry
 

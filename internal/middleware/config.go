@@ -32,7 +32,24 @@ func CreateAuthMiddleware(cfg *config.Auth, userRepo data.UserRepository, logger
 		if adminToken == "" {
 			return nil, fmt.Errorf("SERVER_STATIC_TOKEN is not set")
 		}
+		if cfg.OIDC.IssuerURL != "" {
+			verifier, err := NewOIDCVerifier(cfg.OIDC)
+			if err != nil {
+				return nil, err
+			}
+			return NewOIDCAuth(adminToken, userRepo, verifier, cfg.OIDC.AutoProvision, logger), nil
+		}
 		return NewACLAuth(adminToken, userRepo, logger), nil
+	case "oidc":
+		if userRepo == nil {
+			return nil, fmt.Errorf("user repository is required for auth type: %s", cfg.Type)
+		}
+		verifier, err := NewOIDCVerifier(cfg.OIDC)
+		if err != nil {
+			return nil, err
+		}
+		adminToken := os.Getenv("SERVER_STATIC_TOKEN")
+		return NewOIDCAuth(adminToken, userRepo, verifier, cfg.OIDC.AutoProvision, logger), nil
 	}
 
 	return nil, fmt.Errorf("unknown auth type: %s", cfg.Type)

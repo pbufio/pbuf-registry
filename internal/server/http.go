@@ -28,9 +28,9 @@ func NewHTTPServer(cfg *config.Server,
 	}
 
 	serverMiddlewares := []kratosmiddleware.Middleware{authMiddleware.NewAuthMiddleware()}
-	if cfg.HTTP.Auth.Enabled && cfg.HTTP.Auth.Type == "acl" {
+	if cfg.HTTP.Auth.Enabled && (cfg.HTTP.Auth.Type == "acl" || cfg.HTTP.Auth.Type == "oidc") {
 		if aclRepo == nil {
-			logHelper.Fatalf("ACL repository is required when auth type is 'acl'")
+			logHelper.Fatalf("ACL repository is required when auth type is '%s'", cfg.HTTP.Auth.Type)
 		}
 		serverMiddlewares = append(serverMiddlewares, middleware.NewAuthorizationMiddleware(aclRepo, logger))
 	}

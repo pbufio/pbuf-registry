@@ -1,0 +1,8 @@
+version: v1
+name: test-org/hello-proto
+registry:
+  addr: localhost:6777
+  insecure: true
+export:
+  paths:
+    - hello-proto

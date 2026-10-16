@@ -35,9 +35,9 @@ func NewGRPCServer(cfg *config.Server,
 	}
 
 	serverMiddlewares := []kratosmiddleware.Middleware{authMiddleware.NewAuthMiddleware()}
-	if cfg.GRPC.Auth.Enabled && cfg.GRPC.Auth.Type == "acl" {
+	if cfg.GRPC.Auth.Enabled && (cfg.GRPC.Auth.Type == "acl" || cfg.GRPC.Auth.Type == "oidc") {
 		if aclRepo == nil {
-			logHelper.Fatalf("ACL repository is required when auth type is 'acl'")
+			logHelper.Fatalf("ACL repository is required when auth type is '%s'", cfg.GRPC.Auth.Type)
 		}
 		serverMiddlewares = append(serverMiddlewares, middleware.NewAuthorizationMiddleware(aclRepo, logger))
 	}

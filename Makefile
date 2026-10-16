@@ -47,10 +47,45 @@ mocks:
 test:
 	go test -cover --race ./...
 
+.PHONY: test-ui
+# run UI unit tests
+test-ui:
+	cd ui && (test -d node_modules || npm ci) && npm test
+
+.PHONY: test-ui-e2e
+# run UI Playwright E2E tests
+test-ui-e2e:
+	cd ui && (test -d node_modules || npm ci) && npm run test:e2e
+
+.PHONY: build-ui
+# build UI assets
+build-ui:
+	cd ui && npm ci && npm run build
+
+.PHONY: lint-charts
+# lint Helm charts
+lint-charts:
+	./scripts/lint-charts.sh
+
+.PHONY: test-e2e
+# run E2E tests against local postgres
+test-e2e: build build-cli build-migrations
+	bash ./scripts/e2e-test.sh
+
+.PHONY: test-compose-e2e
+# run full Docker Compose + CLI + Playwright E2E tests
+test-compose-e2e: build-cli
+	bash ./scripts/compose-e2e-test.sh
+
 .PHONY: build
-# build
+# build server
 build:
-	mkdir -p bin/ && go build -o ./bin/pbuf-registry ./cmd/...
+	mkdir -p bin/ && go build -o ./bin/pbuf-registry ./cmd
+
+.PHONY: build-cli
+# build pbuf CLI
+build-cli:
+	mkdir -p bin/ && go build -o ./bin/pbuf ./cmd/pbuf
 
 .PHONY: build-migrations
 # build migrations
@@ -66,7 +101,7 @@ build-in-docker:
       -v "${HOME}/.netrc:/root/.netrc" \
       -w /app \
       golang:1.25 \
-      sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-migrations"
+      sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-cli && CGO_ENABLED=0 GOOS=linux make build-migrations"
 
 .PHONY: docker
 # docker
@@ -78,15 +113,20 @@ docker:
 build-docker:
 	docker build -t ghcr.io/pbufio/registry:${REGISTRY_VERSION} .
 
+.PHONY: build-docker-ui
+# build UI docker image
+build-docker-ui:
+	docker build -t ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ./ui
+
 .PHONY: run
 # run
 run:
-	docker-compose -f docker-compose.dev.yml build && docker-compose -f docker-compose.dev.yml up --force-recreate -d
+	docker compose -f docker-compose.dev.yml build && docker compose -f docker-compose.dev.yml up --force-recreate -d
 
 .PHONY: stop
 # stop
 stop:
-	docker-compose -f docker-compose.dev.yml down
+	docker compose -f docker-compose.dev.yml down
 
 .PHONY: cert-gen
 # generate cert
@@ -96,12 +136,12 @@ cert-gen:
 .PHONY: run-prod
 # run prod
 run-prod:
-	docker-compose -f docker-compose.yml up --force-recreate -d
+	docker compose -f docker-compose.yml up --force-recreate -d
 
 .PHONY: stop-prod
 # stop prod
 stop-prod:
-	docker-compose -f docker-compose.yml down
+	docker compose -f docker-compose.yml down
 
 # show help
 help:

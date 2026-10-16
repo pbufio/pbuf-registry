@@ -32,6 +32,9 @@ type driftIntegrationSuite struct {
 }
 
 func setupSuite(t *testing.T) *driftIntegrationSuite {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, ctxCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer ctxCancel()
 

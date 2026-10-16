@@ -339,6 +339,29 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		assert.True(t, resp.GetEvent().GetAcknowledged())
 	})
 
+	t.Run("drift: module-specific read allows GetModuleDriftEvents for that module only", func(t *testing.T) {
+		plainToken := "pbuf_user_authz_drift_module_read_" + t.Name()
+		user := createTestUser(t, "authz-drift-module-read-"+t.Name(), plainToken)
+
+		err := integrationSuite.aclRepository.GrantPermission(context.Background(), &model.ACLEntry{
+			UserID:     user.ID,
+			ModuleName: "test.module",
+			Permission: model.PermissionRead,
+		})
+		require.NoError(t, err)
+
+		ctx := ctxWithAuthToken(context.Background(), plainToken)
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "test.module"})
+		require.NoError(t, err)
+
+		_, err = driftClient.GetModuleDriftEvents(ctx, &v1.GetModuleDriftEventsRequest{ModuleName: "other.module"})
+		requirePermissionDenied(t, err)
+
+		// Global list still requires wildcard read
+		_, err = driftClient.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
+		requirePermissionDenied(t, err)
+	})
+
 	t.Run("drift: admin token bypass allows all drift operations", func(t *testing.T) {
 		ctx := ctxWithAuthToken(context.Background(), "Bearer "+adminToken)
 

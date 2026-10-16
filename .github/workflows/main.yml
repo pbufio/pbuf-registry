@@ -4,23 +4,25 @@ on:
   push:
     branches:
       - 'main'
+      - 'master'
     paths-ignore:
       - '**/**.md'
   pull_request:
     branches:
       - 'main'
+      - 'master'
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Go Environment
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: 1.25.x
 
@@ -29,33 +31,103 @@ jobs:
         with:
           version: v2.7
 
-      - name: Test
-        run: make test
+      - name: Test Go (Server + CLI) with Coverage
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          echo "### Go Test Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -n 15 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -n 1
+
+      - name: Build Server, CLI, and Migrations
+        run: make build && make build-cli && make build-migrations
+
+      - name: Test and Build Web UI
+        run: make test-ui && make build-ui
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint and Validate Helm Chart
+        run: |
+          helm lint charts/pbuf-registry/
+          helm template pbuf-registry charts/pbuf-registry/ --set ui.enabled=true --set ingress.enabled=true > /dev/null
 
       - name: Docker build
-        run: make docker
+        run: make docker && make build-docker-ui
 
-  upload_proto_test:
+  e2e-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.1-alpine3.23
+        env:
+          POSTGRES_USER: pbuf
+          POSTGRES_PASSWORD: pbuf
+          POSTGRES_DB: pbuf_registry
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pbuf -d pbuf_registry"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - name: Run E2E Tests (Migrations + Server + CLI + Examples)
+        run: make test-e2e
+
+  ui-e2e:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup pbuf cli
-        id: pbuf-setup
-        uses: pbufio/pbuf-setup-action@v1.1.0
-        with:
-          pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
-
-      - name: Install custom CA certificate
+      - name: Check for UI changes
+        id: ui-changes
         run: |
-          sudo apt-get install -y ca-certificates
-          mkdir -p /usr/local/share/ca-certificates
-          echo "${{ secrets.PBUF_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/pbuf.crt
-          sudo update-ca-certificates
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1...HEAD || echo "ui/")
+          fi
+          if echo "$CHANGED" | grep -qE '^(ui/|\.github/workflows/main\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Register Module
-        id: pbuf-register
-        run: pbuf-cli modules register
+      - name: Install UI dependencies and Playwright Chromium
+        if: steps.ui-changes.outputs.changed == 'true'
+        run: cd ui && npm ci && npx playwright install --with-deps chromium
+
+      - name: Run Playwright UI E2E Tests
+        if: steps.ui-changes.outputs.changed == 'true'
+        run: make test-ui-e2e
+
+  compose-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - name: Install UI dependencies and Playwright Chromium
+        run: cd ui && npm ci && npx playwright install --with-deps chromium
+
+      - name: Run Docker Compose + CLI + Playwright E2E Tests
+        run: make test-compose-e2e

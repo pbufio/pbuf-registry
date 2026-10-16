@@ -113,9 +113,23 @@ func Test_staticTokenAuth_NewAuthMiddleware(t *testing.T) {
 			want: "hello",
 		},
 		{
+			name: "staticTokenAuthWithBearerPrefix",
+			fields: fields{
+				token: "Bearer simple-token",
+			},
+			want: "hello",
+		},
+		{
 			name: "wrongToken",
 			fields: fields{
 				"wrong-token",
+			},
+			wantErr: true,
+		},
+		{
+			name: "emptyBearerToken",
+			fields: fields{
+				"Bearer ",
 			},
 			wantErr: true,
 		},
@@ -148,5 +162,30 @@ func Test_staticTokenAuth_NewAuthMiddleware(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+type mockModuleNameReq struct {
+	moduleName string
+}
+
+func (m mockModuleNameReq) GetModuleName() string {
+	return m.moduleName
+}
+
+func Test_getRequiredPermission_DriftService(t *testing.T) {
+	perm, mod := getRequiredPermission("/pbufregistry.v1.DriftService/ListDriftEvents", nil)
+	if perm != "read" || mod != "*" {
+		t.Fatalf("expected (read, *), got (%s, %s)", perm, mod)
+	}
+
+	perm, mod = getRequiredPermission("/pbufregistry.v1.DriftService/GetModuleDriftEvents", mockModuleNameReq{moduleName: "org/payment"})
+	if perm != "read" || mod != "org/payment" {
+		t.Fatalf("expected (read, org/payment), got (%s, %s)", perm, mod)
+	}
+
+	perm, mod = getRequiredPermission("/pbufregistry.v1.DriftService/GetModuleDependencyDriftStatus", mockModuleNameReq{moduleName: "org/orders"})
+	if perm != "read" || mod != "org/orders" {
+		t.Fatalf("expected (read, org/orders), got (%s, %s)", perm, mod)
 	}
 }

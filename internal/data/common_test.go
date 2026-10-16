@@ -75,6 +75,9 @@ func (s *TestSuite) TearDownSuite() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	if testing.Short() {
+		os.Exit(0)
+	}
 	suite.SetupSuite()
 	code := m.Run()
 	suite.TearDownSuite()

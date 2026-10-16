@@ -12,9 +12,20 @@ import (
 //go:embed config.yaml
 var embeddedConfigBytes []byte
 
+type OIDCConfig struct {
+	IssuerURL     string   `mapstructure:"issuerUrl"`
+	ClientID      string   `mapstructure:"clientId"`
+	JWKSURL       string   `mapstructure:"jwksUrl"`
+	UsernameClaim string   `mapstructure:"usernameClaim"`
+	GroupsClaim   string   `mapstructure:"groupsClaim"`
+	AdminGroups   []string `mapstructure:"adminGroups"`
+	AutoProvision bool     `mapstructure:"autoProvision"`
+}
+
 type Auth struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Type    string `mapstructure:"type"`
+	Enabled bool       `mapstructure:"enabled"`
+	Type    string     `mapstructure:"type"`
+	OIDC    OIDCConfig `mapstructure:"oidc"`
 }
 
 type Server struct {
