@@ -102,3 +102,36 @@ func TestListModules_PageSizeClamping(t *testing.T) {
 	registryRepository.AssertExpectations(t)
 }
 
+func TestPushModule_AtomicWithDependencies(t *testing.T) {
+	ctx := context.Background()
+
+	registryRepository := &mocks.RegistryRepository{}
+	metadataRepository := &mocks.MetadataRepository{}
+	srv := NewRegistryServer(registryRepository, metadataRepository, nil)
+
+	protoFiles := []*v1.ProtoFile{
+		{Filename: "hello.proto", Content: `syntax = "proto3"; package hello; message Hello {}`},
+	}
+	deps := []*v1.Dependency{
+		{Name: "dep/mod", Tag: "v1.0.0"},
+	}
+
+	registryRepository.On("PushModule", mock.Anything, "org/svc", "v1.0.0", protoFiles, deps[0]).
+		Return(&v1.Module{Name: "org/svc", Tags: []string{"v1.0.0"}}, nil).Once()
+
+	mod, err := srv.PushModule(ctx, &v1.PushModuleRequest{
+		ModuleName:   "org/svc",
+		Tag:          "v1.0.0",
+		Protofiles:   protoFiles,
+		Dependencies: deps,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mod.Name != "org/svc" {
+		t.Fatalf("expected module name org/svc, got %s", mod.Name)
+	}
+
+	registryRepository.AssertExpectations(t)
+}
+

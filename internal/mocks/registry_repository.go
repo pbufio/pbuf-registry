@@ -350,9 +350,16 @@ func (_m *RegistryRepository) PushDraftModule(ctx context.Context, name string, 
 	return r0, r1
 }
 
-// PushModule provides a mock function with given fields: ctx, name, tag, protofiles
-func (_m *RegistryRepository) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error) {
-	ret := _m.Called(ctx, name, tag, protofiles)
+// PushModule provides a mock function with given fields: ctx, name, tag, protofiles, dependencies
+func (_m *RegistryRepository) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies ...*v1.Dependency) (*v1.Module, error) {
+	_va := make([]interface{}, len(dependencies))
+	for _i := range dependencies {
+		_va[_i] = dependencies[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, name, tag, protofiles)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PushModule")
@@ -360,19 +367,19 @@ func (_m *RegistryRepository) PushModule(ctx context.Context, name string, tag s
 
 	var r0 *v1.Module
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []*v1.ProtoFile) (*v1.Module, error)); ok {
-		return rf(ctx, name, tag, protofiles)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []*v1.ProtoFile, ...*v1.Dependency) (*v1.Module, error)); ok {
+		return rf(ctx, name, tag, protofiles, dependencies...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []*v1.ProtoFile) *v1.Module); ok {
-		r0 = rf(ctx, name, tag, protofiles)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []*v1.ProtoFile, ...*v1.Dependency) *v1.Module); ok {
+		r0 = rf(ctx, name, tag, protofiles, dependencies...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*v1.Module)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, []*v1.ProtoFile) error); ok {
-		r1 = rf(ctx, name, tag, protofiles)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, []*v1.ProtoFile, ...*v1.Dependency) error); ok {
+		r1 = rf(ctx, name, tag, protofiles, dependencies...)
 	} else {
 		r1 = ret.Error(1)
 	}
