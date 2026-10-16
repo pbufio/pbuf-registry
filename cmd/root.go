@@ -31,33 +31,45 @@ func CreateRootCommand(launcher *Launcher) *cobra.Command {
 }
 
 func CreateCompactionDaemon(launcher *Launcher) *cobra.Command {
+	var once bool
 	compactionDaemonCommand := &cobra.Command{
 		Use:   "compaction",
 		Short: "Run compaction daemon",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if once {
+				return launcher.compactionDaemon.Run()
+			}
 			runBackgroundDaemon(
 				launcher.config.Daemons.Compaction.CronSchedule,
 				launcher.compactionDaemon,
 				launcher.debugApp,
 			)
+			return nil
 		},
 	}
+	compactionDaemonCommand.Flags().BoolVar(&once, "once", false, "Run compaction once and exit")
 
 	return compactionDaemonCommand
 }
 
 func CreateProtoParsingDaemon(launcher *Launcher) *cobra.Command {
+	var once bool
 	protoParsingDaemonCommand := &cobra.Command{
 		Use:   "proto-parsing",
 		Short: "Run proto parsing daemon",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if once {
+				return launcher.protoParsingDaemon.Run()
+			}
 			runBackgroundDaemon(
 				launcher.config.Daemons.ProtoParsing.CronSchedule,
 				launcher.protoParsingDaemon,
 				launcher.debugApp,
 			)
+			return nil
 		},
 	}
+	protoParsingDaemonCommand.Flags().BoolVar(&once, "once", false, "Run proto parsing once and exit")
 
 	return protoParsingDaemonCommand
 }
