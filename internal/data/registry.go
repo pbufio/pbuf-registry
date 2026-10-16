@@ -82,6 +82,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 		return nil, fmt.Errorf("could not select tags from database: %w", err)
 	}
+	defer tags.Close()
 
 	for tags.Next() {
 		var tag string
@@ -90,6 +91,9 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 			return nil, fmt.Errorf("could not scan tag: %w", err)
 		}
 		module.Tags = append(module.Tags, tag)
+	}
+	if err := tags.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate tags: %w", err)
 	}
 
 	// fetch draft tags
@@ -105,6 +109,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 		return nil, fmt.Errorf("could not select draft tags from database: %w", err)
 	}
+	defer draftTags.Close()
 
 	for draftTags.Next() {
 		var tag string
@@ -114,6 +119,9 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 		}
 		module.DraftTags = append(module.DraftTags, tag)
 	}
+	if err := draftTags.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate draft tags: %w", err)
+	}
 
 	return &module, nil
 }
@@ -121,23 +129,36 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 // ListModules returns a list of modules with paging support
 // Token is the base64 encoded module name
 func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error) {
-	var modules []*v1.Module
-
-	query := "SELECT id, name FROM modules"
-	if token != "" {
-		decoded, err := base64.StdEncoding.DecodeString(token)
-		if err != nil {
-			return nil, "", fmt.Errorf("could not decode token: %w", err)
-		}
-		query += fmt.Sprintf(" WHERE name >= '%s'", decoded)
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	if pageSize > 1000 {
+		pageSize = 1000
 	}
 
-	query += fmt.Sprintf(" ORDER BY name ASC LIMIT %d", pageSize+1)
+	var (
+		modules []*v1.Module
+		rows    pgx.Rows
+		err     error
+	)
 
-	rows, err := r.pool.Query(ctx, query)
+	if token != "" {
+		decoded, decErr := base64.StdEncoding.DecodeString(token)
+		if decErr != nil {
+			return nil, "", fmt.Errorf("could not decode token: %w", decErr)
+		}
+		rows, err = r.pool.Query(ctx,
+			"SELECT id, name FROM modules WHERE name >= $1 ORDER BY name ASC LIMIT $2",
+			string(decoded), pageSize+1)
+	} else {
+		rows, err = r.pool.Query(ctx,
+			"SELECT id, name FROM modules ORDER BY name ASC LIMIT $1",
+			pageSize+1)
+	}
 	if err != nil {
 		return nil, "", fmt.Errorf("could not select modules from database: %w", err)
 	}
+	defer rows.Close()
 
 	var rowsCount int
 	var nextPageToken string
@@ -156,6 +177,9 @@ func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token stri
 		}
 
 		rowsCount++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("could not iterate modules: %w", err)
 	}
 
 	return modules, nextPageToken, nil
@@ -322,6 +346,7 @@ func (r *registryRepo) PullModule(ctx context.Context, name string, tag string) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not select protofiles from database: %w", err)
 	}
+	defer protofilesRows.Close()
 
 	var protofiles []*v1.ProtoFile
 
@@ -333,6 +358,9 @@ func (r *registryRepo) PullModule(ctx context.Context, name string, tag string) 
 		}
 
 		protofiles = append(protofiles, protofile)
+	}
+	if err := protofilesRows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("could not iterate protofiles: %w", err)
 	}
 
 	return module, protofiles, nil
@@ -479,39 +507,35 @@ func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, t
 		return nil, ErrTagNotFound
 	}
 
-	// find all dependencies
-	rows, err := r.pool.Query(ctx,
-		"SELECT dependency_tag_id FROM dependencies WHERE tag_id = $1",
-		tagId)
+	// Fetch all dependencies in a single JOIN query to avoid N+1 queries and connection pool contention
+	rows, err := r.pool.Query(ctx, `
+		SELECT m.name, t.tag
+		FROM dependencies d
+		JOIN tags t ON d.dependency_tag_id = t.id
+		JOIN modules m ON t.module_id = m.id
+		WHERE d.tag_id = $1
+	`, tagId)
 	if err != nil {
-		// if no dependencies found, return empty slice
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*v1.Dependency{}, nil
 		}
 		return nil, fmt.Errorf("could not select dependencies from database: %w", err)
 	}
+	defer rows.Close()
 
 	for rows.Next() {
-		var dependencyTagId string
-		err := rows.Scan(&dependencyTagId)
-		if err != nil {
+		var dependencyName, dependencyTag string
+		if err := rows.Scan(&dependencyName, &dependencyTag); err != nil {
 			return nil, fmt.Errorf("could not scan dependency: %w", err)
-		}
-
-		// find the module name and tag by dependency tag id
-		var dependencyName string
-		var dependencyTag string
-		err = r.pool.QueryRow(ctx,
-			"SELECT modules.name, tags.tag FROM modules JOIN tags ON modules.id = tags.module_id WHERE tags.id = $1",
-			dependencyTagId).Scan(&dependencyName, &dependencyTag)
-		if err != nil {
-			return nil, fmt.Errorf("could not find module and tag for dependency: %w", err)
 		}
 
 		dependencies = append(dependencies, &v1.Dependency{
 			Name: dependencyName,
 			Tag:  dependencyTag,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate dependencies: %w", err)
 	}
 
 	return dependencies, nil

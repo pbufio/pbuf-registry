@@ -49,6 +49,10 @@ func (m metadataRepo) GetUnprocessedTagIds(ctx context.Context) ([]string, error
 		}
 		tagIds = append(tagIds, tagId)
 	}
+	if err := rows.Err(); err != nil {
+		m.logger.Errorf("error iterating unprocessed tag ids: %v", err)
+		return nil, err
+	}
 
 	return tagIds, nil
 }
@@ -77,6 +81,10 @@ func (m metadataRepo) GetProtoFilesForTagId(ctx context.Context, tagId string) (
 			Filename: filename,
 			Content:  content,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		m.logger.Errorf("error iterating proto files for tag id %s: %v", tagId, err)
+		return nil, err
 	}
 
 	return protoFiles, nil
@@ -184,6 +192,10 @@ func (m metadataRepo) GetParsedProtoFiles(ctx context.Context, tagId string) ([]
 			Filename: filename,
 			Proto:    proto,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		m.logger.Errorf("error iterating parsed proto files for tag id %s: %v", tagId, err)
+		return nil, err
 	}
 
 	return parsedProtoFiles, nil

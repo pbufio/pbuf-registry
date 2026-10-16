@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"encoding/base64"
 	"reflect"
 	"testing"
 	"time"
@@ -827,10 +828,18 @@ func Test_metadataRepo_GetProtoFilesForTagId(t *testing.T) {
 		{
 			name: "get proto files for tag id not found",
 			args: args{
-				tagId: "not-found",
+				tagId: "00000000-0000-0000-0000-000000000000",
 			},
 			want:    noProtoFiles,
 			wantErr: false,
+		},
+		{
+			name: "get proto files for invalid uuid tag id",
+			args: args{
+				tagId: "not-found",
+			},
+			want:    noProtoFiles,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -1146,3 +1155,40 @@ func Test_metadataRepo_GetParsedProtoFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
+
+func Test_registryRepository_ListModules_SQLInjectionAndBounds(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	err := r.RegisterModule(ctx, "sqli-check/mod-a")
+	require.NoError(t, err)
+
+	sqlPayloads := []string{
+		"' OR '1'='1' --",
+		"'; DROP TABLE modules; --",
+		"zzzzz' UNION SELECT id::text, name FROM users --",
+	}
+
+	for _, payload := range sqlPayloads {
+		tok := base64.StdEncoding.EncodeToString([]byte(payload))
+		mods, _, err := r.ListModules(ctx, 10, tok)
+		require.NoError(t, err, "payload %q should be safely parameterized", payload)
+		if payload == "zzzzz' UNION SELECT id::text, name FROM users --" {
+			assert.Empty(t, mods)
+		}
+	}
+
+	// Verify modules table is intact and negative/zero/huge pageSize values are clamped safely
+	mods, _, err := r.ListModules(ctx, -5, "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, mods)
+
+	mods, _, err = r.ListModules(ctx, 50000, "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, mods)
+
+	// Invalid base64 token must return an error
+	_, _, err = r.ListModules(ctx, 10, "%%%not-base64%%%")
+	require.Error(t, err)
+}
+
