@@ -20,6 +20,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
@@ -64,16 +66,12 @@ jobs:
 
       - name: Install doctl (Optional)
         if: env.DO_TOKEN != ''
-        env:
-          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
         uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Docker Login DO (Optional)
         if: env.DO_TOKEN != ''
-        env:
-          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
         run: doctl registry login
 
       - name: Run golangci-lint
@@ -87,7 +85,6 @@ jobs:
       - name: Build and Push Server Image
         env:
           REGISTRY_VERSION: ${{ steps.meta.outputs.tag }}
-          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
         run: |
           make build-docker
           docker push ghcr.io/pbufio/registry:${REGISTRY_VERSION}
@@ -110,13 +107,9 @@ jobs:
         run: |
           make build-docker-ui
           docker push ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION}
-          docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/registry-ui:${REGISTRY_VERSION}
-          docker push ghcr.io/pbufio/registry-ui:${REGISTRY_VERSION}
           if [ "${{ steps.meta.outputs.is_prerelease }}" = "false" ]; then
             docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/pbuf-registry-ui:latest
             docker push ghcr.io/pbufio/pbuf-registry-ui:latest
-            docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/registry-ui:latest
-            docker push ghcr.io/pbufio/registry-ui:latest
           fi
 
       - name: Release CLI Binaries with GoReleaser
@@ -142,7 +135,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
-      - name: Package, Push OCI Chart to GHCR, and Attach to GitHub Release
+      - name: Package, Attach to GitHub Release, and Push OCI Chart to GHCR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release.outputs.tag }}
@@ -152,10 +145,11 @@ jobs:
           helm lint charts/pbuf-registry/
           helm package charts/pbuf-registry/ --version "${CHART_VERSION}" --app-version "${TAG}" --destination .cr-release-packages
 
-          echo "${GH_TOKEN}" | helm registry login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          helm push ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" oci://ghcr.io/pbufio/charts
-
           gh release upload "${TAG}" ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" --clobber
+
+          echo "${GH_TOKEN}" | helm registry login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          helm push ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" oci://ghcr.io/pbufio/charts || \
+            helm push ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" oci://ghcr.io/pbufio/helm
 
       - name: Ensure gh-pages Branch Exists and Update Helm Repo Index
         env:
