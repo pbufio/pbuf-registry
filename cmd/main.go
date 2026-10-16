@@ -93,5 +93,7 @@ func main() {
 	err = CreateRootCommand(launcher).Execute()
 	if err != nil {
 		logHelper.Errorf("failed to run application: %v", err)
+		pool.Close()
+		os.Exit(1)
 	}
 }
