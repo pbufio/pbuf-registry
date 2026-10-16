@@ -126,7 +126,8 @@ test.describe('pbuf-registry Web UI', () => {
 
     await page.getByRole('link', { name: /yourorg\/hello-proto/ }).click()
     await expect(page).toHaveURL(/\/modules\/yourorg\/hello-proto$/)
-    await expect(page.getByText('v1.0.0')).toBeVisible()
+    await expect(page.getByText('v1.0.0', { exact: true })).toBeVisible()
+    await expect(page.getByText('yourorg/hello-proto@v1.0.0')).toBeVisible()
 
     // Verify Nginx blocks write endpoints (405) and withholds public fallback token from /api/v1/users (401)
     const delResp = await request.post('/api/v1/modules/delete', {
