@@ -83,6 +83,18 @@ func TestGoPackagePatcher_Patch(t *testing.T) {
 			want:    withPackageProtoFilePatched,
 			wantErr: false,
 		},
+		{
+			name: "single line and multiline option",
+			fields: fields{
+				goModule: "github.com/pbufio/pbuf-registry",
+			},
+			args: args{
+				outputPath: "api/v1",
+				content:    `syntax = "proto3"; package pbufregistry.v1; option go_package = "old/pkg;v1"; message Module {}`,
+			},
+			want:    `syntax = "proto3"; package pbufregistry.v1; option go_package = "github.com/pbufio/pbuf-registry/api/v1;v1"; message Module {}`,
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

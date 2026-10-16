@@ -63,12 +63,17 @@ message ValidateRules {
 `
 
 	var receivedAuthHeader string
+	var receivedReq bsrDownloadRequest
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/buf.registry.module.v1beta1.DownloadService/Download" {
 			http.NotFound(w, r)
 			return
 		}
 		receivedAuthHeader = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&receivedReq); err != nil || len(receivedReq.Values) == 0 || receivedReq.Values[0].ResourceRef.Name.Module == "" {
+			http.Error(w, "invalid DownloadRequest schema", http.StatusBadRequest)
+			return
+		}
 
 		resp := map[string]interface{}{
 			"contents": []map[string]interface{}{
@@ -111,6 +116,10 @@ message ValidateRules {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer test-buf-token-xyz", receivedAuthHeader)
+	require.Len(t, receivedReq.Values, 1)
+	assert.Equal(t, "bufbuild", receivedReq.Values[0].ResourceRef.Name.Owner)
+	assert.Equal(t, "protovalidate", receivedReq.Values[0].ResourceRef.Name.Module)
+	assert.Equal(t, "v0.14.0", receivedReq.Values[0].ResourceRef.Name.Ref)
 
 	writtenFile := filepath.Join(outDir, "buf/validate/validate.proto")
 	data, err := os.ReadFile(writtenFile)

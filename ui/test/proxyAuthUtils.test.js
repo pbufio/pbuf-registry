@@ -67,4 +67,39 @@ assert.equal(
     ''
 )
 
+test('selectProxyAuthorizationHeader: blocks fallback API token on write or user endpoints', () => {
+  assert.equal(
+    selectProxyAuthorizationHeader({
+      incomingAuthorization: '',
+      apiToken: 'pbuf_user_from_env',
+      publicEnabled: true,
+      method: 'POST',
+      url: '/api/v1/modules/delete'
+    }),
+    ''
+  )
+
+  assert.equal(
+    selectProxyAuthorizationHeader({
+      incomingAuthorization: '',
+      apiToken: 'pbuf_user_from_env',
+      publicEnabled: true,
+      method: 'GET',
+      url: '/api/v1/users'
+    }),
+    ''
+  )
+
+  assert.equal(
+    selectProxyAuthorizationHeader({
+      incomingAuthorization: '',
+      apiToken: 'pbuf_user_from_env',
+      publicEnabled: true,
+      method: 'POST',
+      url: '/api/v1/modules/get'
+    }),
+    'Bearer pbuf_user_from_env'
+  )
+})
+
 console.log('proxyAuthUtils: OK')

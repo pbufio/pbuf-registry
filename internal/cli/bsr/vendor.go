@@ -27,7 +27,11 @@ const (
 )
 
 type bsrDownloadRequest struct {
-	References []bsrResourceRef `json:"references"`
+	Values []bsrDownloadRequestValue `json:"values"`
+}
+
+type bsrDownloadRequestValue struct {
+	ResourceRef bsrResourceRef `json:"resourceRef"`
 }
 
 type bsrResourceRef struct {
@@ -35,10 +39,9 @@ type bsrResourceRef struct {
 }
 
 type bsrRefName struct {
-	Owner      string `json:"owner"`
-	Repository string `json:"repository"`
-	Ref        string `json:"ref,omitempty"`
-	Track      string `json:"track,omitempty"`
+	Owner  string `json:"owner"`
+	Module string `json:"module"`
+	Ref    string `json:"ref,omitempty"`
 }
 
 type bsrDownloadResponse struct {
@@ -188,12 +191,14 @@ var bsrHTTPClient = &http.Client{Timeout: bsrTimeout}
 
 func downloadBSRFiles(ctx context.Context, baseURL, owner, repo, ref, token string) ([]bsrFile, error) {
 	payload := bsrDownloadRequest{
-		References: []bsrResourceRef{
+		Values: []bsrDownloadRequestValue{
 			{
-				Name: bsrRefName{
-					Owner:      owner,
-					Repository: repo,
-					Ref:        ref,
+				ResourceRef: bsrResourceRef{
+					Name: bsrRefName{
+						Owner:  owner,
+						Module: repo,
+						Ref:    ref,
+					},
 				},
 			},
 		},

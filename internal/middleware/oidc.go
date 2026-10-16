@@ -71,6 +71,9 @@ func NewOIDCVerifier(cfg config.OIDCConfig) (*OIDCVerifier, error) {
 	if strings.TrimSpace(cfg.IssuerURL) == "" {
 		return nil, errors.New("oidc issuerUrl is required")
 	}
+	if strings.TrimSpace(cfg.ClientID) == "" {
+		return nil, errors.New("oidc clientId is required")
+	}
 	if cfg.UsernameClaim == "" {
 		cfg.UsernameClaim = "email"
 	}
@@ -112,12 +115,10 @@ func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCC
 		return nil, errors.New("oidc token issuer mismatch")
 	}
 
-	// Verify audience if ClientID is configured
-	if v.cfg.ClientID != "" {
-		aud, err := claims.GetAudience()
-		if err != nil || !containsString(aud, v.cfg.ClientID) {
-			return nil, errors.New("oidc token audience mismatch")
-		}
+	// Verify audience
+	aud, err := claims.GetAudience()
+	if err != nil || !containsString(aud, v.cfg.ClientID) {
+		return nil, errors.New("oidc token audience mismatch")
 	}
 
 	sub, _ := claims.GetSubject()

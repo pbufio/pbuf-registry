@@ -34,8 +34,11 @@ func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 
 	for _, option := range proto.ProtoBody.Options {
 		if option.OptionName == "go_package" {
-			// break by lines
-			// option.Meta.Pos.Line as the line to change
+			start := option.Meta.Pos.Offset
+			end := option.Meta.LastPos.Offset
+			if start >= 0 && end >= start && end < len(content) {
+				return content[:start] + goPackage + content[end+1:], nil
+			}
 			splitted := strings.Split(content, "\n")
 			splitted[option.Meta.Pos.Line-1] = goPackage
 			return strings.Join(splitted, "\n"), nil
@@ -44,8 +47,10 @@ func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 
 	// if no go_package option, add it
 	splitted := strings.Split(content, "\n")
-	// add the element after syntax line
-	line := proto.Syntax.Meta.LastPos.Line
+	line := 0
+	if proto.Syntax != nil {
+		line = proto.Syntax.Meta.LastPos.Line
+	}
 	splitted = append(splitted[:line], append([]string{goPackage}, splitted[line:]...)...)
 
 	return strings.Join(splitted, "\n"), nil

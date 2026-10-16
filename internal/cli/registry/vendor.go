@@ -41,19 +41,21 @@ func VendorRegistryModule(module *model.Module, client v1.RegistryClient, patche
 		outputPath := module.OutputFolder
 
 		if module.Path != "" {
-			modulePath := strings.TrimSuffix(module.Path, "/")
+			modulePath := filepath.Clean(module.Path)
 
 			if strings.HasSuffix(modulePath, ".proto") {
 				if originalFilename != modulePath {
 					continue
 				}
 				modulePath = filepath.Dir(modulePath)
-			} else if originalFilename != modulePath && !strings.HasPrefix(originalFilename, modulePath+"/") {
+			} else if modulePath != "." && originalFilename != modulePath && !strings.HasPrefix(originalFilename, modulePath+"/") {
 				continue
 			}
 
 			if outputPath != "" {
-				originalFilename = strings.Replace(originalFilename, modulePath, outputPath, 1)
+				if relPath, relErr := filepath.Rel(modulePath, originalFilename); relErr == nil {
+					originalFilename = filepath.Join(outputPath, relPath)
+				}
 			}
 		} else if outputPath != "" {
 			originalFilename = filepath.Join(outputPath, originalFilename)

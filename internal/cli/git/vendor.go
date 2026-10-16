@@ -59,9 +59,9 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		return err
 	}
 
-	modulePath := module.Path
-	if strings.HasSuffix(module.Path, ".proto") {
-		modulePath = filepath.Dir(module.Path)
+	modulePath := filepath.Clean(module.Path)
+	if strings.HasSuffix(modulePath, ".proto") {
+		modulePath = filepath.Dir(modulePath)
 	}
 
 	baseDir := modulePath
@@ -78,7 +78,10 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 			return nil
 		}
 
-		outputPath := strings.ReplaceAll(path, modulePath, baseDir)
+		outputPath := path
+		if relPath, relErr := filepath.Rel(modulePath, path); relErr == nil {
+			outputPath = filepath.Join(baseDir, relPath)
+		}
 
 		file, err := fs.Open(path)
 		if err != nil {

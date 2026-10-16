@@ -44,6 +44,10 @@ func TestVendorRegistryModule(t *testing.T) {
 					Filename: "../../etc/evil.proto",
 					Content:  "evil",
 				},
+				{
+					Filename: "root.proto",
+					Content:  "syntax = \"proto3\";\n",
+				},
 			},
 		},
 	}
@@ -67,6 +71,17 @@ func TestVendorRegistryModule(t *testing.T) {
 	// api/v10/other.proto should NOT match prefix api/v1
 	_, err = os.Stat(filepath.Join(outDir, "other.proto"))
 	assert.True(t, os.IsNotExist(err))
+
+	// Root-level file selection (path: root.proto) writes to <outDir>/root.proto
+	rootMod := &model.Module{
+		Name:         "org/users",
+		Tag:          "v1.0.0",
+		Path:         "root.proto",
+		OutputFolder: outDir,
+	}
+	require.NoError(t, VendorRegistryModule(rootMod, client, nil))
+	_, err = os.Stat(filepath.Join(outDir, "root.proto"))
+	require.NoError(t, err)
 }
 
 func TestCollectProtoFilesInDirs(t *testing.T) {

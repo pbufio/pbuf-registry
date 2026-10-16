@@ -50,7 +50,9 @@ export default defineConfig(({ mode }) => {
               const headerValue = selectProxyAuthorizationHeader({
                 incomingAuthorization: req.headers?.authorization,
                 apiToken: env.API_TOKEN,
-                publicEnabled
+                publicEnabled,
+                method: req.method,
+                url: req.url
               })
 
               if (headerValue) {

@@ -25,10 +25,14 @@ func TestVendorGitModule(t *testing.T) {
 	require.NoError(t, os.MkdirAll(protoDir, 0o755))
 	protoFile := filepath.Join(protoDir, "hello.proto")
 	require.NoError(t, os.WriteFile(protoFile, []byte("syntax = \"proto3\";\npackage api.v1;\noption go_package = \"old/pkg;v1\";\n"), 0o644))
+	rootProto := filepath.Join(repoDir, "root.proto")
+	require.NoError(t, os.WriteFile(rootProto, []byte("syntax = \"proto3\";\n"), 0o644))
 
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
 	_, err = wt.Add("api/v1/hello.proto")
+	require.NoError(t, err)
+	_, err = wt.Add("root.proto")
 	require.NoError(t, err)
 
 	commitHash, err := wt.Commit("initial proto", &gogit.CommitOptions{
@@ -57,4 +61,14 @@ func TestVendorGitModule(t *testing.T) {
 	written, err := os.ReadFile(filepath.Join(outDir, "hello.proto"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "github.com/example/app/gen/api/v1")
+
+	rootMod := &model.Module{
+		Repository:   repoDir,
+		Path:         "root.proto",
+		Tag:          "v1.0.0",
+		OutputFolder: outDir,
+	}
+	require.NoError(t, VendorGitModule(rootMod, nil, nil))
+	_, err = os.Stat(filepath.Join(outDir, "root.proto"))
+	require.NoError(t, err)
 }
