@@ -1,139 +1,106 @@
 # pbuf-registry Examples
 
-This directory contains example protobuf files and configurations to help you get started with pbuf-registry.
+This directory contains example protobuf files and a sample [`pbuf.yaml`](pbuf.yaml) configuration to help you get started with `pbuf-registry` and the `pbuf` CLI.
 
-## What's included
+## What's Included
 
-- `hello-proto/` - A simple example module with:
-  - `greeter.proto` - A basic gRPC service definition
-  - `types.proto` - Common message types and enums
-- `pbuf.yaml` - Configuration file for the example module
+- `hello-proto/` — A sample protobuf module with:
+  - `greeter.proto` — A basic gRPC service definition
+  - `types.proto` — Common message types and enums
+- `pbuf.yaml` — Configuration file for the example module
 
 ## Prerequisites
 
-1. **pbuf-registry running**: Follow the [installation instructions](../README.md#installation) to start the registry
-2. **pbuf installed**: Get it from [pbuf repository](https://github.com/pbufio/pbuf-cli)
-3. **Environment configured**:
+1. **`pbuf-registry` running**: Follow the [Quick Start instructions](../README.md#quick-start-2-minutes) to start the registry locally.
+2. **`pbuf` CLI installed**: Follow the [CLI installation instructions](../README.md#cli-installation-pbuf) or build from source (`make build-cli`).
+3. **Authenticate with your registry token**:
    ```shell
-   export PBUF_REGISTRY_URL=https://localhost:6777
-   export PBUF_REGISTRY_TOKEN=${SERVER_STATIC_TOKEN}
+   cd examples
+   pbuf auth "${SERVER_STATIC_TOKEN}"
    ```
 
 ## Step-by-Step Tutorial
 
-### Step 1: Register the module
+### Step 1: Register the Module
 
-First, register a new module in the registry (the module name comes from `pbuf.yaml`):
-
-```shell
-pbuf modules register
-```
-
-You should see a success message confirming the module was registered.
-
-### Step 2: Push your first version
-
-Navigate to the examples directory and push the module with a tag:
+From the `examples/` directory, register the module defined in `pbuf.yaml` (`yourorg/hello-proto`):
 
 ```shell
 cd examples
+pbuf modules register
+```
+
+### Step 2: Push Your First Version
+
+Push the `.proto` files from `hello-proto/` with semantic version tag `v1.0.0`:
+
+```shell
 pbuf modules push v1.0.0
 ```
 
 This will:
-- Read the `pbuf.yaml` configuration
-- Collect all `.proto` files from `hello-proto/` directory
-- Upload them to the registry with tag `v1.0.0`
+- Read `pbuf.yaml`
+- Collect all `.proto` files from the `export.paths` (`hello-proto/`) directory
+- Upload them to the registry under immutable tag `v1.0.0`
 
-### Step 3: Verify the module
+### Step 3: Verify the Module
 
-Get information about your module, including all available tags:
+Retrieve module details, tags, and dependencies:
 
 ```shell
-pbuf modules get github.com/yourorg/hello-proto
+pbuf modules get yourorg/hello-proto
 ```
 
-You should see `v1.0.0` in the tags list.
-
-### Step 4: Vendor the module (use it in another project)
-
-Now, simulate using this module in another project:
+You can also inspect the parsed protobuf AST metadata (once the background proto-parser runs):
 
 ```shell
-# Create a new directory for testing
+pbuf metadata get yourorg/hello-proto v1.0.0
+```
+
+### Step 4: Vendor Dependencies into a Consumer Project
+
+Simulate consuming `yourorg/hello-proto` (alongside a `buf.build` or Git dependency) in another service:
+
+```shell
 mkdir -p /tmp/test-project
 cd /tmp/test-project
 
-# Initialize a new pbuf project
 cat > pbuf.yaml <<EOF
 version: v1
-module: github.com/yourorg/test-project
-vendor:
-  modules:
-    - name: github.com/yourorg/hello-proto
-      tag: v1.0.0
+name: yourorg/test-project
+registry:
+  addr: localhost:6777
+  insecure: true
+modules:
+  - name: yourorg/hello-proto
+    tag: v1.0.0
+    out: third_party
 EOF
 
-# Pull the dependencies
 pbuf vendor
 ```
 
-The proto files from `hello-proto` will be downloaded into your `vendor/` directory.
+The `.proto` files from `yourorg/hello-proto` (`v1.0.0`) will be downloaded into `/tmp/test-project/third_party/hello-proto/`.
 
-### Step 5: Push a new version
+### Step 5: Push a New Version & Check Drift
 
-Let's make a change and push a new version. Go back to the examples directory:
+Return to `examples/`, modify `hello-proto/greeter.proto` (for example, add a new RPC method), and push `v1.1.0`:
 
 ```shell
 cd /path/to/pbuf-registry/examples
-```
-
-Edit `hello-proto/greeter.proto` to add a new RPC method, then push:
-
-```shell
 pbuf modules push v1.1.0
 ```
 
-Now you have two versions: `v1.0.0` and `v1.1.0` in the registry!
+Then check drift events:
 
-## Next Steps
-
-- Explore the [REST API](../README.md#http) using the swagger documentation
-- Check out the [gRPC API](../README.md#grpc) for programmatic access
-- Try the Web UI at http://localhost:80 (if running via docker-compose)
-- Learn about [advanced pbuf features](https://github.com/pbufio/pbuf-cli)
-
-## Customization
-
-To use these examples with your own module:
-
-1. Change the `module` name in `pbuf.yaml`
-2. Update the `go_package` option in the `.proto` files
-3. Register your module: `pbuf modules register`
-4. Push: `pbuf modules push v1.0.0`
+```shell
+pbuf drift module yourorg/hello-proto
+```
 
 ## Troubleshooting
 
-**Certificate errors?**
-```shell
-# If using self-signed certificates, skip verification (dev only!)
-export PBUF_REGISTRY_INSECURE=true
-```
-
-**Connection refused?**
-```shell
-# Check if the registry is running
-docker-compose ps
-
-# Check the logs
-docker-compose logs pbuf-registry
-```
-
-**Authentication errors?**
-```shell
-# Ensure your token is set correctly
-echo $PBUF_REGISTRY_TOKEN
-
-# If empty, export it:
-export PBUF_REGISTRY_TOKEN=your-token-here
-```
+- **TLS / Self-Signed Certificate Errors**:
+  - For local plaintext gRPC registries, set `insecure: true` under `registry:` in `pbuf.yaml`.
+  - For TLS registries using `make cert-gen`, trust `gen/certs/ca-cert.pem` in your OS keychain/CA store.
+- **Authentication Errors (`Unauthenticated` / `PermissionDenied`)**:
+  - Re-run `pbuf auth <token>` in the directory containing your `pbuf.yaml` so `~/.netrc` has an entry matching `registry.addr`.

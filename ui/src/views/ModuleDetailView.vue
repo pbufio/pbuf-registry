@@ -138,7 +138,7 @@ modules:
     out: third_party
 
 # Then run:
-# pbuf-cli vendor`
+# pbuf vendor`
 }
 
 onMounted(() => {
@@ -172,8 +172,8 @@ onMounted(() => {
           <PCodeBlock :code="vendorConfig(module.tags[0] || 'v1.0.0')" />
           <p class="text-zinc-400 text-sm mt-2">
             Learn more: 
-            <a href="https://github.com/pbufio/pbuf-cli" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
-              pbuf-cli Documentation
+            <a href="https://github.com/pbufio/pbuf-registry#cli-reference" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
+              pbuf CLI Documentation
             </a>
           </p>
         </div>
@@ -254,7 +254,7 @@ onMounted(() => {
             </div>
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Get module information</h3>
-              <PCodeBlock :code="`pbuf-cli modules get ${module.name}`" />
+              <PCodeBlock :code="`pbuf modules get ${module.name}`" />
             </div>
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Advanced: Vendor with code generation path</h3>
@@ -266,7 +266,7 @@ modules:
     gen_out: gen  # patches go_package option
 
 # Then run:
-# pbuf-cli vendor`" />
+# pbuf vendor`" />
             </div>
           </div>
         </div>

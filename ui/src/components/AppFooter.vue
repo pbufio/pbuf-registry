@@ -30,7 +30,7 @@ import { RouterLink } from 'vue-router'
             </li>
             <li>
               <a
-                href="https://github.com/pbufio/pbuf-cli"
+                href="https://github.com/pbufio/pbuf-registry#cli-reference"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-zinc-400 hover:text-brand transition-colors text-sm"

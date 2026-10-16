@@ -50,7 +50,7 @@ const logout = async () => {
             Modules
           </RouterLink>
           <a 
-            href="https://github.com/pbufio/pbuf-cli" 
+            href="https://github.com/pbufio/pbuf-registry#cli-reference" 
             target="_blank"
             rel="noopener noreferrer"
             class="text-zinc-300 hover:text-zinc-50 transition-colors font-medium"
@@ -102,7 +102,7 @@ const logout = async () => {
             Modules
           </RouterLink>
           <a 
-            href="https://github.com/pbufio/pbuf-cli" 
+            href="https://github.com/pbufio/pbuf-registry#cli-reference" 
             target="_blank"
             rel="noopener noreferrer"
             class="text-zinc-300 hover:text-zinc-50 transition-colors font-medium"

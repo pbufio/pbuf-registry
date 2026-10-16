@@ -2,12 +2,26 @@
 set -e
 
 # PowerBuf CLI installation script
-# Usage: curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh
-# Or: wget -qO- https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh -s -- -v v0.9.0
 
 REPO="pbufio/pbuf-registry"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="pbuf"
+VERSION="${VERSION:-}"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -v|--version)
+            VERSION="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -39,16 +53,24 @@ esac
 echo "Detected OS: $OS"
 echo "Detected Architecture: $ARCH"
 
-# Get latest version
-echo "Fetching latest version..."
-LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+# Resolve version
+if [ -n "$VERSION" ]; then
+    case "$VERSION" in
+        v*) LATEST_VERSION="$VERSION" ;;
+        *)  LATEST_VERSION="v$VERSION" ;;
+    esac
+    echo "Requested version: $LATEST_VERSION"
+else
+    echo "Fetching latest version..."
+    LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
-if [ -z "$LATEST_VERSION" ]; then
-    echo "Error: Failed to fetch latest version"
-    exit 1
+    if [ -z "$LATEST_VERSION" ]; then
+        echo "Error: Failed to fetch latest version"
+        exit 1
+    fi
+
+    echo "Latest version: $LATEST_VERSION"
 fi
-
-echo "Latest version: $LATEST_VERSION"
 
 # Construct download URL
 # Use version without leading 'v' in archive file name

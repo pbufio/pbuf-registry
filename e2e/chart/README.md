@@ -18,7 +18,7 @@ To run the e2e tests locally, you need the following tools installed:
 Run the e2e tests with default settings:
 
 ```bash
-cd tests/e2e
+cd e2e/chart
 ./run-e2e-tests.sh
 ```
 
@@ -73,12 +73,7 @@ kind delete cluster --name pbuf-registry-e2e
 
 ## Running Tests in CI/CD
 
-The e2e tests are automatically run in GitHub Actions on:
-- Pull requests to `main` branch
-- Pushes to `main` branch
-- Manual workflow dispatch
-
-See `.github/workflows/e2e.yml` for the workflow configuration.
+Chart linting runs automatically in GitHub Actions via `.github/workflows/main.yml` (`make lint-charts`).
 
 ### Manual Trigger
 

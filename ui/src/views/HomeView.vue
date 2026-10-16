@@ -19,11 +19,11 @@ import PFeatureCard from '@/components/PFeatureCard.vue'
       
       <div class="flex flex-col sm:flex-row justify-center gap-4 mb-12">
         <PButton to="/modules">Browse Modules</PButton>
-        <PButton variant="secondary" href="https://github.com/pbufio/pbuf-cli" external>View Docs</PButton>
+        <PButton variant="secondary" href="https://github.com/pbufio/pbuf-registry#cli-reference" external>View Docs</PButton>
       </div>
 
       <div class="max-w-2xl mx-auto">
-        <PCodeBlock code="pbuf-cli init my-service" />
+        <PCodeBlock code="pbuf init my-service" />
       </div>
     </header>
 
@@ -70,10 +70,10 @@ import PFeatureCard from '@/components/PFeatureCard.vue'
       <div class="space-y-6">
         <div>
           <h3 class="text-xl font-semibold mb-3 text-zinc-200">1. Install the CLI</h3>
-          <PCodeBlock code="go install github.com/pbufio/pbuf-cli@latest" />
+          <PCodeBlock code="go install github.com/pbufio/pbuf-registry/cmd/pbuf@latest" />
           <p class="text-zinc-400 text-sm mt-2">
             Or download binaries from 
-            <a href="https://github.com/pbufio/pbuf-cli/releases" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
+            <a href="https://github.com/pbufio/pbuf-registry/releases" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
               GitHub Releases
             </a>
           </p>
@@ -81,12 +81,12 @@ import PFeatureCard from '@/components/PFeatureCard.vue'
 
         <div>
           <h3 class="text-xl font-semibold mb-3 text-zinc-200">2. Initialize Your Project</h3>
-          <PCodeBlock code="pbuf-cli init my-service" />
+          <PCodeBlock code="pbuf init my-service" />
         </div>
 
         <div>
           <h3 class="text-xl font-semibold mb-3 text-zinc-200">3. Push Your Protos</h3>
-          <PCodeBlock code="pbuf-cli modules push v1.0.0" />
+          <PCodeBlock code="pbuf modules push v1.0.0" />
         </div>
       </div>
     </section>

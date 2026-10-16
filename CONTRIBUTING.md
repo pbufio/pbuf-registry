@@ -111,10 +111,15 @@ Provide any relevant context about your setup or use case.
    - Add tests for new functionality
    - Update documentation as needed
 
-3. **Test Your Changes**
+3. **Test & Lint Your Changes**
    ```shell
+   make lint
+   make lint-charts
    make test
+   make test-ui
    make build
+   make build-cli
+   make build-ui
    ```
 
 4. **Submit PR**
@@ -130,23 +135,23 @@ Provide any relevant context about your setup or use case.
 
 ## Code Style
 
-- Follow standard Go conventions (`gofmt`, `golint`)
+- Follow standard Go conventions (`gofmt`, `golangci-lint`)
 - Write clear comments for public APIs
 - Keep functions focused and testable
 - Use meaningful variable and function names
 
 ## Testing
 
-- Write unit tests for new functionality
-- Ensure existing tests pass: `make test`
-- Add integration tests for API changes
-- Test with Docker Compose setup locally
+- Write unit tests for new functionality (Go server, `pbuf` CLI, and Vue Web UI)
+- Ensure Go unit tests pass: `make test`
+- Ensure Web UI unit tests pass: `make test-ui`
+- Run binary + PostgreSQL E2E tests: `make test-e2e`
+- Run full Docker Compose + CLI + Playwright UI E2E tests: `make test-compose-e2e`
 
 ## Documentation
 
-- Update README.md if you change user-facing features
-- Add KDoc comments for public APIs
-- Update swagger definitions if you modify the API
+- Update `README.md`, `ui/README.md`, or `charts/pbuf-registry/README.md` if you change user-facing features
+- Regenerate Protobuf & OpenAPI/Swagger definitions (`make api`) if you modify `api/pbuf-registry/v1/`
 - Include examples for new features
 
 ## Community
