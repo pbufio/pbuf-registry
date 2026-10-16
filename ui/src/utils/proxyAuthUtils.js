@@ -13,7 +13,10 @@ const PUBLIC_PATH_REGEX = /^\/api\/v1\/(modules|metadata|drift)(\/|$)/
 
 export const isPublicReadEndpoint = (method = 'GET', url = '/api/v1/modules') => {
   const m = String(method || 'GET').toUpperCase()
-  const path = String(url || '').split('?')[0]
+  const rawPath = String(url || '').split('?')[0]
+  const path = rawPath.startsWith('/v1/') || rawPath === '/v1'
+    ? `/api${rawPath}`
+    : rawPath
   if (!PUBLIC_PATH_REGEX.test(path)) return false
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true
   if (m === 'POST') return PUBLIC_POST_ENDPOINTS.has(path)

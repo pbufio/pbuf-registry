@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => {
                 apiToken: env.API_TOKEN,
                 publicEnabled,
                 method: req.method,
-                url: req.url
+                url: req.originalUrl || req.url
               })
 
               if (headerValue) {

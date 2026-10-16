@@ -142,6 +142,8 @@ postgresql:
 
 ingress:
   enabled: false
+  # Target service when ui.enabled=true ("ui" or "api")
+  target: "ui"
   className: ""
   annotations: {}
     # kubernetes.io/ingress.class: nginx

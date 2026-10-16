@@ -48,7 +48,7 @@ func VendorRegistryModule(module *model.Module, client v1.RegistryClient, patche
 					continue
 				}
 				modulePath = filepath.Dir(modulePath)
-			} else if modulePath != "." && originalFilename != modulePath && !strings.HasPrefix(originalFilename, modulePath+"/") {
+			} else if modulePath != "." && originalFilename != modulePath && !strings.HasPrefix(originalFilename, modulePath+string(filepath.Separator)) {
 				continue
 			}
 
@@ -65,9 +65,15 @@ func VendorRegistryModule(module *model.Module, client v1.RegistryClient, patche
 		outputDir := filepath.Dir(originalFilename)
 
 		if module.GenerateOutputFolder != "" {
+			genDir := filepath.Join(module.GenerateOutputFolder, outputDir)
+			if module.OutputFolder != "" {
+				if rel, relErr := filepath.Rel(module.OutputFolder, outputDir); relErr == nil {
+					genDir = filepath.Join(module.GenerateOutputFolder, rel)
+				}
+			}
 			patched, patchErr := patcher.ApplyPatchers(
 				patchers,
-				strings.Replace(outputDir, module.OutputFolder, module.GenerateOutputFolder, 1),
+				genDir,
 				protoFileContent,
 			)
 			if patchErr != nil {

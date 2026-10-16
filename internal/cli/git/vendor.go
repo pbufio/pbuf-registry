@@ -97,9 +97,15 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		outputDir := filepath.Dir(outputPath)
 
 		if module.GenerateOutputFolder != "" {
+			genDir := filepath.Join(module.GenerateOutputFolder, outputDir)
+			if module.OutputFolder != "" {
+				if rel, relErr := filepath.Rel(module.OutputFolder, outputDir); relErr == nil {
+					genDir = filepath.Join(module.GenerateOutputFolder, rel)
+				}
+			}
 			patched, patchErr := patcher.ApplyPatchers(
 				patchers,
-				strings.Replace(outputDir, module.OutputFolder, module.GenerateOutputFolder, 1),
+				genDir,
 				content,
 			)
 			if patchErr != nil {

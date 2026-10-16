@@ -16,14 +16,6 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if ct is installed
-if ! command -v ct &> /dev/null; then
-    log_error "chart-testing (ct) is not installed."
-    log_info "Install it from: https://github.com/helm/chart-testing"
-    log_info "Or using Homebrew: brew install chart-testing"
-    exit 1
-fi
-
 # Check if helm is installed
 if ! command -v helm &> /dev/null; then
     log_error "helm is not installed."

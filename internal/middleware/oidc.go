@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	defaultJWKSCacheTTL = 15 * time.Minute
-	oidcHTTPTimeout     = 10 * time.Second
+	defaultJWKSCacheTTL    = 15 * time.Minute
+	minJWKSRefreshInterval = 5 * time.Second
+	oidcHTTPTimeout        = 10 * time.Second
 )
 
 // OIDCClaims holds the verified identity extracted from an OIDC JWT.
@@ -59,6 +60,7 @@ type OIDCVerifier struct {
 	cfg        config.OIDCConfig
 	httpClient *http.Client
 
+	refreshMu   sync.Mutex
 	mu          sync.RWMutex
 	keys        map[string]crypto.PublicKey
 	defaultKey  crypto.PublicKey
@@ -148,7 +150,7 @@ func (v *OIDCVerifier) getPublicKey(ctx context.Context, kid string) (crypto.Pub
 		return key, nil
 	}
 
-	if err := v.refreshKeys(ctx); err != nil {
+	if err := v.refreshKeys(ctx, kid); err != nil {
 		return nil, err
 	}
 
@@ -172,17 +174,29 @@ func (v *OIDCVerifier) lookupKeyLocked(kid string) (crypto.PublicKey, bool) {
 	return nil, false
 }
 
-func (v *OIDCVerifier) refreshKeys(ctx context.Context) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+func (v *OIDCVerifier) refreshKeys(ctx context.Context, kid string) error {
+	v.refreshMu.Lock()
+	defer v.refreshMu.Unlock()
 
+	v.mu.RLock()
+	_, ok := v.lookupKeyLocked(kid)
+	age := time.Since(v.lastFetched)
+	hasFetched := !v.lastFetched.IsZero()
 	jwksURL := v.jwksURL
+	v.mu.RUnlock()
+
+	if ok && age <= defaultJWKSCacheTTL {
+		return nil
+	}
+	if hasFetched && age < minJWKSRefreshInterval {
+		return nil
+	}
+
 	if jwksURL == "" {
 		discoveredURL, err := v.discoverJWKSURL(ctx)
 		if err != nil {
 			return err
 		}
-		v.jwksURL = discoveredURL
 		jwksURL = discoveredURL
 	}
 
@@ -228,9 +242,14 @@ func (v *OIDCVerifier) refreshKeys(ctx context.Context) error {
 		return errors.New("no valid signing keys found in JWKS")
 	}
 
+	v.mu.Lock()
+	if v.jwksURL == "" {
+		v.jwksURL = jwksURL
+	}
 	v.keys = newKeys
 	v.defaultKey = firstKey
 	v.lastFetched = time.Now()
+	v.mu.Unlock()
 	return nil
 }
 

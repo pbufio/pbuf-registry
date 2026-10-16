@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -108,29 +109,29 @@ func Vendor(config *model.Config, netrcAuth *netrc.Netrc, client v1.RegistryClie
 		case bsr.IsBSRModule(module):
 			err := bsr.VendorBSRModule(module, netrcAuth, patchers)
 			if err != nil {
-				log.Fatalf("failed to vendor BSR module %s: %v", module.Name, err)
+				return fmt.Errorf("failed to vendor BSR module %s: %w", module.Name, err)
 			}
 		case module.Repository == "":
 			if config.HasRegistry() {
 				if module.Name == "" {
-					log.Fatalf("no module name found for module: %v", module)
+					return fmt.Errorf("no module name found for module: %v", module)
 				}
 
 				if module.Tag == "" {
-					log.Fatalf("no module tag found for module: %v", module)
+					return fmt.Errorf("no module tag found for module: %v", module)
 				}
 
 				err := registry.VendorRegistryModule(module, client, patchers)
 				if err != nil {
-					log.Fatalf("failed to vendor module %s: %v", module.Name, err)
+					return fmt.Errorf("failed to vendor module %s: %w", module.Name, err)
 				}
 			} else {
-				log.Fatalf("no repository found for module: %s", module.Name)
+				return fmt.Errorf("no repository found for module: %s", module.Name)
 			}
 		default:
 			err := git.VendorGitModule(module, netrcAuth, patchers)
 			if err != nil {
-				log.Fatalf("failed to vendor module %s: %v", module.Repository, err)
+				return fmt.Errorf("failed to vendor module %s: %w", module.Repository, err)
 			}
 		}
 	}
@@ -142,7 +143,7 @@ func Vendor(config *model.Config, netrcAuth *netrc.Netrc, client v1.RegistryClie
 			log.Printf("vendoring transitive dependency: %s@%s", module.Name, module.Tag)
 			err := registry.VendorRegistryModule(module, client, patchers)
 			if err != nil {
-				log.Fatalf("failed to vendor transitive dependency %s: %v", module.Name, err)
+				return fmt.Errorf("failed to vendor transitive dependency %s: %w", module.Name, err)
 			}
 		}
 	}

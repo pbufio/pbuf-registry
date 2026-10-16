@@ -162,9 +162,13 @@ func VendorBSRModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		outputDir := filepath.Dir(targetRelPath)
 
 		if module.GenerateOutputFolder != "" {
+			genDir := filepath.Join(module.GenerateOutputFolder, outputDir)
+			if rel, relErr := filepath.Rel(outputRoot, outputDir); relErr == nil {
+				genDir = filepath.Join(module.GenerateOutputFolder, rel)
+			}
 			patched, patchErr := patcher.ApplyPatchers(
 				patchers,
-				strings.Replace(outputDir, outputRoot, module.GenerateOutputFolder, 1),
+				genDir,
 				content,
 			)
 			if patchErr != nil {
@@ -242,7 +246,11 @@ func downloadBSRFiles(ctx context.Context, baseURL, owner, repo, ref, token stri
 		}
 
 		if resp.StatusCode == http.StatusNotFound {
-			lastErr = fmt.Errorf("BSR endpoint %s returned 404", endpoint)
+			if msg := strings.TrimSpace(string(respBody)); msg != "" {
+				lastErr = fmt.Errorf("BSR endpoint %s returned 404: %s", endpoint, msg)
+			} else {
+				lastErr = fmt.Errorf("BSR endpoint %s returned 404", endpoint)
+			}
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {

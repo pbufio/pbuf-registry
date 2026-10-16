@@ -2,11 +2,12 @@ package patcher
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/yoheimuta/go-protoparser/v4"
 	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
 )
-import "github.com/yoheimuta/go-protoparser/v4"
 
 type GoPackagePatcher struct {
 	goModule string
@@ -29,8 +30,9 @@ func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 		return "", err
 	}
 
-	dirs := strings.Split(outputPath, "/")
-	goPackage := fmt.Sprintf(`option go_package = "%s/%s;%s";`, p.goModule, outputPath, dirs[len(dirs)-1])
+	normalizedPath := strings.Trim(strings.ReplaceAll(filepath.ToSlash(outputPath), `\`, "/"), "/")
+	dirs := strings.Split(normalizedPath, "/")
+	goPackage := fmt.Sprintf(`option go_package = "%s/%s;%s";`, p.goModule, normalizedPath, dirs[len(dirs)-1])
 
 	for _, option := range proto.ProtoBody.Options {
 		if option.OptionName == "go_package" {

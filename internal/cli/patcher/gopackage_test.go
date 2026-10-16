@@ -95,6 +95,18 @@ func TestGoPackagePatcher_Patch(t *testing.T) {
 			want:    `syntax = "proto3"; package pbufregistry.v1; option go_package = "github.com/pbufio/pbuf-registry/api/v1;v1"; message Module {}`,
 			wantErr: false,
 		},
+		{
+			name: "windows backslash output path",
+			fields: fields{
+				goModule: "github.com/pbufio/pbuf-registry",
+			},
+			args: args{
+				outputPath: `api\v1`,
+				content:    withPackageProtoFile,
+			},
+			want:    withPackageProtoFilePatched,
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

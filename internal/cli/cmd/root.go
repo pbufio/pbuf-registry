@@ -40,16 +40,6 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
-	if configNotFound {
-		rootCmd.AddCommand(CreateInitCmd())
-		return rootCmd
-	}
-
-	modulesConfig, err := modules.NewConfig(file)
-	if err != nil {
-		log.Fatalf("failed to create modules config: %v", err)
-	}
-
 	var netrcAuth *netrc.Netrc
 
 	usr, err := user.Current()
@@ -58,6 +48,18 @@ func NewRootCmd() *cobra.Command {
 		// Ignore error if .netrc doesn't exist - auth command will create it
 	} else {
 		log.Printf("failed to fetch current user: %v", err)
+	}
+
+	if configNotFound {
+		rootCmd.AddCommand(CreateInitCmd())
+		rootCmd.AddCommand(NewAuthCmd(nil, usr, netrcAuth))
+		rootCmd.AddCommand(NewLoginCmd(nil, usr, netrcAuth))
+		return rootCmd
+	}
+
+	modulesConfig, err := modules.NewConfig(file)
+	if err != nil {
+		log.Fatalf("failed to create modules config: %v", err)
 	}
 
 	if modulesConfig.HasRegistry() {
@@ -82,6 +84,7 @@ func NewRootCmd() *cobra.Command {
 		rootCmd.AddCommand(NewMetadataCmd(modulesConfig, metadataClient))
 	} else {
 		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, nil))
+		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
 		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
 	}
 
