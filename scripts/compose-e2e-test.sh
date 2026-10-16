@@ -10,8 +10,8 @@ export UI_PORT="${UI_PORT:-80}"
 export SERVER_STATIC_TOKEN="${SERVER_STATIC_TOKEN:-dev-admin-token}"
 
 WORK_DIR="$(mktemp -d)"
-export HOME="${WORK_DIR}/home"
-mkdir -p "${HOME}"
+PBUF_HOME="${WORK_DIR}/home"
+mkdir -p "${PBUF_HOME}"
 
 cleanup() {
   local exit_code=$?
@@ -84,6 +84,7 @@ export:
 EOF
 
 (
+  export HOME="${PBUF_HOME}"
   cd "${BASE_MOD_DIR}"
   "${PBUF_BIN}" auth "${SERVER_STATIC_TOKEN}"
   "${PBUF_BIN}" modules register
@@ -96,6 +97,7 @@ cp -R "${PROJECT_ROOT}/examples" "${EXAMPLES_DIR}"
 rm -rf "${EXAMPLES_DIR}/api"
 
 (
+  export HOME="${PBUF_HOME}"
   cd "${EXAMPLES_DIR}"
   "${PBUF_BIN}" auth "pbuf_user_dev_writer_token"
   "${PBUF_BIN}" modules register
@@ -104,6 +106,7 @@ rm -rf "${EXAMPLES_DIR}/api"
 
 echo "==> 3. Testing seeded reader token (read-only access + ACL write rejection)..."
 (
+  export HOME="${PBUF_HOME}"
   cd "${EXAMPLES_DIR}"
   "${PBUF_BIN}" auth "pbuf_user_dev_reader_token"
   "${PBUF_BIN}" modules get yourorg/hello-proto

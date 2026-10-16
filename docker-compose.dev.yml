@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: pbuf
       POSTGRES_DB: pbuf_registry
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready", "-d", "pbuf_registry" ]
+      test: [ "CMD-SHELL", "pg_isready -U pbuf -d pbuf_registry" ]
       interval: 5s
       timeout: 10s
       retries: 5
