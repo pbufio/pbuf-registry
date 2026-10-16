@@ -20,7 +20,7 @@ type RegistryRepository interface {
 	GetModule(ctx context.Context, name string) (*v1.Module, error)
 	ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error)
 	DeleteModule(ctx context.Context, name string) error
-	PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error)
+	PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies ...*v1.Dependency) (*v1.Module, error)
 	PushDraftModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies []*v1.Dependency) (*v1.Module, error)
 	PullModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
 	PullDraftModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
@@ -186,8 +186,19 @@ func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token stri
 }
 
 func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("could not begin transaction: %w", err)
+	}
+	defer func(tx pgx.Tx, ctx context.Context) {
+		err := tx.Rollback(ctx)
+		if err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.logger.Errorf("could not rollback transaction: %w", err)
+		}
+	}(tx, context.Background())
+
 	// delete all protofiles
-	res, err := r.pool.Exec(ctx,
+	res, err := tx.Exec(ctx,
 		"DELETE FROM protofiles WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
 		name)
 	if err != nil {
@@ -198,9 +209,11 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 		r.logger.Infof("deleted %d protofiles for module %s", res.RowsAffected(), name)
 	}
 
-	// delete all module dependencies
-	res, err = r.pool.Exec(ctx,
-		"DELETE FROM dependencies WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
+	// delete all module dependencies (both outgoing and incoming references)
+	res, err = tx.Exec(ctx,
+		`DELETE FROM dependencies
+		 WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))
+		    OR dependency_tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))`,
 		name)
 	if err != nil {
 		return fmt.Errorf("could not delete module dependencies from database: %w", err)
@@ -211,7 +224,7 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 	}
 
 	// delete all module tags
-	res, err = r.pool.Exec(ctx,
+	res, err = tx.Exec(ctx,
 		"DELETE FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1)",
 		name)
 	if err != nil {
@@ -223,7 +236,7 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 	}
 
 	// delete all module draft tags
-	res, err = r.pool.Exec(ctx,
+	res, err = tx.Exec(ctx,
 		"DELETE FROM draft_tags WHERE module_id = (SELECT id FROM modules WHERE name = $1)",
 		name)
 	if err != nil {
@@ -235,23 +248,26 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 	}
 
 	// delete module
-	res, err = r.pool.Exec(ctx,
+	res, err = tx.Exec(ctx,
 		"DELETE FROM modules WHERE name = $1",
 		name)
 	if err != nil {
 		return fmt.Errorf("could not delete module from database: %w", err)
 	}
 
-	if res.RowsAffected() > 0 {
-		r.logger.Infof("deleted module %s", name)
-	} else {
+	if res.RowsAffected() == 0 {
 		return errors.New("module not found")
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("could not commit module deletion: %w", err)
+	}
+
+	r.logger.Infof("deleted module %s", name)
 	return nil
 }
 
-func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile) (*v1.Module, error) {
+func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, protofiles []*v1.ProtoFile, dependencies ...*v1.Dependency) (*v1.Module, error) {
 	// check if module exists
 	module, err := r.GetModule(ctx, name)
 	if err != nil {
@@ -262,11 +278,13 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 		return nil, errors.New("module not found")
 	}
 
-	// check if tag exists
-	for _, t := range module.Tags {
-		if t == tag {
-			return nil, errors.New("tag already exists")
-		}
+	// Check if tag exists directly in the tags table (GetModule caps module.Tags at LIMIT 10)
+	existingTagId, err := r.GetModuleTagId(ctx, name, tag)
+	if err != nil {
+		return nil, fmt.Errorf("could not check if tag exists: %w", err)
+	}
+	if existingTagId != "" {
+		return nil, errors.New("tag already exists")
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -306,6 +324,11 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 		if err != nil {
 			return nil, fmt.Errorf("could not insert protofile into database: %w", err)
 		}
+	}
+
+	// insert dependencies atomically within the same transaction
+	if err := r.insertDependenciesTx(ctx, tx, tagId, dependencies); err != nil {
+		return nil, err
 	}
 
 	err = tx.Commit(ctx)
@@ -410,8 +433,19 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 		return ErrTagNotFound
 	}
 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("could not begin transaction: %w", err)
+	}
+	defer func(tx pgx.Tx, ctx context.Context) {
+		err := tx.Rollback(ctx)
+		if err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.logger.Errorf("could not rollback transaction: %w", err)
+		}
+	}(tx, context.Background())
+
 	// delete protofiles
-	res, err := r.pool.Exec(ctx,
+	res, err := tx.Exec(ctx,
 		"DELETE FROM protofiles WHERE tag_id = $1",
 		tagId)
 	if err != nil {
@@ -423,7 +457,7 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	}
 
 	// delete dependencies
-	res, err = r.pool.Exec(ctx,
+	res, err = tx.Exec(ctx,
 		"DELETE FROM dependencies WHERE tag_id = $1 OR dependency_tag_id = $1",
 		tagId)
 	if err != nil {
@@ -435,19 +469,22 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	}
 
 	// delete tag
-	res, err = r.pool.Exec(ctx,
+	res, err = tx.Exec(ctx,
 		"DELETE FROM tags WHERE id = $1",
 		tagId)
 	if err != nil {
 		return fmt.Errorf("could not delete tag from database: %w", err)
 	}
 
-	if res.RowsAffected() > 0 {
-		r.logger.Infof("deleted tag %s", tag)
-	} else {
+	if res.RowsAffected() == 0 {
 		return ErrTagNotFound
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("could not commit tag deletion: %w", err)
+	}
+
+	r.logger.Infof("deleted tag %s", tag)
 	return nil
 }
 
@@ -462,17 +499,42 @@ func (r *registryRepo) AddModuleDependencies(ctx context.Context, name string, t
 		return ErrTagNotFound
 	}
 
-	// for each dependency find tag id and insert into dependencies table
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("could not begin transaction: %w", err)
+	}
+	defer func(tx pgx.Tx, ctx context.Context) {
+		err := tx.Rollback(ctx)
+		if err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.logger.Errorf("could not rollback transaction: %w", err)
+		}
+	}(tx, context.Background())
+
+	if err := r.insertDependenciesTx(ctx, tx, tagId, dependencies); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("could not commit dependencies: %w", err)
+	}
+
+	return nil
+}
+
+func (r *registryRepo) insertDependenciesTx(ctx context.Context, tx pgx.Tx, tagId string, dependencies []*v1.Dependency) error {
 	for _, dependency := range dependencies {
+		if dependency == nil {
+			continue
+		}
 		var dependencyTagId string
-		err := r.pool.QueryRow(ctx,
+		err := tx.QueryRow(ctx,
 			"SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
 			dependency.Name, dependency.Tag).Scan(&dependencyTagId)
 		if err != nil {
 			return fmt.Errorf("could not find tag %s for module %s: %w", dependency.Tag, dependency.Name, err)
 		}
 
-		_, err = r.pool.Exec(ctx,
+		_, err = tx.Exec(ctx,
 			"INSERT INTO dependencies (tag_id, dependency_tag_id) VALUES ($1, $2)",
 			tagId, dependencyTagId)
 		if err != nil {

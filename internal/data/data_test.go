@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -1190,5 +1191,46 @@ func Test_registryRepository_ListModules_SQLInjectionAndBounds(t *testing.T) {
 	// Invalid base64 token must return an error
 	_, _, err = r.ListModules(ctx, 10, "%%%not-base64%%%")
 	require.Error(t, err)
+}
+
+func Test_registryRepository_PushModule_MoreThan10TagsAndAtomicDeps(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	ts := time.Now().Format("20060102150405")
+	moduleName := "test-many-tags-" + ts
+	err := r.RegisterModule(ctx, moduleName)
+	require.NoError(t, err)
+
+	sampleProtos := []*v1.ProtoFile{
+		{Filename: "test.proto", Content: `syntax = "proto3"; package test; message M {}`},
+	}
+
+	// Push 12 tags so the oldest tag (v1.0.0) falls outside GetModule's LIMIT 10
+	for i := 0; i < 12; i++ {
+		tag := fmt.Sprintf("v1.0.%d", i)
+		_, err := r.PushModule(ctx, moduleName, tag, sampleProtos)
+		require.NoError(t, err)
+	}
+
+	// Re-pushing the oldest tag (v1.0.0) must still fail with "tag already exists"
+	_, err = r.PushModule(ctx, moduleName, "v1.0.0", sampleProtos)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tag already exists")
+
+	// Pushing a new tag with a missing dependency must roll back the tag creation atomically
+	_, err = r.PushModule(ctx, moduleName, "v2.0.0", sampleProtos, &v1.Dependency{
+		Name: "non-existent/dep-module",
+		Tag:  "v1.0.0",
+	})
+	require.Error(t, err)
+
+	// Verify v2.0.0 was rolled back and can now be pushed cleanly without the broken dependency
+	tagId, err := r.GetModuleTagId(ctx, moduleName, "v2.0.0")
+	require.NoError(t, err)
+	assert.Empty(t, tagId)
+
+	_, err = r.PushModule(ctx, moduleName, "v2.0.0", sampleProtos)
+	require.NoError(t, err)
 }
 

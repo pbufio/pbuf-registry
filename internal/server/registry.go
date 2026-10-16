@@ -151,15 +151,9 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		return module, nil
 	}
 
-	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles)
+	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles, request.Dependencies...)
 	if err != nil {
 		r.logger.Infof("error pushing module: %v", err)
-		return nil, err
-	}
-
-	err = r.registryRepository.AddModuleDependencies(ctx, name, tag, request.Dependencies)
-	if err != nil {
-		r.logger.Infof("error while adding dependencies for module: %v", err)
 		return nil, err
 	}
 
