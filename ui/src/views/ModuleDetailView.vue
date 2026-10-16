@@ -132,6 +132,8 @@ const viewVersion = (tag) => {
 
 const vendorConfig = (tag) => {
   return `# Add to your pbuf.yaml:
+version: v1
+domain: https://pbuf.io
 modules:
   - name: ${moduleName.value}
     tag: ${tag}
@@ -259,6 +261,8 @@ onMounted(() => {
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Advanced: Vendor with code generation path</h3>
               <PCodeBlock :code="`# Add to your pbuf.yaml:
+version: v1
+domain: https://pbuf.io
 modules:
   - name: ${module.name}
     tag: ${module.tags[0] || 'v1.0.0'}

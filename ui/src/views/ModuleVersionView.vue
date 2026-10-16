@@ -363,6 +363,8 @@ onMounted(() => {
         <div class="mb-8">
           <h2 class="text-2xl font-semibold mb-4">Vendor This Version</h2>
           <PCodeBlock :code="`# Add to your pbuf.yaml:
+version: v1
+domain: https://pbuf.io
 modules:
   - name: ${moduleName}
     tag: ${tag}
