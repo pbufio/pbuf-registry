@@ -129,7 +129,7 @@ echo "==> 7. Triggering breaking change & testing drift list / module / dependen
   EVENT_ID="$(printf '%s' "${DRIFT_LIST}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["events"][0]["id"])')"
   ACK_OUT="$("${PBUF_BIN}" drift acknowledge "${EVENT_ID}" --by e2e-ci)"
   echo "${ACK_OUT}" | grep -q '"acknowledged": true'
-  echo "${ACK_OUT}" | grep -q '"acknowledgedBy": "e2e-ci"'
+  echo "${ACK_OUT}" | grep -q '"acknowledged_by": "e2e-ci"'
 
   # Default --unacknowledged-only=true should exclude the acknowledged event
   if "${PBUF_BIN}" drift list | grep -q "${EVENT_ID}"; then
