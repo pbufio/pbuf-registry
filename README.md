@@ -526,6 +526,9 @@ pbuf drift module myorg/payment-service --tag v2.0.0
 # Print a tabular report of dependency drift status and recommendations
 pbuf drift dependencies myorg/order-service
 pbuf drift dependencies myorg/order-service --tag v1.4.0
+
+# Acknowledge a drift event by ID
+pbuf drift acknowledge <event-id> --by alice
 ```
 
 ---

@@ -294,6 +294,36 @@ func (_m *DriftRepository) GetUnacknowledgedDriftEvents(ctx context.Context) ([]
 	return r0, r1
 }
 
+// GetDriftEvents provides a mock function with given fields: ctx, unacknowledgedOnly
+func (_m *DriftRepository) GetDriftEvents(ctx context.Context, unacknowledgedOnly bool) ([]model.DriftEvent, error) {
+	ret := _m.Called(ctx, unacknowledgedOnly)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDriftEvents")
+	}
+
+	var r0 []model.DriftEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bool) ([]model.DriftEvent, error)); ok {
+		return rf(ctx, unacknowledgedOnly)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, bool) []model.DriftEvent); ok {
+		r0 = rf(ctx, unacknowledgedOnly)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]model.DriftEvent)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, bool) error); ok {
+		r1 = rf(ctx, unacknowledgedOnly)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // SaveDriftEvents provides a mock function with given fields: ctx, events
 func (_m *DriftRepository) SaveDriftEvents(ctx context.Context, events []model.DriftEvent) error {
 	ret := _m.Called(ctx, events)

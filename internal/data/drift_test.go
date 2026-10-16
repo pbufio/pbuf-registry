@@ -319,18 +319,35 @@ func TestDriftRepository_AcknowledgeDriftEvent(t *testing.T) {
 	}
 	assert.False(t, found, "acknowledged event should not be in unacknowledged list")
 
-	// Verify event details in module events
-	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleID, "")
+	// Verify event details in module events and GetDriftEvents(ctx, false)
+	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
 	require.NoError(t, err)
 
+	foundInModule := false
 	for _, e := range moduleEvents {
 		if e.ID == eventID {
+			foundInModule = true
 			assert.True(t, e.Acknowledged)
 			assert.Equal(t, "test-user", e.AcknowledgedBy)
 			assert.NotNil(t, e.AcknowledgedAt)
 			break
 		}
 	}
+	assert.True(t, foundInModule, "acknowledged event should be returned by GetDriftEventsForModule")
+
+	allEvents, err := suite.driftRepository.GetDriftEvents(ctx, false)
+	require.NoError(t, err)
+	foundInAll := false
+	for _, e := range allEvents {
+		if e.ID == eventID {
+			foundInAll = true
+			assert.True(t, e.Acknowledged)
+			assert.Equal(t, "test-user", e.AcknowledgedBy)
+			assert.NotNil(t, e.AcknowledgedAt)
+			break
+		}
+	}
+	assert.True(t, foundInAll, "acknowledged event should be returned by GetDriftEvents(ctx, false)")
 }
 
 func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {

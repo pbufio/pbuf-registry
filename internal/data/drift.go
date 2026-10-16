@@ -33,6 +33,8 @@ type DriftRepository interface {
 	SaveDriftEvents(ctx context.Context, events []model.DriftEvent) error
 	// GetUnacknowledgedDriftEvents returns all unacknowledged drift events
 	GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error)
+	// GetDriftEvents returns drift events, optionally filtered to only unacknowledged events
+	GetDriftEvents(ctx context.Context, unacknowledgedOnly bool) ([]model.DriftEvent, error)
 	// AcknowledgeDriftEvent marks a drift event as acknowledged
 	AcknowledgeDriftEvent(ctx context.Context, eventID string, acknowledgedBy string) error
 	// GetDriftEventsForModule returns drift events for a specific module by name
@@ -314,29 +316,37 @@ func (d *driftRepo) SaveDriftEvents(ctx context.Context, events []model.DriftEve
 }
 
 func (d *driftRepo) GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error) {
+	return d.GetDriftEvents(ctx, true)
+}
+
+func (d *driftRepo) GetDriftEvents(ctx context.Context, unacknowledgedOnly bool) ([]model.DriftEvent, error) {
 	var events []model.DriftEvent
 
-	rows, err := d.pool.Query(ctx, `
-		SELECT de.id, de.module_id, m.name, de.tag_id, t.tag, de.filename, de.event_type, de.previous_hash, de.current_hash, de.severity, de.detected_at
+	query := `
+		SELECT de.id, de.module_id, m.name, de.tag_id, t.tag, de.filename, de.event_type, de.previous_hash, de.current_hash, de.severity, de.detected_at, de.acknowledged, de.acknowledged_at, de.acknowledged_by
 		FROM drift_events de
 		JOIN modules m ON de.module_id = m.id
-		JOIN tags t ON de.tag_id = t.id
-		WHERE de.acknowledged = false
-		ORDER BY de.detected_at DESC
-	`)
+		JOIN tags t ON de.tag_id = t.id`
+	if unacknowledgedOnly {
+		query += ` WHERE de.acknowledged = false`
+	}
+	query += ` ORDER BY de.detected_at DESC`
+
+	rows, err := d.pool.Query(ctx, query)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return events, nil
 		}
-		d.logger.Errorf("error getting unacknowledged drift events: %v", err)
+		d.logger.Errorf("error getting drift events: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var event model.DriftEvent
-		var previousHash, currentHash *string
-		if err := rows.Scan(&event.ID, &event.ModuleID, &event.ModuleName, &event.TagID, &event.TagName, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt); err != nil {
+		var previousHash, currentHash, acknowledgedBy *string
+		var acknowledgedAt *time.Time
+		if err := rows.Scan(&event.ID, &event.ModuleID, &event.ModuleName, &event.TagID, &event.TagName, &event.Filename, &event.EventType, &previousHash, &currentHash, &event.Severity, &event.DetectedAt, &event.Acknowledged, &acknowledgedAt, &acknowledgedBy); err != nil {
 			d.logger.Errorf("error scanning drift event: %v", err)
 			return nil, err
 		}
@@ -346,10 +356,16 @@ func (d *driftRepo) GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.D
 		if currentHash != nil {
 			event.CurrentHash = *currentHash
 		}
+		if acknowledgedAt != nil {
+			event.AcknowledgedAt = acknowledgedAt
+		}
+		if acknowledgedBy != nil {
+			event.AcknowledgedBy = *acknowledgedBy
+		}
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
-		d.logger.Errorf("error iterating unacknowledged drift events: %v", err)
+		d.logger.Errorf("error iterating drift events: %v", err)
 		return nil, err
 	}
 

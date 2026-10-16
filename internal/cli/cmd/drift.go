@@ -23,6 +23,7 @@ func NewDriftCmd(_ *model.Config, client v1.DriftServiceClient) *cobra.Command {
 	driftCmd.AddCommand(newListDriftEventsCmd(client))
 	driftCmd.AddCommand(newGetModuleDriftEventsCmd(client))
 	driftCmd.AddCommand(newGetModuleDependencyDriftStatusCmd(client))
+	driftCmd.AddCommand(newAcknowledgeDriftEventCmd(client))
 
 	return driftCmd
 }
@@ -158,4 +159,33 @@ func printDependencyDriftStatuses(w io.Writer, moduleName, tagName string, statu
 	}
 
 	return tw.Flush()
+}
+
+func newAcknowledgeDriftEventCmd(client v1.DriftServiceClient) *cobra.Command {
+	ackCmd := &cobra.Command{
+		Use:   "acknowledge [event_id]",
+		Short: "Acknowledge a drift event",
+		Long:  "Acknowledge is a command to mark a drift event as acknowledged",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eventID := args[0]
+			acknowledgedBy, err := cmd.Flags().GetString("by")
+			if err != nil {
+				return err
+			}
+
+			resp, err := client.AcknowledgeDriftEvent(cmd.Context(), &v1.AcknowledgeDriftEventRequest{
+				EventId:        eventID,
+				AcknowledgedBy: acknowledgedBy,
+			})
+			if err != nil {
+				return err
+			}
+
+			return printJSON(resp)
+		},
+	}
+
+	ackCmd.Flags().String("by", "", "identifier of the user acknowledging the event")
+	return ackCmd
 }
