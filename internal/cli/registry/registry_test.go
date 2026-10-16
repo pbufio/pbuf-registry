@@ -48,6 +48,10 @@ func TestVendorRegistryModule(t *testing.T) {
 					Filename: "root.proto",
 					Content:  "syntax = \"proto3\";\n",
 				},
+				{
+					Filename: "go.mod",
+					Content:  "module evil\n",
+				},
 			},
 		},
 	}
@@ -82,6 +86,16 @@ func TestVendorRegistryModule(t *testing.T) {
 	require.NoError(t, VendorRegistryModule(rootMod, client, nil))
 	_, err = os.Stat(filepath.Join(outDir, "root.proto"))
 	require.NoError(t, err)
+
+	// Unfiltered vendoring skips non-.proto files such as go.mod
+	unfilteredMod := &model.Module{
+		Name:         "org/users",
+		Tag:          "v1.0.0",
+		OutputFolder: outDir,
+	}
+	require.NoError(t, VendorRegistryModule(unfilteredMod, client, nil))
+	_, err = os.Stat(filepath.Join(outDir, "go.mod"))
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestCollectProtoFilesInDirs(t *testing.T) {

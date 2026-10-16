@@ -34,7 +34,7 @@ func VendorRegistryModule(module *model.Module, client v1.RegistryClient, patche
 
 	for _, protoFile := range response.Protofiles {
 		originalFilename := filepath.Clean(protoFile.Filename)
-		if originalFilename == "." || strings.HasPrefix(originalFilename, "..") || filepath.IsAbs(originalFilename) {
+		if originalFilename == "." || strings.HasPrefix(originalFilename, "..") || filepath.IsAbs(originalFilename) || !strings.HasSuffix(originalFilename, ".proto") {
 			continue
 		}
 		protoFileContent := protoFile.Content

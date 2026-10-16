@@ -106,7 +106,7 @@ func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCC
 
 		kid, _ := token.Header["kid"].(string)
 		return v.getPublicKey(ctx, kid)
-	})
+	}, jwtv5.WithExpirationRequired())
 	if err != nil || !token.Valid {
 		return nil, fmt.Errorf("invalid oidc token: %w", err)
 	}

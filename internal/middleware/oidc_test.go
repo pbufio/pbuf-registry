@@ -274,4 +274,25 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 		_, err := handler(sCtx, nil)
 		require.Error(t, err)
 	})
+
+	t.Run("missing expiration is rejected", func(t *testing.T) {
+		rawJWT := signTestJWT(t, privKey, kid, jwtv5.MapClaims{
+			"iss":   issuerURL,
+			"sub":   "user-sub-123",
+			"aud":   "pbuf-registry",
+			"email": "alice@example.com",
+		})
+
+		handler := authMW(func(_ context.Context, _ interface{}) (interface{}, error) {
+			return "ok", nil
+		})
+
+		sCtx := transport.NewServerContext(
+			context.Background(),
+			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer "+rawJWT)},
+		)
+
+		_, err := handler(sCtx, nil)
+		require.Error(t, err)
+	})
 }

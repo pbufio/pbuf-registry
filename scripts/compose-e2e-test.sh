@@ -6,6 +6,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 PBUF_BIN="${PROJECT_ROOT}/bin/pbuf"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pbuf-registry-e2e}"
 export UI_PORT="${UI_PORT:-80}"
 export SERVER_STATIC_TOKEN="${SERVER_STATIC_TOKEN:-dev-admin-token}"
 
