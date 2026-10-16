@@ -67,3 +67,38 @@ func TestRegisterService(t *testing.T) {
 		t.Errorf("expected module name to be hello, got %s", module.Name)
 	}
 }
+
+func TestListModules_PageSizeClamping(t *testing.T) {
+	ctx := context.Background()
+
+	registryRepository := &mocks.RegistryRepository{}
+	metadataRepository := &mocks.MetadataRepository{}
+	srv := NewRegistryServer(registryRepository, metadataRepository, nil)
+
+	// Negative pageSize should clamp to defaultPageSize (10)
+	registryRepository.On("ListModules", mock.Anything, 10, "tok-1").
+		Return([]*v1.Module{{Name: "m1"}}, "next-1", nil).Once()
+
+	resp, err := srv.ListModules(ctx, &v1.ListModulesRequest{PageSize: -10, PageToken: "tok-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Modules) != 1 || resp.NextPageToken != "next-1" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	// Excessive pageSize (>1000) should clamp to 1000
+	registryRepository.On("ListModules", mock.Anything, 1000, "tok-2").
+		Return([]*v1.Module{{Name: "m2"}}, "", nil).Once()
+
+	resp, err = srv.ListModules(ctx, &v1.ListModulesRequest{PageSize: 99999, PageToken: "tok-2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Modules) != 1 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	registryRepository.AssertExpectations(t)
+}
+

@@ -88,8 +88,11 @@ func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleReq
 
 func (r *RegistryServer) ListModules(ctx context.Context, request *v1.ListModulesRequest) (*v1.ListModulesResponse, error) {
 	pageSize := int(request.PageSize)
-	if pageSize == 0 {
+	if pageSize <= 0 {
 		pageSize = defaultPageSize
+	}
+	if pageSize > 1000 {
+		pageSize = 1000
 	}
 
 	modules, nextPageToken, err := r.registryRepository.ListModules(ctx, pageSize, request.PageToken)
