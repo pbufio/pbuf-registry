@@ -121,6 +121,16 @@ func (f *fakeDriftClient) GetModuleDependencyDriftStatus(_ context.Context, _ *v
 	}, nil
 }
 
+func (f *fakeDriftClient) AcknowledgeDriftEvent(_ context.Context, in *v1.AcknowledgeDriftEventRequest, _ ...grpc.CallOption) (*v1.AcknowledgeDriftEventResponse, error) {
+	return &v1.AcknowledgeDriftEventResponse{
+		Event: &v1.DriftEvent{
+			Id:             in.EventId,
+			Acknowledged:   true,
+			AcknowledgedBy: in.AcknowledgedBy,
+		},
+	}, nil
+}
+
 func TestSaveTokenToNetrcAndAuthCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	usr := &user.User{HomeDir: tmpDir}
@@ -215,8 +225,10 @@ func TestUsersMetadataAndDriftCommands(t *testing.T) {
 	driftCmd.SetOut(&out)
 	for _, args := range [][]string{
 		{"list"},
+		{"list", "--unacknowledged-only=false"},
 		{"module", "org/hello", "--tag", "v1.0.0"},
 		{"dependencies", "org/hello", "--tag", "v1.0.0"},
+		{"acknowledge", "evt-123", "--by", "alice"},
 	} {
 		driftCmd.SetArgs(args)
 		require.NoError(t, driftCmd.Execute())

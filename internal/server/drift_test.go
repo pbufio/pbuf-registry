@@ -89,7 +89,7 @@ func TestDriftServer_NilRequest_ReturnsInvalidRequest(t *testing.T) {
 func TestDriftServer_ListDriftEvents_GRPC(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("success unacknowledged only", func(t *testing.T) {
 		driftRepo := mocks.NewDriftRepository(t)
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
@@ -123,7 +123,7 @@ func TestDriftServer_ListDriftEvents_GRPC(t *testing.T) {
 
 		driftRepo.On("GetUnacknowledgedDriftEvents", mock.Anything).Return(events, nil).Once()
 
-		resp, err := client.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
+		resp, err := client.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{UnacknowledgedOnly: true})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -141,12 +141,48 @@ func TestDriftServer_ListDriftEvents_GRPC(t *testing.T) {
 		}
 	})
 
+	t.Run("success all events including acknowledged", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		detectedAt := time.Now().UTC().Truncate(time.Second)
+		ackedAt := detectedAt.Add(time.Minute)
+		events := []model.DriftEvent{
+			{
+				ID:             "event-acked",
+				ModuleID:       "module-1",
+				TagID:          "tag-1",
+				Filename:       "test.proto",
+				EventType:      model.DriftEventTypeModified,
+				Severity:       model.DriftSeverityWarning,
+				DetectedAt:     detectedAt,
+				Acknowledged:   true,
+				AcknowledgedAt: &ackedAt,
+				AcknowledgedBy: "alice",
+			},
+		}
+
+		driftRepo.On("GetDriftEvents", mock.Anything, false).Return(events, nil).Once()
+
+		resp, err := client.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{UnacknowledgedOnly: false})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.GetEvents()) != 1 {
+			t.Fatalf("expected 1 event, got %d", len(resp.GetEvents()))
+		}
+		if !resp.GetEvents()[0].GetAcknowledged() || resp.GetEvents()[0].GetAcknowledgedBy() != "alice" {
+			t.Fatalf("expected acknowledged event by alice, got %+v", resp.GetEvents()[0])
+		}
+	})
+
 	t.Run("empty list", func(t *testing.T) {
 		driftRepo := mocks.NewDriftRepository(t)
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("GetUnacknowledgedDriftEvents", mock.Anything).Return([]model.DriftEvent{}, nil).Once()
+		driftRepo.On("GetDriftEvents", mock.Anything, false).Return([]model.DriftEvent{}, nil).Once()
 
 		resp, err := client.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
 		if err != nil {
@@ -162,7 +198,7 @@ func TestDriftServer_ListDriftEvents_GRPC(t *testing.T) {
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("GetUnacknowledgedDriftEvents", mock.Anything).Return(nil, errors.New("db")).Once()
+		driftRepo.On("GetDriftEvents", mock.Anything, false).Return(nil, errors.New("db")).Once()
 
 		_, err := client.ListDriftEvents(ctx, &v1.ListDriftEventsRequest{})
 		requireStatusCode(t, err, codes.Internal)

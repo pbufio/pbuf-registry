@@ -32,15 +32,23 @@ func NewDriftServer(driftRepo data.DriftRepository, logger log.Logger) *DriftSer
 	}
 }
 
-// ListDriftEvents returns all unacknowledged drift events
+// ListDriftEvents returns drift events, optionally filtered to only unacknowledged events
 func (s *DriftServer) ListDriftEvents(ctx context.Context, request *v1.ListDriftEventsRequest) (*v1.ListDriftEventsResponse, error) {
 	if request == nil {
 		return nil, ErrInvalidRequest
 	}
 
-	events, err := s.driftRepo.GetUnacknowledgedDriftEvents(ctx)
+	var (
+		events []model.DriftEvent
+		err    error
+	)
+	if request.UnacknowledgedOnly {
+		events, err = s.driftRepo.GetUnacknowledgedDriftEvents(ctx)
+	} else {
+		events, err = s.driftRepo.GetDriftEvents(ctx, false)
+	}
 	if err != nil {
-		s.logger.Errorf("failed to get unacknowledged drift events: %v", err)
+		s.logger.Errorf("failed to get drift events: %v", err)
 		return nil, kerrors.InternalServer("DRIFT_EVENTS_FETCH_FAILED", "failed to fetch drift events")
 	}
 
