@@ -6,6 +6,12 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-wip.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create/publish (e.g. v0.8.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,31 +20,61 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Resolve and Ensure Release Tag
+        id: meta
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(rc|wip)\.[0-9]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
+            exit 1
+          fi
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git config user.name "$GITHUB_ACTOR"
+            git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *"rc"* ]] || [[ "$TAG" == *"wip"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Go Environment
         uses: actions/setup-go@v5
         with:
           go-version: 1.25.x
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Docker Login DO
-        run: doctl registry login
-
       - name: Docker Login GHCR
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install doctl (Optional)
+        if: env.DO_TOKEN != ''
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Docker Login DO (Optional)
+        if: env.DO_TOKEN != ''
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        run: doctl registry login
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -46,30 +82,42 @@ jobs:
           version: v2.7
 
       - name: Test
-        run: make test
+        run: make test && make test-ui
 
-      - name: Docker Build
+      - name: Build and Push Server Image
         env:
-          REGISTRY_VERSION: ${{ github.ref_name }}
-        run: make docker
-
-      - name: Docker Push DO
-        run: docker push registry.digitalocean.com/pbuf/registry:${{ github.ref_name }}
-
-      - name: Docker Tag GHCR
-        run: docker tag registry.digitalocean.com/pbuf/registry:${{ github.ref_name }} ghcr.io/pbufio/registry:${{ github.ref_name }}
-
-      - name: Docker Push GHCR
-        run: docker push ghcr.io/pbufio/registry:${{ github.ref_name }}
+          REGISTRY_VERSION: ${{ steps.meta.outputs.tag }}
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        run: |
+          make build-docker
+          docker push ghcr.io/pbufio/registry:${REGISTRY_VERSION}
+          docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} ghcr.io/pbufio/pbuf-registry:${REGISTRY_VERSION}
+          docker push ghcr.io/pbufio/pbuf-registry:${REGISTRY_VERSION}
+          if [ "${{ steps.meta.outputs.is_prerelease }}" = "false" ]; then
+            docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} ghcr.io/pbufio/registry:latest
+            docker push ghcr.io/pbufio/registry:latest
+            docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} ghcr.io/pbufio/pbuf-registry:latest
+            docker push ghcr.io/pbufio/pbuf-registry:latest
+          fi
+          if [ -n "$DO_TOKEN" ]; then
+            docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION}
+            docker push registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION}
+          fi
 
       - name: Build and Push Web UI Image
         env:
-          REGISTRY_VERSION: ${{ github.ref_name }}
+          REGISTRY_VERSION: ${{ steps.meta.outputs.tag }}
         run: |
           make build-docker-ui
-          docker push ghcr.io/pbufio/pbuf-registry-ui:${{ github.ref_name }}
-          docker tag ghcr.io/pbufio/pbuf-registry-ui:${{ github.ref_name }} ghcr.io/pbufio/registry-ui:${{ github.ref_name }}
-          docker push ghcr.io/pbufio/registry-ui:${{ github.ref_name }}
+          docker push ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION}
+          docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/registry-ui:${REGISTRY_VERSION}
+          docker push ghcr.io/pbufio/registry-ui:${REGISTRY_VERSION}
+          if [ "${{ steps.meta.outputs.is_prerelease }}" = "false" ]; then
+            docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/pbuf-registry-ui:latest
+            docker push ghcr.io/pbufio/pbuf-registry-ui:latest
+            docker tag ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_VERSION} ghcr.io/pbufio/registry-ui:latest
+            docker push ghcr.io/pbufio/registry-ui:latest
+          fi
 
       - name: Release CLI Binaries with GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -79,61 +127,113 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.meta.outputs.tag }}
 
   release_charts:
     runs-on: ubuntu-latest
-    if: "!contains(github.ref_name, 'rc') && !contains(github.ref_name, 'wip')"
+    needs: release
+    if: needs.release.outputs.is_prerelease == 'false'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
       - name: Install Helm
         uses: azure/setup-helm@v4
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          charts_dir: charts
+      - name: Package, Push OCI Chart to GHCR, and Attach to GitHub Release
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          CHART_VERSION="${TAG#v}"
+          mkdir -p .cr-release-packages
+          helm lint charts/pbuf-registry/
+          helm package charts/pbuf-registry/ --version "${CHART_VERSION}" --app-version "${TAG}" --destination .cr-release-packages
+
+          echo "${GH_TOKEN}" | helm registry login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          helm push ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" oci://ghcr.io/pbufio/charts
+
+          gh release upload "${TAG}" ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" --clobber
+
+      - name: Ensure gh-pages Branch Exists and Update Helm Repo Index
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          CHART_VERSION="${TAG#v}"
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+          WORKTREE_DIR="$(mktemp -d)"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add "${WORKTREE_DIR}" origin/gh-pages
+            git -C "${WORKTREE_DIR}" checkout -B gh-pages
+          else
+            git worktree add --detach "${WORKTREE_DIR}"
+            git -C "${WORKTREE_DIR}" checkout --orphan gh-pages
+            git -C "${WORKTREE_DIR}" rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          cp ".cr-release-packages/pbuf-registry-${CHART_VERSION}.tgz" "${WORKTREE_DIR}/"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          if [ -f "${WORKTREE_DIR}/index.yaml" ]; then
+            helm repo index .cr-release-packages --url "${DOWNLOAD_URL}" --merge "${WORKTREE_DIR}/index.yaml"
+          else
+            helm repo index .cr-release-packages --url "${DOWNLOAD_URL}"
+          fi
+          cp .cr-release-packages/index.yaml "${WORKTREE_DIR}/index.yaml"
+          rm -f "${WORKTREE_DIR}/pbuf-registry-${CHART_VERSION}.tgz"
+
+          git -C "${WORKTREE_DIR}" add index.yaml
+          if ! git -C "${WORKTREE_DIR}" diff --cached --quiet; then
+            git -C "${WORKTREE_DIR}" commit -m "chore(charts): release pbuf-registry-${CHART_VERSION}"
+            git -C "${WORKTREE_DIR}" push origin gh-pages
+          fi
 
   upload_proto:
     runs-on: ubuntu-latest
+    needs: release
+    env:
+      PBUF_TOKEN: ${{ secrets.PBUF_CLOUD_TOKEN }}
+      PBUF_CA: ${{ secrets.PBUF_CA_CERT }}
+      TAG: ${{ needs.release.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        if: env.PBUF_TOKEN != ''
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup pbuf cli
-        id: pbuf-setup
-        uses: pbufio/pbuf-setup-action@v1.2.0
+      - name: Setup Go Environment
+        if: env.PBUF_TOKEN != ''
+        uses: actions/setup-go@v5
         with:
-          pbuf_token: ${{ secrets.PBUF_CLOUD_TOKEN }}
+          go-version: 1.25.x
+
+      - name: Build pbuf CLI
+        if: env.PBUF_TOKEN != ''
+        run: |
+          make build-cli
+          sudo install -m 0755 ./bin/pbuf /usr/local/bin/pbuf
 
       - name: Install custom CA certificate
+        if: env.PBUF_TOKEN != '' && env.PBUF_CA != ''
         run: |
           sudo apt-get install -y ca-certificates
-          mkdir -p /usr/local/share/ca-certificates
-          echo "${{ secrets.PBUF_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/pbuf.crt
+          sudo mkdir -p /usr/local/share/ca-certificates
+          echo "$PBUF_CA" | sudo tee /usr/local/share/ca-certificates/pbuf.crt >/dev/null
           sudo update-ca-certificates
 
-      - name: Register Module
-        id: pbuf-register
-        run: pbuf modules register
-
-      - name: Push Module Tag
-        id: pbuf-push
+      - name: Authenticate, Register, and Push Module Tag
+        if: env.PBUF_TOKEN != ''
         run: |
-          if [[ ${{ github.ref_name }} == *"rc"* ]] || [[ ${{ github.ref_name }} == *"wip"* ]]; then
-            pbuf modules push ${{ github.ref_name }} --draft
+          pbuf auth "$PBUF_TOKEN"
+          pbuf modules register || true
+          if [ "${{ needs.release.outputs.is_prerelease }}" = "true" ]; then
+            pbuf modules push "$TAG" --draft
           else
-            pbuf modules push ${{ github.ref_name }}
+            pbuf modules push "$TAG"
           fi

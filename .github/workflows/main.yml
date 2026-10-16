@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - 'main'
+      - 'master'
     paths-ignore:
       - '**/**.md'
   pull_request:
     branches:
       - 'main'
+      - 'master'
 
 jobs:
   build-and-test:
@@ -112,3 +114,20 @@ jobs:
       - name: Run Playwright UI E2E Tests
         if: steps.ui-changes.outputs.changed == 'true'
         run: make test-ui-e2e
+
+  compose-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - name: Install UI dependencies and Playwright Chromium
+        run: cd ui && npm ci && npx playwright install --with-deps chromium
+
+      - name: Run Docker Compose + CLI + Playwright E2E Tests
+        run: make test-compose-e2e

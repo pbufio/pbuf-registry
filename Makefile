@@ -72,6 +72,11 @@ lint-charts:
 test-e2e: build build-cli build-migrations
 	bash ./scripts/e2e-test.sh
 
+.PHONY: test-compose-e2e
+# run full Docker Compose + CLI + Playwright E2E tests
+test-compose-e2e: build-cli
+	bash ./scripts/compose-e2e-test.sh
+
 .PHONY: build
 # build server
 build:
@@ -116,12 +121,12 @@ build-docker-ui:
 .PHONY: run
 # run
 run:
-	docker-compose -f docker-compose.dev.yml build && docker-compose -f docker-compose.dev.yml up --force-recreate -d
+	docker compose -f docker-compose.dev.yml build && docker compose -f docker-compose.dev.yml up --force-recreate -d
 
 .PHONY: stop
 # stop
 stop:
-	docker-compose -f docker-compose.dev.yml down
+	docker compose -f docker-compose.dev.yml down
 
 .PHONY: cert-gen
 # generate cert
@@ -131,12 +136,12 @@ cert-gen:
 .PHONY: run-prod
 # run prod
 run-prod:
-	docker-compose -f docker-compose.yml up --force-recreate -d
+	docker compose -f docker-compose.yml up --force-recreate -d
 
 .PHONY: stop-prod
 # stop prod
 stop-prod:
-	docker-compose -f docker-compose.yml down
+	docker compose -f docker-compose.yml down
 
 # show help
 help:

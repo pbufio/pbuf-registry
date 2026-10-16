@@ -45,6 +45,8 @@ for i in $(seq 1 30); do
 done
 
 WORK_DIR="$(mktemp -d)"
+export HOME="${WORK_DIR}/home"
+mkdir -p "${HOME}"
 trap 'cleanup; rm -rf "${WORK_DIR}"' EXIT
 
 echo "==> 1. Authenticating pbuf CLI against localhost:6777..."
