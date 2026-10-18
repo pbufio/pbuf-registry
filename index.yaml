@@ -2,6 +2,19 @@ apiVersion: v1
 entries:
   pbuf-registry:
   - apiVersion: v2
+    appVersion: v0.9.2
+    created: "2026-10-18T07:07:43.9661182Z"
+    description: A Helm chart for PBUF Registry
+    digest: 5ba7ebb8cc293441d2b4932246e5cb0b1b64fec922dfd6d2200c3210b128fc08
+    maintainers:
+    - email: aatarasoff@gmail.com
+      name: aatarasoff
+    name: pbuf-registry
+    type: application
+    urls:
+    - https://github.com/pbufio/pbuf-registry/releases/download/v0.9.2/pbuf-registry-0.9.2.tgz
+    version: 0.9.2
+  - apiVersion: v2
     appVersion: v0.9.1
     created: "2026-10-16T15:35:50.603953684Z"
     description: A Helm chart for PBUF Registry
@@ -27,4 +40,4 @@ entries:
     urls:
     - https://github.com/pbufio/pbuf-registry/releases/download/v0.9.0/pbuf-registry-0.9.0.tgz
     version: 0.9.0
-generated: "2026-10-16T15:35:50.602814626Z"
+generated: "2026-10-18T07:07:43.964655269Z"
