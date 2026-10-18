@@ -22,6 +22,7 @@ import (
 const (
 	defaultProtocolVersion = "2024-11-05"
 	maxScannerBuffer       = 10 * 1024 * 1024
+	maxHTTPBodyBytes       = 1 << 20
 )
 
 type rpcRequest struct {
@@ -222,8 +223,20 @@ func (s *Server) handleMessage(ctx context.Context, raw []byte) ([]byte, bool, e
 		return resp, true, nil
 	}
 
-	isNotification := len(req.ID) == 0 || string(req.ID) == "null"
-	if strings.HasPrefix(req.Method, "notifications/") || isNotification {
+	if req.JSONRPC != "2.0" || req.Method == "" {
+		id := req.ID
+		if len(id) == 0 {
+			id = json.RawMessage("null")
+		}
+		resp, _ := json.Marshal(rpcResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error:   &rpcError{Code: -32600, Message: "invalid request"},
+		})
+		return resp, true, nil
+	}
+
+	if len(req.ID) == 0 || strings.HasPrefix(req.Method, "notifications/") {
 		return nil, false, nil
 	}
 
@@ -331,6 +344,8 @@ func (s *Server) callTool(ctx context.Context, rawParams json.RawMessage) (any, 
 	return nil, &rpcError{Code: -32602, Message: "unknown tool: " + call.Name}, nil
 }
 
+type httpCtxKeyType struct{}
+
 // RegisterHTTPServer mounts the MCP Streamable HTTP endpoint at POST /v1/mcp and POST /mcp.
 func RegisterHTTPServer(
 	srv *kratosHttp.Server,
@@ -350,21 +365,26 @@ func RegisterHTTPServer(
 	)
 
 	handler := func(ctx kratosHttp.Context) error {
-		body, err := io.ReadAll(ctx.Request().Body)
+		body, err := io.ReadAll(io.LimitReader(ctx.Request().Body, maxHTTPBodyBytes+1))
 		if err != nil {
 			return err
 		}
+		if len(body) > maxHTTPBodyBytes {
+			return kerrors.BadRequest("PAYLOAD_TOO_LARGE", "request body exceeds 1MB limit")
+		}
 
 		// Authenticate top-level MCP session/discovery calls via Kratos middleware.
+		var authedCtx context.Context
 		kratosHttp.SetOperation(ctx, "/pbufregistry.v1.MCP/Handle")
 		h := ctx.Middleware(func(c context.Context, _ any) (any, error) {
+			authedCtx = context.WithValue(c, httpCtxKeyType{}, ctx)
 			return nil, nil
 		})
 		if _, err := h(ctx, nil); err != nil {
 			return err
 		}
 
-		respBytes, hasReply, err := mcpSrv.handleMessage(ctx, body)
+		respBytes, hasReply, err := mcpSrv.handleMessage(authedCtx, body)
 		if err != nil {
 			return err
 		}
@@ -391,12 +411,12 @@ func (c *inProcessConn) Invoke(ctx context.Context, method string, args any, rep
 		out any
 		err error
 	)
-	if httpCtx, ok := ctx.(kratosHttp.Context); ok {
+	if httpCtx, ok := ctx.Value(httpCtxKeyType{}).(kratosHttp.Context); ok {
 		kratosHttp.SetOperation(httpCtx, method)
 		h := httpCtx.Middleware(func(mCtx context.Context, req any) (any, error) {
 			return c.dispatch(mCtx, method, req)
 		})
-		out, err = h(httpCtx, args)
+		out, err = h(ctx, args)
 	} else {
 		out, err = c.dispatch(ctx, method, args)
 	}

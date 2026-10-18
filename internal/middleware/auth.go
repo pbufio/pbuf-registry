@@ -111,6 +111,13 @@ func NewOIDCAuth(adminToken string, userRepo data.UserRepository, verifier *OIDC
 func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
 	return func(handler middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req interface{}) (reply interface{}, err error) {
+			if IsAdmin(ctx) {
+				return handler(ctx, req)
+			}
+			if _, ok := GetUserFromContext(ctx); ok {
+				return handler(ctx, req)
+			}
+
 			serverContext, ok := transport.FromServerContext(ctx)
 			if !ok {
 				return nil, jwt.ErrWrongContext

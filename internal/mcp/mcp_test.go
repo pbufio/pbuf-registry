@@ -126,15 +126,19 @@ func TestServeStdioAndHTTP(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_modules"}}`,
+		`{"jsonrpc":"2.0","id":null,"method":"ping"}`,
+		`{}`,
 	}, "\n") + "\n"
 
 	var out bytes.Buffer
 	require.NoError(t, srv.ServeStdio(context.Background(), strings.NewReader(in), &out))
 
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 4)
 	assert.Contains(t, lines[0], `"protocolVersion":"2024-11-05"`)
 	assert.Contains(t, lines[1], "org/mod")
+	assert.Contains(t, lines[2], `"id":null,"result":{}`)
+	assert.Contains(t, lines[3], `"code":-32600`)
 
 	stub.fail = true
 	out.Reset()
@@ -148,9 +152,9 @@ func TestHTTPServerAuthAndACL(t *testing.T) {
 
 	aliceID := uuid.New()
 	alice := &model.User{ID: aliceID, Name: "alice", Type: model.UserTypeUser, IsActive: true}
-	userRepo.On("GetUserByToken", mock.Anything, "alice-token").Return(alice, nil)
-	aclRepo.On("CheckPermission", mock.Anything, aliceID, "allowed/mod", model.PermissionRead).Return(true, nil)
-	aclRepo.On("CheckPermission", mock.Anything, aliceID, "secret/mod", model.PermissionRead).Return(false, nil)
+	userRepo.On("GetUserByToken", mock.Anything, "alice-token").Return(alice, nil).Twice()
+	aclRepo.On("CheckPermission", mock.Anything, aliceID, "allowed/mod", model.PermissionRead).Return(true, nil).Once()
+	aclRepo.On("CheckPermission", mock.Anything, aliceID, "secret/mod", model.PermissionRead).Return(false, nil).Once()
 
 	authMw := middleware.NewACLAuth("admin-token", userRepo, log.DefaultLogger)
 	authzMw := middleware.NewAuthorizationMiddleware(aclRepo, log.DefaultLogger)
@@ -197,4 +201,11 @@ func TestHTTPServerAuthAndACL(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &listResp))
 	assert.Len(t, listResp.Result.Tools, 8)
+
+	// 5. Reject oversized (>1MB) HTTP body -> 400 Bad Request
+	req = httptest.NewRequest(http.MethodPost, "/v1/mcp", strings.NewReader(strings.Repeat("x", maxHTTPBodyBytes+10)))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	rec = httptest.NewRecorder()
+	httpSrv.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
