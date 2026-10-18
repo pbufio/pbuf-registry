@@ -234,4 +234,11 @@ func TestUsersMetadataAndDriftCommands(t *testing.T) {
 		require.NoError(t, driftCmd.Execute())
 	}
 	assert.Contains(t, out.String(), "org/dep")
+
+	mcpCmd := NewMCPCmd(&fakeRegistryClient{}, &fakeMetadataClient{}, &fakeDriftClient{})
+	var mcpOut bytes.Buffer
+	mcpCmd.SetIn(bytes.NewBufferString("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n"))
+	mcpCmd.SetOut(&mcpOut)
+	require.NoError(t, mcpCmd.Execute())
+	assert.Contains(t, mcpOut.String(), `"list_modules"`)
 }

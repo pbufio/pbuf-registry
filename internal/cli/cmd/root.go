@@ -13,6 +13,7 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
 	"github.com/pbufio/pbuf-registry/internal/cli/modules"
 	"github.com/pbufio/pbuf-registry/internal/cli/registry"
+	"github.com/pbufio/pbuf-registry/internal/mcp"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -50,16 +51,26 @@ func NewRootCmd() *cobra.Command {
 		log.Printf("failed to fetch current user: %v", err)
 	}
 
-	if configNotFound {
+	envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR")
+	if configNotFound && envRegistryAddr == "" {
 		rootCmd.AddCommand(CreateInitCmd())
 		rootCmd.AddCommand(NewAuthCmd(nil, usr, netrcAuth))
 		rootCmd.AddCommand(NewLoginCmd(nil, usr, netrcAuth))
 		return rootCmd
 	}
 
-	modulesConfig, err := modules.NewConfig(file)
-	if err != nil {
-		log.Fatalf("failed to create modules config: %v", err)
+	modulesConfig := &model.Config{}
+	if !configNotFound {
+		modulesConfig, err = modules.NewConfig(file)
+		if err != nil {
+			log.Fatalf("failed to create modules config: %v", err)
+		}
+	}
+	if envRegistryAddr != "" {
+		modulesConfig.Registry.Addr = envRegistryAddr
+		if os.Getenv("PBUF_REGISTRY_INSECURE") == "true" {
+			modulesConfig.Registry.Insecure = true
+		}
 	}
 
 	if modulesConfig.HasRegistry() {
@@ -82,6 +93,7 @@ func NewRootCmd() *cobra.Command {
 		rootCmd.AddCommand(NewUsersCmd(modulesConfig, usersClient))
 		rootCmd.AddCommand(NewDriftCmd(modulesConfig, driftClient))
 		rootCmd.AddCommand(NewMetadataCmd(modulesConfig, metadataClient))
+		rootCmd.AddCommand(NewMCPCmd(registryClient, metadataClient, driftClient))
 	} else {
 		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, nil))
 		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
@@ -89,6 +101,19 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	return rootCmd
+}
+
+// NewMCPCmd creates the `pbuf mcp` command running the MCP server over stdio.
+func NewMCPCmd(registryClient v1.RegistryClient, metadataClient v1.MetadataServiceClient, driftClient v1.DriftServiceClient) *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "Start MCP server over stdio",
+		Long:  "Start a Model Context Protocol (MCP) server over stdio for AI coding assistants",
+		Args:  cobra.ExactArgs(0),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return mcp.NewServer(registryClient, metadataClient, driftClient).ServeStdio(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout())
+		},
+	}
 }
 
 func NewAuthCmd(config *model.Config, usr *user.User, auth *netrc.Netrc) *cobra.Command {
