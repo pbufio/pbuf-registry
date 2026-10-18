@@ -234,4 +234,26 @@ func TestUsersMetadataAndDriftCommands(t *testing.T) {
 		require.NoError(t, driftCmd.Execute())
 	}
 	assert.Contains(t, out.String(), "org/dep")
+
+	mcpCmd := NewMCPCmd(&fakeRegistryClient{}, &fakeMetadataClient{}, &fakeDriftClient{})
+	var mcpOut bytes.Buffer
+	mcpCmd.SetIn(bytes.NewBufferString("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n"))
+	mcpCmd.SetOut(&mcpOut)
+	require.NoError(t, mcpCmd.Execute())
+	assert.Contains(t, mcpOut.String(), `"list_modules"`)
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(t.TempDir()))
+	t.Setenv("PBUF_REGISTRY_ADDR", "localhost:6777")
+	t.Setenv("PBUF_REGISTRY_INSECURE", "true")
+	rootCmd := NewRootCmd()
+	foundMCP := false
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "mcp" {
+			foundMCP = true
+		}
+	}
+	assert.True(t, foundMCP)
 }

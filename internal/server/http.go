@@ -7,6 +7,7 @@ import (
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
 	"github.com/pbufio/pbuf-registry/internal/data"
+	"github.com/pbufio/pbuf-registry/internal/mcp"
 	"github.com/pbufio/pbuf-registry/internal/middleware"
 )
 
@@ -47,6 +48,7 @@ func NewHTTPServer(cfg *config.Server,
 	v1.RegisterMetadataServiceHTTPServer(srv, metadataServer)
 	v1.RegisterUserServiceHTTPServer(srv, usersServer)
 	v1.RegisterDriftServiceHTTPServer(srv, driftServer)
+	mcp.RegisterHTTPServer(srv, registryServer, metadataServer, driftServer)
 
 	return srv
 }

@@ -174,4 +174,13 @@ EOF
   grep -q 'option go_package = "github.com/yourorg/hello-proto/gen/api/pbuf-registry/v1;v1";' "${EXAMPLES_DIR}/api/pbuf-registry/v1/registry.proto"
 )
 
+echo "==> 10. Testing MCP server over HTTP (/v1/mcp) and CLI stdio (pbuf mcp)..."
+MCP_HTTP_OUT="$(curl -sf -X POST -H "Authorization: Bearer ${SERVER_STATIC_TOKEN}" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_modules"}}' http://localhost:8080/v1/mcp)"
+echo "${MCP_HTTP_OUT}" | grep -q "yourorg/hello-proto"
+(
+  cd "${EXAMPLES_DIR}"
+  MCP_STDIO_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_module_metadata","arguments":{"name":"yourorg/hello-proto","tag":"v1.0.0"}}}' | "${PBUF_BIN}" mcp)"
+  echo "${MCP_STDIO_OUT}" | grep -q "Greeter"
+)
+
 echo "==> All E2E tests passed!"
