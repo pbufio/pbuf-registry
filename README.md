@@ -1,18 +1,29 @@
-# Modern Open-Source Protobuf Registry (`pbuf-registry`)
+# Self-Hosted, Open-Source Protobuf Schema Registry (`pbuf-registry`)
 
 [![Status](https://github.com/pbufio/pbuf-registry/actions/workflows/main.yml/badge.svg)](https://github.com/pbufio/pbuf-registry/actions/workflows/main.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/pbufio/pbuf-registry)](https://github.com/pbufio/pbuf-registry/releases)
+[![Live Registry](https://img.shields.io/badge/live_registry-pbuf.io-10b981)](https://pbuf.io/modules)
 
-`pbuf-registry` is a self-hosted, open-source Protocol Buffers schema registry, CLI, Web UI, and Kubernetes Helm chart. It provides a central place to store, version, audit, and vendor `.proto` files across repositories.
+`pbuf-registry` is an Apache-2.0, self-hosted Protocol Buffers schema registry written in Go—complete with **OIDC / OAuth2 SSO**, **per-module RBAC**, **multi-source vendoring** (`pbuf-registry`, `buf.build`, and Git), **automatic `option go_package` rewriting**, **breaking-change & transitive drift detection**, a **dark-mode Vue 3 Web UI**, and a **built-in Model Context Protocol (`pbuf mcp`) server** for AI coding agents.
+
+<p align="center">
+  <img src="docs/assets/cli-demo.svg" alt="pbuf CLI demo — multi-source vendoring with go_package patching and breaking change drift detection" width="900" />
+</p>
 
 ---
 
 ## Table of Contents
 
-- [Motivation](#motivation)
+- [Why `pbuf-registry`? (Comparison vs. Buf & Git)](#why-pbuf-registry)
 - [The Ecosystem](#the-ecosystem)
 - [Key Features](#key-features)
+  - [Automatic `option go_package` Rewriting (`gen_out`)](#automatic-option-go_package-rewriting-gen_out)
+  - [Hybrid Multi-Source Vendoring (`pbuf-registry`, `buf.build`, and Git)](#multi-source-vendoring-pbuf-registry-bufbuild-and-git)
+  - [Schema Drift & Breaking Change Detection (`pbuf drift diff`)](#schema-drift--breaking-change-detection)
+  - [Native MCP Server for AI Coding Agents (`pbuf mcp`)](#native-mcp-server-for-ai-coding-agents-pbuf-mcp)
+  - [Per-Module RBAC & OIDC / OAuth2 SSO](#per-module-rbac--oidc--oauth2-sso)
+  - [Web UI for Browsing & Incident Investigation](#web-ui-for-browsing--incident-investigation)
 - [Quick Start (2 Minutes)](#quick-start-2-minutes)
 - [CLI Installation (`pbuf`)](#cli-installation-pbuf)
 - [Configuration (`pbuf.yaml`)](#configuration-pbufyaml)
@@ -25,6 +36,7 @@
   - [Module Commands (`pbuf modules`)](#module-commands-pbuf-modules)
   - [Metadata Commands (`pbuf metadata`)](#metadata-commands-pbuf-metadata)
   - [Drift Detection Commands (`pbuf drift`)](#drift-detection-commands-pbuf-drift)
+  - [AI Coding Assistants (`pbuf mcp`)](#ai-coding-assistants-pbuf-mcp)
   - [User, Bot & Permission Commands (`pbuf users`)](#user-bot--permission-commands-pbuf-users)
 - [Deploying `pbuf-registry`](#deploying-pbuf-registry)
   - [Docker Compose](#docker-compose)
@@ -39,11 +51,24 @@
 
 ---
 
-## Motivation
+## Why `pbuf-registry`?
 
-Protobuf schemas are shared contracts between services. In a monorepo, proximity solves this — every team sees the same file. Once services split across repositories, you're copying `.proto` files by hand, vendoring from arbitrary Git branches, and hoping all the copies stay in sync. They won't.
+Once gRPC microservices split across repositories, teams typically face an uncomfortable choice: copy `.proto` files via brittle Git scripts, or pay per-seat SaaS pricing for private schemas, SSO, and RBAC.
 
-`pbuf-registry` gives every `.proto` module a canonical home with immutable versioned releases, dependency tracking, breaking-change and drift detection, fine-grained per-module RBAC, and OIDC/OAuth2 SSO — so schema state is observable and schema changes are attributable.
+`pbuf-registry` solves three real pain points out of the box:
+1. **Self-Hosted, Zero-Seat-Tax Private Registry**: Run a complete private registry (gRPC/REST server + background AST indexer + Vue 3 Web UI + PostgreSQL) in Docker Compose or Kubernetes under Apache-2.0—with **OIDC SSO and granular per-module RBAC included for free**.
+2. **Automatic `option go_package` Rewriting (`gen_out`)**: Eliminate conflicting upstream `option go_package` declarations across Go repositories. Set `gen_out: gen` in `pbuf.yaml` and `pbuf vendor` automatically rewrites `option go_package` in downloaded `.proto` files to match your local `go.mod` module path.
+3. **Gradual Migration via Multi-Source `pbuf.yaml`**: Pull internal schemas from `pbuf-registry`, upstream packages from `buf.build` (BSR), and raw `.proto` subtrees from Git repositories in a single manifest.
+
+| Capability | `pbuf-registry` + `pbuf` | Buf Schema Registry (Free) | Buf BSR (Team / Enterprise) | Raw Git / `git submodule` / `protodep` |
+| :--- | :---: | :---: | :---: | :---: |
+| **License & Self-Hosting** | **Apache-2.0 (Self-Hosted or Cloud)** | SaaS only | Paid Enterprise self-hosted | DIY scripts |
+| **Private Schemas without Per-Seat Pricing** | **Yes (Unlimited users & bots)** | Limited / public focus | Paid per-user seat tax | Yes |
+| **OIDC / OAuth2 SSO & Per-Module RBAC** | **Included** | No | Paid / Enterprise tier | Relies on Git repo permissions |
+| **Hybrid Vendoring (`pbuf` + `buf.build` + Git)** | **Yes (All 3 in one `pbuf.yaml`)** | BSR only | BSR only | Git only |
+| **Automatic `option go_package` Patching (`gen_out`)** | **Built-in (`go.mod`-aware)** | Managed mode (compilation only) | Managed mode (compilation only) | Manual sed scripts |
+| **Transitive Dependency Drift & Breaking Alerts** | **Built-in (`pbuf drift` + UI)** | Breaking lint only | Breaking lint + graph | None |
+| **Native MCP Server (`pbuf mcp`) for AI Agents** | **Built-in (`stdio`)** | External | External | None |
 
 ---
 
@@ -79,37 +104,16 @@ All components live in this monorepo and are released together under unified sem
 
 ## Key Features
 
-### Schema Drift & Breaking Change Detection
+### Automatic `option go_package` Rewriting (`gen_out`)
 
-When a module version modifies, deletes, or incompatibly changes `.proto` files compared to prior tags or downstream dependencies, the background proto-parser indexes the AST and records drift events with severity levels (`INFO`, `WARNING`, `CRITICAL`) and upgrade recommendations.
+Anyone managing Go gRPC microservices across multiple repositories has hit conflicting `option go_package` declarations in upstream `.proto` files. When you set `gen_out: gen` on any dependency in `pbuf.yaml`, `pbuf vendor` reads your local `go.mod` module path and automatically rewrites `option go_package` in every downloaded `.proto` file:
 
-```shell
-# List all unacknowledged drift events across the registry
-pbuf drift list
-
-# Drift events for a specific module, optionally filtered by tag
-pbuf drift module payment-service
-pbuf drift module payment-service --tag v2.1.0
-
-# Evaluate transitive dependency drift status for a module
-pbuf drift dependencies order-service --tag v1.4.0
+```diff
+ syntax = "proto3";
+ package acme.payment.v1;
+-option go_package = "github.com/acme/payment-service/api/payment/v1;paymentv1";
++option go_package = "github.com/acme/order-service/gen/payment/v1";
 ```
-
-### Immutable Versioned Tags & Ephemeral Draft Tags
-
-Every schema push gets a tag. Published tags are immutable: once pushed, the content at a tag never changes. Draft tags (`--draft`) can be overwritten during development and are automatically cleaned up after 7 days by the compaction daemon.
-
-```shell
-pbuf modules push v2.1.0               # Stable — permanent and immutable
-pbuf modules push v2.1.0-rc1 --draft   # Draft — mutable, auto-expires after 7 days
-```
-
-### Per-Module RBAC & OIDC / OAuth2 SSO
-
-Engineers and CI pipelines can authenticate using:
-- **OIDC / OAuth2 SSO** (`pbuf login` via OAuth 2.0 Device Authorization Flow, or Web UI Authorization Code + PKCE Flow)
-- **Scoped User & Bot Tokens** (`pbuf_user_*` / `pbuf_bot_*`) with explicit `read`, `write`, or `admin` permissions per module or globally (`*`)
-- **Static Admin Token** (`SERVER_STATIC_TOKEN`) for bootstrap and administrative automation
 
 ### Multi-Source Vendoring (`pbuf-registry`, `buf.build`, and Git)
 
@@ -124,7 +128,7 @@ export:
   paths:
     - api
 modules:
-  # 1. From pbuf-registry — pinned, auditable, drift-tracked
+  # 1. From pbuf-registry — pinned, auditable, drift-tracked, go_package patched
   - name: myorg/payment-service
     tag: v2.1.0
     out: third_party
@@ -142,9 +146,56 @@ modules:
     out: third_party
 ```
 
+### Schema Drift & Breaking Change Detection
+
+When a module version modifies, deletes, or incompatibly changes `.proto` files compared to prior tags or downstream dependencies, the background proto-parser indexes the AST and records drift events with severity levels (`INFO`, `WARNING`, `CRITICAL`) and upgrade recommendations. You can also run `pbuf drift diff` locally or in CI before pushing a tag:
+
+```shell
+# Compare local .proto edits against the latest published tag in the registry (exits non-zero on CRITICAL)
+pbuf drift diff
+pbuf drift diff --against v2.0.0 --format markdown
+
+# List all unacknowledged drift events across the registry
+pbuf drift list
+
+# Drift events for a specific module, optionally filtered by tag
+pbuf drift module payment-service --tag v2.1.0
+
+# Evaluate transitive dependency drift status for a module
+pbuf drift dependencies order-service --tag v1.4.0
+```
+
+### Native MCP Server for AI Coding Agents (`pbuf mcp`)
+
+`pbuf` includes a built-in **Model Context Protocol (MCP)** server (`pbuf mcp`) over `stdio`. Connect **Claude Code**, **Cursor**, **Antigravity**, or **GitHub Copilot** directly to your organization's live Protobuf registry so AI coding assistants can inspect module tags, pull `.proto` definitions, query parsed AST metadata (messages, fields, RPCs, enums), and check breaking drift statuses without hallucinating wire types.
+
+### Immutable Versioned Tags & Ephemeral Draft Tags
+
+Every schema push gets a tag. Published tags are immutable: once pushed, the content at a tag never changes. Draft tags (`--draft`) can be overwritten during development and are automatically cleaned up after 7 days by the compaction daemon.
+
+```shell
+pbuf modules push v2.1.0               # Stable — permanent and immutable
+pbuf modules push v2.1.0-rc1 --draft   # Draft — mutable, auto-expires after 7 days
+```
+
+### Per-Module RBAC & OIDC / OAuth2 SSO
+
+Engineers and CI pipelines can authenticate using:
+- **OIDC / OAuth2 SSO** (`pbuf login` via OAuth 2.0 Device Authorization Flow, or Web UI Authorization Code + PKCE Flow)
+- **Scoped User & Bot Tokens** (`pbuf_user_*` / `pbuf_bot_*`) with explicit `read`, `write`, or `admin` permissions per module or globally (`*`)
+- **Static Admin Token** (`SERVER_STATIC_TOKEN`) for bootstrap and administrative automation
+
 ### Web UI for Browsing & Incident Investigation
 
-The Web UI lets engineers browse registered modules, inspect `.proto` source files at any tag, explore parsed messages/services/enums/fields, and review dependency drift alerts — either in public read-only mode or authenticated via Bearer token or OIDC SSO.
+The dark-mode Vue 3 Web UI lets engineers browse registered modules, inspect `.proto` source files at any tag, explore parsed messages/services/enums/fields, and review dependency drift alerts — either in public read-only mode or authenticated via Bearer token or OIDC SSO.
+
+<p align="center">
+  <img src="docs/assets/ui-module-overview.svg" alt="pbuf-registry Web UI — Module Overview and AST Explorer" width="900" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/ui-drift-events.svg" alt="pbuf-registry Web UI — Transitive Dependency Drift and Breaking Change Alerts" width="900" />
+</p>
 
 ---
 
@@ -197,6 +248,12 @@ See [`examples/`](examples/) for a complete end-to-end walkthrough with sample `
 
 ## CLI Installation (`pbuf`)
 
+### Homebrew (macOS & Linux)
+
+```shell
+brew install pbufio/tap/pbuf
+```
+
 ### Linux & macOS (Install Script)
 
 Install the latest release to `/usr/local/bin`:
@@ -209,7 +266,7 @@ Install a specific version or to a custom directory:
 
 ```shell
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh -s -- -v v0.9.0
+curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh -s -- -v v0.10.0
 
 # Custom install directory (no sudo required)
 INSTALL_DIR=$HOME/.local/bin curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh
@@ -396,9 +453,12 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
 | `pbuf metadata get [module_name] [tag]` | Retrieve parsed AST metadata (packages, messages, services, enums) for a module tag |
+| `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
 | `pbuf drift module <module_name> [--tag <tag>]` | List schema drift events for a specific module |
 | `pbuf drift dependencies <module_name> [--tag <tag>]` | Check dependency drift status and upgrade recommendations for a module |
+| `pbuf drift acknowledge <event_id> --by <user>` | Acknowledge a schema drift event by ID |
+| `pbuf mcp` | Start a Model Context Protocol (MCP) server over `stdio` for AI coding agents |
 | `pbuf users create <name> [--type user\|bot]` | Create a user or bot and output its one-time token |
 | `pbuf users list [--page-size 50] [--page 0]` | List users and bots |
 | `pbuf users get <id>` | Get user or bot details by ID |
@@ -510,9 +570,13 @@ pbuf metadata get myorg/payment-service v1.0.0
 
 ### Drift Detection Commands (`pbuf drift`)
 
-Inspects file-level breaking changes and cross-module dependency drift:
+Inspects local uncommitted breaking changes, file-level drift events, and cross-module dependency drift:
 
 ```shell
+# Compare local .proto files in export.paths against the latest (or specified) registry tag
+pbuf drift diff
+pbuf drift diff --against v1.2.0 --format markdown --fail-on critical
+
 # List unacknowledged drift events (default --unacknowledged-only=true)
 pbuf drift list
 
@@ -530,6 +594,41 @@ pbuf drift dependencies myorg/order-service --tag v1.4.0
 # Acknowledge a drift event by ID
 pbuf drift acknowledge <event-id> --by alice
 ```
+
+---
+
+### AI Coding Assistants (`pbuf mcp`)
+
+`pbuf mcp` runs a standard JSON-RPC 2.0 **Model Context Protocol (MCP)** server over `stdio`. It connects to the registry configured in `pbuf.yaml` (or via `PBUF_REGISTRY_ADDR` and `PBUF_REGISTRY_INSECURE` environment variables) using credentials from `~/.netrc`.
+
+#### Configure in Claude Code / Cursor / Antigravity (`mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "pbuf-registry": {
+      "command": "pbuf",
+      "args": ["mcp"],
+      "env": {
+        "PBUF_REGISTRY_ADDR": "pbuf.cloud:6777"
+      }
+    }
+  }
+}
+```
+
+#### Available MCP Tools
+
+| Tool Name | Description |
+| :--- | :--- |
+| `list_modules` | List registered protobuf modules with optional pagination (`page_size`, `page_token`). |
+| `get_module` | Retrieve module details, published tags, draft tags, and packages (`name`). |
+| `get_module_dependencies` | Get direct and transitive dependencies for a module tag (`name`, `tag`, `resolve_transitive`). |
+| `get_module_metadata` | Retrieve parsed AST metadata (packages, messages, fields, enums, services, RPCs) for a module tag (`name`, `tag`). |
+| `get_proto_files` | Pull raw `.proto` file contents for a module and tag (`name`, `tag`). |
+| `list_drift_events` | List schema drift and breaking-change events across the registry (`unacknowledged_only`). |
+| `get_module_drift_events` | List schema drift events for a specific module (`module_name`, `tag_name`). |
+| `get_dependency_drift_status` | Evaluate dependency drift severities and upgrade recommendations for a module (`module_name`, `tag_name`). |
 
 ---
 

@@ -1,10 +1,33 @@
 apiVersion: v2
 name: pbuf-registry
-description: A Helm chart for PBUF Registry
+description: Self-hosted Protocol Buffers schema registry with OIDC SSO, RBAC, drift detection, and Web UI
 type: application
-version: 0.9.0
-appVersion: "v0.9.0"
+version: 0.10.0
+appVersion: "v0.10.0"
+home: https://pbuf.io
+sources:
+  - https://github.com/pbufio/pbuf-registry
+keywords:
+  - protobuf
+  - grpc
+  - schema-registry
+  - pbuf
+  - microservices
 
 maintainers:
   - name: aatarasoff
     email: aatarasoff@gmail.com
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/pbufio/pbuf-registry#readme
+    - name: Live Demo Registry
+      url: https://pbuf.io/modules
+  artifacthub.io/images: |
+    - name: pbuf-registry
+      image: ghcr.io/pbufio/registry:v0.10.0
+    - name: pbuf-registry-ui
+      image: ghcr.io/pbufio/pbuf-registry-ui:v0.10.0

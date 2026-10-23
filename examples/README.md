@@ -4,6 +4,7 @@ This directory contains example protobuf files and a sample [`pbuf.yaml`](pbuf.y
 
 ## What's Included
 
+- **[`microservices-demo/`](microservices-demo/)** — A 1-click multi-service walkthrough (`billing-service` & `order-service`) demonstrating `pbuf modules push`, `pbuf vendor` with automatic `option go_package` patching (`gen_out`), and catching wire-breaking changes locally with `pbuf drift diff`.
 - `hello-proto/` — A sample protobuf module with:
   - `greeter.proto` — A basic gRPC service definition
   - `types.proto` — Common message types and enums

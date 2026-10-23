@@ -53,3 +53,20 @@ release:
     name: pbuf-registry
   extra_files:
     - glob: ./scripts/install.sh
+
+brews:
+  - name: pbuf
+    ids:
+      - pbuf
+    homepage: "https://pbuf.io"
+    description: "CLI for pbuf-registry — Protocol Buffers schema registry, multi-source vendoring, drift detection, and MCP server"
+    license: "Apache-2.0"
+    directory: Formula
+    skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
+    repository:
+      owner: pbufio
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    test: |
+      system "#{bin}/pbuf --help"

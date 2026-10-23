@@ -18,6 +18,11 @@ import (
 
 type fakeRegistryClient struct {
 	v1.RegistryClient
+	pulledFiles []*v1.ProtoFile
+}
+
+func (f *fakeRegistryClient) PullModule(_ context.Context, _ *v1.PullModuleRequest, _ ...grpc.CallOption) (*v1.PullModuleResponse, error) {
+	return &v1.PullModuleResponse{Protofiles: f.pulledFiles}, nil
 }
 
 func (f *fakeRegistryClient) RegisterModule(_ context.Context, in *v1.RegisterModuleRequest, _ ...grpc.CallOption) (*v1.Module, error) {
@@ -165,6 +170,14 @@ func TestInitAndModuleCommands(t *testing.T) {
 	assert.Contains(t, string(raw), "org/hello")
 	assert.Contains(t, string(raw), "localhost:6777")
 
+	initDomainCmd := CreateInitCmd()
+	initDomainCmd.SetArgs([]string{"org/hello", "--domain", "https://pbuf.io/"})
+	require.NoError(t, initDomainCmd.Execute())
+
+	rawDomain, err := os.ReadFile("pbuf.yaml")
+	require.NoError(t, err)
+	assert.Contains(t, string(rawDomain), "addr: pbuf.io")
+
 	require.NoError(t, os.MkdirAll("api", 0o755))
 	require.NoError(t, os.WriteFile("api/hello.proto", []byte("syntax = \"proto3\";"), 0o644))
 
@@ -180,6 +193,7 @@ func TestInitAndModuleCommands(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"register"},
+		{"register", "org/hello"},
 		{"push", "v1.0.0"},
 		{"get"},
 		{"list"},
@@ -256,4 +270,76 @@ func TestUsersMetadataAndDriftCommands(t *testing.T) {
 		}
 	}
 	assert.True(t, foundMCP)
+}
+
+func TestDriftDiffCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	require.NoError(t, os.MkdirAll("api", 0o755))
+	require.NoError(t, os.WriteFile("api/pay.proto", []byte(`syntax = "proto3";
+package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+}
+message Money {
+  string units = 1;
+}
+service PayService {
+  rpc StreamPay(stream Money) returns (Money);
+}
+`), 0o644))
+
+	// Omit Export.Paths to verify default path resolution works when only api/ exists
+	cfg := &model.Config{
+		Name: "acme/payment",
+	}
+	regClient := &fakeRegistryClient{
+		pulledFiles: []*v1.ProtoFile{
+			{
+				Filename: "api/pay.proto",
+				Content: `syntax = "proto3";
+package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+}
+message Money {
+  int64 units = 1;
+  int32 nanos = 2;
+}
+service PayService {
+  rpc StreamPay(Money) returns (Money);
+}
+`,
+			},
+		},
+	}
+
+	driftCmd := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
+	var mdOut bytes.Buffer
+	driftCmd.SetOut(&mdOut)
+	driftCmd.SetArgs([]string{"diff", "--format", "markdown", "--fail-on", "none"})
+	require.NoError(t, driftCmd.Execute())
+	assert.Contains(t, mdOut.String(), "FIELD_TYPE_CHANGED")
+	assert.Contains(t, mdOut.String(), "FIELD_REMOVED")
+	assert.Contains(t, mdOut.String(), "ENUM_VALUE_REMOVED")
+	assert.Contains(t, mdOut.String(), "(Money)->(Money) to (stream Money)->(Money)")
+
+	// When --fail-on=critical (default), breaking changes must return an error
+	driftCmdFail := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
+	var tblOut bytes.Buffer
+	driftCmdFail.SetOut(&tblOut)
+	driftCmdFail.SetArgs([]string{"diff"})
+	err = driftCmdFail.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CRITICAL")
+
+	// Invalid --fail-on value must fail instead of silently passing
+	driftCmdBadFlag := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
+	driftCmdBadFlag.SetArgs([]string{"diff", "--fail-on", "typo"})
+	require.ErrorContains(t, driftCmdBadFlag.Execute(), "invalid --fail-on")
 }

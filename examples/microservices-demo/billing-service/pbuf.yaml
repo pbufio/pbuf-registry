@@ -1,0 +1,8 @@
+version: v1
+name: demo/billing-service
+registry:
+  addr: localhost:6777
+  insecure: true
+export:
+  paths:
+    - api
