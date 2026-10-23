@@ -95,7 +95,7 @@ modules:
   - name: ${bsr_module}
     path: ${bsr_path}
     tag: ${bsr_ref}
-    out: proto
+    out: proto/${bsr_path}
 EOF
 
   echo "==> Seeding ${module_name} (${push_tag}) from ${bsr_module}@${bsr_ref}..."
@@ -146,7 +146,33 @@ seed_from_bsr "envoyproxy/protoc-gen-validate" "buf.build/envoyproxy/protoc-gen-
 seed_from_bsr "connectrpc/eliza" "buf.build/connectrpc/eliza" "connectrpc/eliza/v1" "main" "v1.0.0"
 
 seed_from_git "open-telemetry/opentelemetry-proto" "https://github.com/open-telemetry/opentelemetry-proto" "opentelemetry/proto/common/v1" "v1.3.2" "v1.3.2"
-seed_from_git "open-telemetry/opentelemetry-proto" "https://github.com/open-telemetry/opentelemetry-proto" "opentelemetry/proto/trace/v1" "v1.4.0" "v1.4.0"
+OTEL_DIR="${WORKDIR}/open-telemetry_opentelemetry-proto_v1.4.0"
+mkdir -p "${OTEL_DIR}"
+cat > "${OTEL_DIR}/pbuf.yaml" <<EOF
+version: v1
+name: open-telemetry/opentelemetry-proto
+registry:
+  addr: ${REGISTRY_ADDR}
+  insecure: ${INSECURE}
+export:
+  paths:
+    - proto
+modules:
+  - repository: https://github.com/open-telemetry/opentelemetry-proto
+    path: opentelemetry/proto/common/v1
+    tag: v1.4.0
+    out: proto/opentelemetry/proto/common/v1
+  - repository: https://github.com/open-telemetry/opentelemetry-proto
+    path: opentelemetry/proto/trace/v1
+    tag: v1.4.0
+    out: proto/opentelemetry/proto/trace/v1
+EOF
+(
+  cd "${OTEL_DIR}"
+  "${PBUF_BIN}" vendor
+  "${PBUF_BIN}" modules register || true
+  "${PBUF_BIN}" modules push "v1.4.0" || true
+)
 
 seed_from_git "cloudevents/spec-proto" "https://github.com/cloudevents/spec" "cloudevents/formats/protobuf" "v1.0.2" "v1.0.2"
 

@@ -19,7 +19,7 @@
 - [The Ecosystem](#the-ecosystem)
 - [Key Features](#key-features)
   - [Automatic `option go_package` Rewriting (`gen_out`)](#automatic-option-go_package-rewriting-gen_out)
-  - [Hybrid Multi-Source Vendoring (`pbuf-registry`, `buf.build`, and Git)](#Multi-Source-Vendoring-pbuf-registry-bufbuild-and-Git)
+  - [Hybrid Multi-Source Vendoring (`pbuf-registry`, `buf.build`, and Git)](#multi-source-vendoring-pbuf-registry-bufbuild-and-git)
   - [Schema Drift & Breaking Change Detection (`pbuf drift diff`)](#schema-drift--breaking-change-detection)
   - [Native MCP Server for AI Coding Agents (`pbuf mcp`)](#native-mcp-server-for-ai-coding-agents-pbuf-mcp)
   - [Per-Module RBAC & OIDC / OAuth2 SSO](#per-module-rbac--oidc--oauth2-sso)

@@ -282,14 +282,20 @@ func TestDriftDiffCommand(t *testing.T) {
 	require.NoError(t, os.MkdirAll("api", 0o755))
 	require.NoError(t, os.WriteFile("api/pay.proto", []byte(`syntax = "proto3";
 package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+}
 message Money {
   string units = 1;
 }
+service PayService {
+  rpc StreamPay(stream Money) returns (Money);
+}
 `), 0o644))
 
+	// Omit Export.Paths to verify default path resolution works when only api/ exists
 	cfg := &model.Config{
-		Name:   "acme/payment",
-		Export: model.Export{Paths: []string{"api"}},
+		Name: "acme/payment",
 	}
 	regClient := &fakeRegistryClient{
 		pulledFiles: []*v1.ProtoFile{
@@ -297,9 +303,16 @@ message Money {
 				Filename: "api/pay.proto",
 				Content: `syntax = "proto3";
 package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+}
 message Money {
   int64 units = 1;
   int32 nanos = 2;
+}
+service PayService {
+  rpc StreamPay(Money) returns (Money);
 }
 `,
 			},
@@ -313,6 +326,8 @@ message Money {
 	require.NoError(t, driftCmd.Execute())
 	assert.Contains(t, mdOut.String(), "FIELD_TYPE_CHANGED")
 	assert.Contains(t, mdOut.String(), "FIELD_REMOVED")
+	assert.Contains(t, mdOut.String(), "ENUM_VALUE_REMOVED")
+	assert.Contains(t, mdOut.String(), "(Money)->(Money) to (stream Money)->(Money)")
 
 	// When --fail-on=critical (default), breaking changes must return an error
 	driftCmdFail := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
@@ -322,4 +337,9 @@ message Money {
 	err = driftCmdFail.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "CRITICAL")
+
+	// Invalid --fail-on value must fail instead of silently passing
+	driftCmdBadFlag := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
+	driftCmdBadFlag.SetArgs([]string{"diff", "--fail-on", "typo"})
+	require.ErrorContains(t, driftCmdBadFlag.Execute(), "invalid --fail-on")
 }

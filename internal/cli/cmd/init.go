@@ -52,7 +52,11 @@ func CreateInitCmd() *cobra.Command {
 					registryURL = "pbuf.cloud"
 				}
 			} else {
-				registryURL = askQuestionAndGetAnswer("Please provide registry URL", "pbuf.cloud")
+				if domainFlag != "" {
+					registryURL = domainFlag
+				} else {
+					registryURL = askQuestionAndGetAnswer("Please provide registry URL", "pbuf.cloud")
+				}
 				moduleName = askQuestionAndGetAnswer("Please provide module name", "domain/module-name")
 				modules = askMultiQuestionAndGetAnswer("Please provide modules", "domain/module-name")
 				paths = askMultiQuestionAndGetAnswer("Please provide paths", "api")
@@ -86,7 +90,6 @@ func CreateInitCmd() *cobra.Command {
 			// backward compatibility
 			if len(pbufPaths) == 0 {
 				pbufPaths = append(pbufPaths, "api")
-				pbufPaths = append(pbufPaths, "proto")
 			}
 
 			pbufYaml := &model.Config{

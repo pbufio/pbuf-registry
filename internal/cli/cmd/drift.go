@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -204,12 +204,7 @@ func newAcknowledgeDriftEventCmd(client v1.DriftServiceClient) *cobra.Command {
 }
 
 // LocalDriftDiffItem represents a single schema change detected between a registry tag and local .proto files.
-type LocalDriftDiffItem struct {
-	Filename string `json:"filename"`
-	Severity string `json:"severity"`
-	Change   string `json:"change"`
-	Details  string `json:"details"`
-}
+type LocalDriftDiffItem = utils.ProtoDiffItem
 
 // LocalDriftDiffReport represents the full result of `pbuf drift diff`.
 type LocalDriftDiffReport struct {
@@ -241,9 +236,18 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 				return fmt.Errorf("module name is required (set 'name' in pbuf.yaml or pass as argument)")
 			}
 
-			exportPaths := []string{"api", "proto"}
+			var exportPaths []string
 			if config != nil && len(config.Export.Paths) > 0 {
 				exportPaths = config.Export.Paths
+			} else {
+				for _, dir := range []string{"api", "proto"} {
+					if info, err := os.Stat(dir); err == nil && info.IsDir() {
+						exportPaths = append(exportPaths, dir)
+					}
+				}
+				if len(exportPaths) == 0 {
+					exportPaths = []string{"api"}
+				}
 			}
 
 			baseTag, err := cmd.Flags().GetString("against")
@@ -266,6 +270,10 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 			if err != nil {
 				return err
 			}
+			failThreshold, err := parseFailOnThreshold(failOn)
+			if err != nil {
+				return err
+			}
 
 			localFiles, err := registry.CollectProtoFilesInDirs(exportPaths)
 			if err != nil {
@@ -278,6 +286,12 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 					return fmt.Errorf("failed to fetch module %s from registry: %w", moduleName, getErr)
 				}
 				if len(mod.GetTags()) == 0 {
+					if strings.EqualFold(format, "json") {
+						return renderDriftDiffReport(cmd.OutOrStdout(), LocalDriftDiffReport{
+							ModuleName: moduleName,
+							Items:      []LocalDriftDiffItem{},
+						}, format)
+					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No prior published tags found for %s; skipping diff (%d local file(s)).\n", moduleName, len(localFiles))
 					return nil
 				}
@@ -307,7 +321,7 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 				return err
 			}
 
-			if shouldFailDriftDiff(items, failOn) {
+			if shouldFailDriftDiff(items, failThreshold) {
 				return fmt.Errorf("schema drift check failed: detected changes meeting or exceeding %s severity", strings.ToUpper(failOn))
 			}
 
@@ -374,8 +388,7 @@ func computeLocalDriftDiff(baseFiles, localFiles []*v1.ProtoFile) ([]LocalDriftD
 		if localContent == baseContentMap[filename] {
 			continue
 		}
-		fileItems := diffParsedProtoFile(filename, baseParsed[filename], localParsed[filename])
-		items = append(items, fileItems...)
+		items = append(items, utils.DiffParsedProtoFile(filename, baseParsed[filename], localParsed[filename])...)
 	}
 
 	// Check added files
@@ -397,258 +410,6 @@ func computeLocalDriftDiff(baseFiles, localFiles []*v1.ProtoFile) ([]LocalDriftD
 	}
 
 	return items, nil
-}
-
-func diffParsedProtoFile(filename string, prev, curr *unordered.Proto) []LocalDriftDiffItem {
-	if prev == nil || curr == nil || prev.ProtoBody == nil || curr.ProtoBody == nil {
-		return []LocalDriftDiffItem{{
-			Filename: filename,
-			Severity: "WARNING",
-			Change:   "FILE_MODIFIED",
-			Details:  "Proto file modified",
-		}}
-	}
-
-	var items []LocalDriftDiffItem
-	prevBody := prev.ProtoBody
-	currBody := curr.ProtoBody
-
-	prevPkg := firstPackageName(prevBody)
-	currPkg := firstPackageName(currBody)
-	if prevPkg != currPkg {
-		items = append(items, LocalDriftDiffItem{
-			Filename: filename,
-			Severity: "CRITICAL",
-			Change:   "PACKAGE_CHANGED",
-			Details:  fmt.Sprintf("package changed from %q to %q", prevPkg, currPkg),
-		})
-	}
-
-	prevMsgs := collectMessageNames(prevBody.Messages, "")
-	currMsgs := collectMessageNames(currBody.Messages, "")
-	for _, msg := range sortedMissingKeys(prevMsgs, currMsgs) {
-		items = append(items, LocalDriftDiffItem{
-			Filename: filename,
-			Severity: "CRITICAL",
-			Change:   "MESSAGE_REMOVED",
-			Details:  fmt.Sprintf("message %s was removed", msg),
-		})
-	}
-
-	prevSvcs := make(map[string]bool)
-	for _, s := range prevBody.Services {
-		prevSvcs[s.ServiceName] = true
-	}
-	currSvcs := make(map[string]bool)
-	for _, s := range currBody.Services {
-		currSvcs[s.ServiceName] = true
-	}
-	for _, svc := range sortedMissingKeys(prevSvcs, currSvcs) {
-		items = append(items, LocalDriftDiffItem{
-			Filename: filename,
-			Severity: "CRITICAL",
-			Change:   "SERVICE_REMOVED",
-			Details:  fmt.Sprintf("service %s was removed", svc),
-		})
-	}
-
-	prevEnums := make(map[string]bool)
-	for _, e := range prevBody.Enums {
-		prevEnums[e.EnumName] = true
-	}
-	currEnums := make(map[string]bool)
-	for _, e := range currBody.Enums {
-		currEnums[e.EnumName] = true
-	}
-	for _, enumName := range sortedMissingKeys(prevEnums, currEnums) {
-		items = append(items, LocalDriftDiffItem{
-			Filename: filename,
-			Severity: "CRITICAL",
-			Change:   "ENUM_REMOVED",
-			Details:  fmt.Sprintf("enum %s was removed", enumName),
-		})
-	}
-
-	prevFields := collectFieldsByTagNumber(prevBody.Messages, "")
-	currFields := collectFieldsByTagNumber(currBody.Messages, "")
-	fieldKeys := make([]string, 0, len(prevFields))
-	for k := range prevFields {
-		fieldKeys = append(fieldKeys, k)
-	}
-	sort.Strings(fieldKeys)
-
-	for _, fk := range fieldKeys {
-		pf := prevFields[fk]
-		cf, exists := currFields[fk]
-		if !exists {
-			items = append(items, LocalDriftDiffItem{
-				Filename: filename,
-				Severity: "CRITICAL",
-				Change:   "FIELD_REMOVED",
-				Details:  fmt.Sprintf("field %s (%s %s) was removed", fk, pf.Type, pf.Name),
-			})
-			continue
-		}
-		if pf.Type != cf.Type {
-			items = append(items, LocalDriftDiffItem{
-				Filename: filename,
-				Severity: "CRITICAL",
-				Change:   "FIELD_TYPE_CHANGED",
-				Details:  fmt.Sprintf("field %s (%s) type changed from %s to %s", fk, pf.Name, pf.Type, cf.Type),
-			})
-		} else if pf.Name != cf.Name {
-			items = append(items, LocalDriftDiffItem{
-				Filename: filename,
-				Severity: "WARNING",
-				Change:   "FIELD_RENAMED",
-				Details:  fmt.Sprintf("field %s renamed from %s to %s", fk, pf.Name, cf.Name),
-			})
-		}
-	}
-
-	prevRPCs := collectRPCDetails(prevBody.Services)
-	currRPCs := collectRPCDetails(currBody.Services)
-	rpcKeys := make([]string, 0, len(prevRPCs))
-	for k := range prevRPCs {
-		rpcKeys = append(rpcKeys, k)
-	}
-	sort.Strings(rpcKeys)
-
-	for _, rk := range rpcKeys {
-		pr := prevRPCs[rk]
-		cr, exists := currRPCs[rk]
-		if !exists {
-			items = append(items, LocalDriftDiffItem{
-				Filename: filename,
-				Severity: "CRITICAL",
-				Change:   "RPC_REMOVED",
-				Details:  fmt.Sprintf("rpc %s was removed", rk),
-			})
-			continue
-		}
-		if pr != cr {
-			items = append(items, LocalDriftDiffItem{
-				Filename: filename,
-				Severity: "CRITICAL",
-				Change:   "RPC_SIGNATURE_CHANGED",
-				Details:  fmt.Sprintf("rpc %s signature changed from (%s)->(%s) to (%s)->(%s)", rk, pr.Req, pr.Resp, cr.Req, cr.Resp),
-			})
-		}
-	}
-
-	if len(items) == 0 {
-		items = append(items, LocalDriftDiffItem{
-			Filename: filename,
-			Severity: "INFO",
-			Change:   "FILE_MODIFIED",
-			Details:  "Backward-compatible schema update",
-		})
-	}
-
-	return items
-}
-
-type cliFieldInfo struct {
-	Name string
-	Type string
-}
-
-type cliRPCInfo struct {
-	Req        string
-	Resp       string
-	ReqStream  bool
-	RespStream bool
-}
-
-func firstPackageName(body *unordered.ProtoBody) string {
-	if body != nil && len(body.Packages) > 0 {
-		return body.Packages[0].Name
-	}
-	return ""
-}
-
-func collectMessageNames(messages []*unordered.Message, prefix string) map[string]bool {
-	res := make(map[string]bool)
-	for _, m := range messages {
-		name := m.MessageName
-		if prefix != "" {
-			name = prefix + "." + m.MessageName
-		}
-		res[name] = true
-		if m.MessageBody != nil {
-			for k, v := range collectMessageNames(m.MessageBody.Messages, name) {
-				res[k] = v
-			}
-		}
-	}
-	return res
-}
-
-func collectFieldsByTagNumber(messages []*unordered.Message, prefix string) map[string]cliFieldInfo {
-	res := make(map[string]cliFieldInfo)
-	for _, m := range messages {
-		msgName := m.MessageName
-		if prefix != "" {
-			msgName = prefix + "." + m.MessageName
-		}
-		if m.MessageBody == nil {
-			continue
-		}
-		for _, f := range m.MessageBody.Fields {
-			if _, err := strconv.ParseInt(f.FieldNumber, 10, 32); err == nil {
-				res[msgName+"#"+f.FieldNumber] = cliFieldInfo{Name: f.FieldName, Type: f.Type}
-			}
-		}
-		for _, mf := range m.MessageBody.Maps {
-			if _, err := strconv.ParseInt(mf.FieldNumber, 10, 32); err == nil {
-				res[msgName+"#"+mf.FieldNumber] = cliFieldInfo{Name: mf.MapName, Type: "map<" + mf.KeyType + "," + mf.Type + ">"}
-			}
-		}
-		for _, oo := range m.MessageBody.Oneofs {
-			for _, oof := range oo.OneofFields {
-				if _, err := strconv.ParseInt(oof.FieldNumber, 10, 32); err == nil {
-					res[msgName+"#"+oof.FieldNumber] = cliFieldInfo{Name: oof.FieldName, Type: oof.Type}
-				}
-			}
-		}
-		for k, v := range collectFieldsByTagNumber(m.MessageBody.Messages, msgName) {
-			res[k] = v
-		}
-	}
-	return res
-}
-
-func collectRPCDetails(services []*unordered.Service) map[string]cliRPCInfo {
-	res := make(map[string]cliRPCInfo)
-	for _, s := range services {
-		if s.ServiceBody == nil {
-			continue
-		}
-		for _, r := range s.ServiceBody.RPCs {
-			var info cliRPCInfo
-			if r.RPCRequest != nil {
-				info.Req = r.RPCRequest.MessageType
-				info.ReqStream = r.RPCRequest.IsStream
-			}
-			if r.RPCResponse != nil {
-				info.Resp = r.RPCResponse.MessageType
-				info.RespStream = r.RPCResponse.IsStream
-			}
-			res[s.ServiceName+"."+r.RPCName] = info
-		}
-	}
-	return res
-}
-
-func sortedMissingKeys(prev, curr map[string]bool) []string {
-	var missing []string
-	for k := range prev {
-		if !curr[k] {
-			missing = append(missing, k)
-		}
-	}
-	sort.Strings(missing)
-	return missing
 }
 
 func renderDriftDiffReport(w io.Writer, report LocalDriftDiffReport, format string) error {
@@ -698,28 +459,29 @@ func renderDriftDiffReport(w io.Writer, report LocalDriftDiffReport, format stri
 	}
 }
 
-func shouldFailDriftDiff(items []LocalDriftDiffItem, failOn string) bool {
-	threshold := severityRank(failOn)
+func shouldFailDriftDiff(items []LocalDriftDiffItem, threshold int) bool {
 	if threshold == 0 {
 		return false
 	}
 	for _, item := range items {
-		if severityRank(item.Severity) >= threshold {
+		if r, _ := parseFailOnThreshold(item.Severity); r >= threshold {
 			return true
 		}
 	}
 	return false
 }
 
-func severityRank(s string) int {
+func parseFailOnThreshold(s string) (int, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "critical":
-		return 3
+		return 3, nil
 	case "warning", "warn":
-		return 2
+		return 2, nil
 	case "info":
-		return 1
+		return 1, nil
+	case "none", "":
+		return 0, nil
 	default:
-		return 0
+		return 0, fmt.Errorf("invalid --fail-on value %q (must be critical, warning, info, or none)", s)
 	}
 }
