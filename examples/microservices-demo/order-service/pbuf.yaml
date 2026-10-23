@@ -1,0 +1,15 @@
+version: v1
+name: demo/order-service
+registry:
+  addr: localhost:6777
+  insecure: true
+export:
+  paths:
+    - api
+modules:
+  # Pulls from pbuf-registry and automatically rewrites option go_package
+  # to "github.com/acme/order-service/gen/api/billing/v1"
+  - name: demo/billing-service
+    tag: v1.0.0
+    out: third_party
+    gen_out: gen

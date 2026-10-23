@@ -120,6 +120,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.meta.outputs.tag }}
 
   release_charts:
@@ -181,7 +182,15 @@ jobs:
           cp .cr-release-packages/index.yaml "${WORKTREE_DIR}/index.yaml"
           rm -f "${WORKTREE_DIR}/pbuf-registry-${CHART_VERSION}.tgz"
 
-          git -C "${WORKTREE_DIR}" add index.yaml
+          if [ ! -f "${WORKTREE_DIR}/artifacthub-repo.yml" ]; then
+            cat > "${WORKTREE_DIR}/artifacthub-repo.yml" <<'EOF'
+          owners:
+            - name: aatarasoff
+              email: aatarasoff@gmail.com
+          EOF
+          fi
+
+          git -C "${WORKTREE_DIR}" add index.yaml artifacthub-repo.yml
           if ! git -C "${WORKTREE_DIR}" diff --cached --quiet; then
             git -C "${WORKTREE_DIR}" commit -m "chore(charts): release pbuf-registry-${CHART_VERSION}"
             git -C "${WORKTREE_DIR}" push origin gh-pages

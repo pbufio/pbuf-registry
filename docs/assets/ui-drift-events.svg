@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-label="pbuf-registry Web UI — Schema Drift and Transitive Dependency Alerts">
+  <defs>
+    <filter id="cardShadow2" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect x="12" y="12" width="936" height="416" rx="12" fill="#09090b" stroke="#27272a" stroke-width="1.5" filter="url(#cardShadow2)"/>
+
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <!-- Header Banner -->
+    <text x="36" y="52" fill="#fafafa" font-size="20" font-weight="800">acme/order-service</text>
+    <rect x="246" y="34" width="60" height="24" rx="6" fill="#18181b" stroke="#27272a"/>
+    <text x="276" y="50" text-anchor="middle" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600">v1.0.0</text>
+
+    <rect x="318" y="34" width="168" height="24" rx="6" fill="#f43f5e" fill-opacity="0.16" stroke="#f43f5e" stroke-opacity="0.45"/>
+    <text x="402" y="50" text-anchor="middle" fill="#fb7185" font-size="11.5" font-weight="700">CRITICAL UPSTREAM DRIFT</text>
+
+    <!-- Dependency Drift Alert Card -->
+    <rect x="36" y="76" width="888" height="132" rx="10" fill="#121215" stroke="#f43f5e" stroke-opacity="0.4"/>
+    <text x="56" y="104" fill="#fafafa" font-size="14" font-weight="700">Transitive Dependency Drift Status</text>
+    <text x="56" y="124" fill="#a1a1aa" font-size="12.5">Upstream modules pinned in pbuf.yaml have published newer tags with breaking schema changes.</text>
+
+    <text x="56" y="154" fill="#71717a" font-size="11" font-weight="700">DEPENDENCY</text>
+    <text x="290" y="154" fill="#71717a" font-size="11" font-weight="700">PINNED TAG</text>
+    <text x="410" y="154" fill="#71717a" font-size="11" font-weight="700">LATEST TAG</text>
+    <text x="530" y="154" fill="#71717a" font-size="11" font-weight="700">SEVERITY</text>
+    <text x="680" y="154" fill="#71717a" font-size="11" font-weight="700">RECOMMENDATION</text>
+
+    <line x1="56" y1="162" x2="904" y2="162" stroke="#27272a"/>
+
+    <text x="56" y="186" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">acme/payment-service</text>
+    <text x="290" y="186" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">v1.0.0</text>
+    <text x="410" y="186" fill="#fbbf24" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" font-weight="600">v2.0.0</text>
+
+    <rect x="530" y="170" width="84" height="22" rx="5" fill="#f43f5e" fill-opacity="0.18"/>
+    <text x="572" y="185" text-anchor="middle" fill="#fb7185" font-size="11" font-weight="700">CRITICAL</text>
+
+    <rect x="680" y="170" width="196" height="22" rx="5" fill="#f59e0b" fill-opacity="0.16"/>
+    <text x="778" y="185" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">ALERT: REVIEW BREAKING DIFF</text>
+
+    <!-- File-Level Drift Events Table -->
+    <rect x="36" y="226" width="888" height="178" rx="10" fill="#121215" stroke="#27272a"/>
+    <text x="56" y="254" fill="#fafafa" font-size="14" font-weight="700">Detected Schema Drift Events (acme/payment-service@v2.0.0)</text>
+
+    <text x="56" y="284" fill="#71717a" font-size="11" font-weight="700">SEVERITY</text>
+    <text x="170" y="284" fill="#71717a" font-size="11" font-weight="700">EVENT TYPE</text>
+    <text x="300" y="284" fill="#71717a" font-size="11" font-weight="700">PROTO FILE</text>
+    <text x="610" y="284" fill="#71717a" font-size="11" font-weight="700">HASH TRANSITION</text>
+    <text x="800" y="284" fill="#71717a" font-size="11" font-weight="700">STATUS</text>
+
+    <line x1="56" y1="292" x2="904" y2="292" stroke="#27272a"/>
+
+    <!-- Row 1 -->
+    <rect x="56" y="304" width="84" height="22" rx="5" fill="#f43f5e" fill-opacity="0.18"/>
+    <text x="98" y="319" text-anchor="middle" fill="#fb7185" font-size="11" font-weight="700">CRITICAL</text>
+    <text x="170" y="319" fill="#fbbf24" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600">MODIFIED</text>
+    <text x="300" y="319" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">api/payment/v1/payment.proto</text>
+    <text x="610" y="319" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">e3b0c442 → 8f434346</text>
+    <text x="800" y="319" fill="#fb7185" font-size="12" font-weight="600">Unacknowledged</text>
+
+    <!-- Row 2 -->
+    <rect x="56" y="344" width="84" height="22" rx="5" fill="#3b82f6" fill-opacity="0.16"/>
+    <text x="98" y="359" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700">INFO</text>
+    <text x="170" y="359" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600">ADDED</text>
+    <text x="300" y="359" fill="#e4e4e7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">api/payment/v1/webhook_events.proto</text>
+    <text x="610" y="359" fill="#a1a1aa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">new → 7a29b10c</text>
+    <text x="800" y="359" fill="#10b981" font-size="12" font-weight="600">Acknowledged</text>
+  </g>
+</svg>

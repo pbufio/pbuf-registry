@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" role="img" aria-label="pbuf CLI demo: multi-source vendoring with go_package patching and breaking change drift detection">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Terminal Window Frame -->
+  <rect x="16" y="16" width="888" height="468" rx="12" fill="url(#bgGrad)" stroke="#30363d" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Title Bar -->
+  <path d="M16 28 C16 21.373 21.373 16 28 16 L892 16 C898.627 16 904 21.373 904 28 L904 52 L16 52 Z" fill="#161b22"/>
+  <line x1="16" y1="52" x2="904" y2="52" stroke="#30363d" stroke-width="1"/>
+  <!-- Window Controls -->
+  <circle cx="40" cy="34" r="6" fill="#ff5f56"/>
+  <circle cx="60" cy="34" r="6" fill="#ffbd2e"/>
+  <circle cx="80" cy="34" r="6" fill="#27c93f"/>
+  <text x="460" y="39" text-anchor="middle" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="13" font-weight="600">pbuf — order-service (zsh)</text>
+
+  <!-- Terminal Content -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="13.5">
+    <!-- Command 1: pbuf vendor -->
+    <text x="40" y="84" fill="#3fb950" font-weight="700">❯</text>
+    <text x="58" y="84" fill="#e6edf3" font-weight="600">pbuf vendor</text>
+    <text x="165" y="84" fill="#6e7681"># pulls from pbuf-registry, buf.build (BSR), and Git + patches go_package</text>
+
+    <text x="40" y="110" fill="#8b949e">[pbuf] vendoring module</text>
+    <text x="236" y="110" fill="#79c0ff">acme/payment-service@v1.1.0</text>
+    <text x="466" y="110" fill="#8b949e">(registry: pbuf.cloud) →</text>
+    <text x="665" y="110" fill="#a5d6ff">third_party/</text>
+
+    <text x="40" y="132" fill="#d2a8ff">  ↳ patched option go_package</text>
+    <text x="275" y="132" fill="#8b949e">→</text>
+    <text x="295" y="132" fill="#a5d6ff">"github.com/acme/order-service/gen/payment/v1"</text>
+
+    <text x="40" y="156" fill="#8b949e">[pbuf] vendoring BSR module</text>
+    <text x="268" y="156" fill="#79c0ff">buf.build/bufbuild/protovalidate@v0.14.0</text>
+    <text x="605" y="156" fill="#8b949e">→</text>
+    <text x="625" y="156" fill="#a5d6ff">third_party/</text>
+
+    <text x="40" y="180" fill="#8b949e">[pbuf] vendoring Git module</text>
+    <text x="268" y="180" fill="#79c0ff">github.com/googleapis/googleapis@common-protos-1_3_2</text>
+    <text x="700" y="180" fill="#8b949e">→</text>
+    <text x="720" y="180" fill="#a5d6ff">third_party/</text>
+
+    <text x="40" y="204" fill="#3fb950">✔ Successfully vendored 3 modules (14 .proto files)</text>
+
+    <!-- Command 2: pbuf drift diff -->
+    <text x="40" y="246" fill="#3fb950" font-weight="700">❯</text>
+    <text x="58" y="246" fill="#e6edf3" font-weight="600">pbuf drift diff --against v1.1.0</text>
+    <text x="330" y="246" fill="#6e7681"># local pre-push breaking change check</text>
+
+    <text x="40" y="274" fill="#e6edf3" font-weight="600">Schema drift diff for acme/payment-service (against v1.1.0)</text>
+
+    <text x="40" y="302" fill="#8b949e" font-weight="600">SEVERITY    FILE                           CHANGE              DETAILS</text>
+    <line x1="40" y1="310" x2="880" y2="310" stroke="#30363d" stroke-width="1"/>
+
+    <rect x="40" y="320" width="76" height="20" rx="4" fill="#f85149" fill-opacity="0.18"/>
+    <text x="46" y="335" fill="#ff7b72" font-weight="700">CRITICAL</text>
+    <text x="138" y="335" fill="#e6edf3">api/payment/v1/payment.proto</text>
+    <text x="388" y="335" fill="#ffa657">FIELD_TYPE_CHANGED</text>
+    <text x="550" y="335" fill="#8b949e">field Money#2 (units) int64 → string</text>
+
+    <rect x="40" y="346" width="76" height="20" rx="4" fill="#f85149" fill-opacity="0.18"/>
+    <text x="46" y="361" fill="#ff7b72" font-weight="700">CRITICAL</text>
+    <text x="138" y="361" fill="#e6edf3">api/payment/v1/payment.proto</text>
+    <text x="388" y="361" fill="#ffa657">FIELD_REMOVED</text>
+    <text x="550" y="361" fill="#8b949e">field ChargeResponse#2 (status) removed</text>
+
+    <rect x="40" y="372" width="76" height="20" rx="4" fill="#d29922" fill-opacity="0.18"/>
+    <text x="50" y="387" fill="#e3b341" font-weight="700">WARNING</text>
+    <text x="138" y="387" fill="#e6edf3">api/payment/v1/payment.proto</text>
+    <text x="388" y="387" fill="#e3b341">FIELD_RENAMED</text>
+    <text x="550" y="387" fill="#8b949e">field ChargeRequest#3 renamed</text>
+
+    <!-- Command 3: pbuf drift dependencies -->
+    <text x="40" y="424" fill="#3fb950" font-weight="700">❯</text>
+    <text x="58" y="424" fill="#e6edf3" font-weight="600">pbuf drift dependencies acme/order-service</text>
+
+    <text x="40" y="448" fill="#8b949e">DEPENDENCY             CURRENT  TARGET   SEVERITY                  RECOMMENDATION</text>
+    <text x="40" y="468" fill="#79c0ff">acme/payment-service</text>
+    <text x="226" y="468" fill="#e6edf3">v1.0.0   v2.0.0</text>
+    <text x="372" y="468" fill="#ff7b72" font-weight="700">DRIFT_SEVERITY_CRITICAL</text>
+    <text x="582" y="468" fill="#ffa657">ALERT_REVIEW</text>
+  </g>
+</svg>

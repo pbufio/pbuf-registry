@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package demo.order.v1;
+
+option go_package = "github.com/acme/order-service/gen/order/v1;orderv1";
+
+message PlaceOrderRequest {
+  string customer_id = 1;
+  repeated string item_skus = 2;
+}
+
+message PlaceOrderResponse {
+  string order_id = 1;
+  string invoice_id = 2;
+}
+
+service OrderService {
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+}

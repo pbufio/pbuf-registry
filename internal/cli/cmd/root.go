@@ -91,7 +91,7 @@ func NewRootCmd() *cobra.Command {
 		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
 		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
 		rootCmd.AddCommand(NewUsersCmd(modulesConfig, usersClient))
-		rootCmd.AddCommand(NewDriftCmd(modulesConfig, driftClient))
+		rootCmd.AddCommand(NewDriftCmd(modulesConfig, driftClient, registryClient))
 		rootCmd.AddCommand(NewMetadataCmd(modulesConfig, metadataClient))
 		rootCmd.AddCommand(NewMCPCmd(registryClient, metadataClient, driftClient))
 	} else {
@@ -158,17 +158,21 @@ func NewModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Command
 func NewRegisterModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
 	// create register module command
 	registerModuleCmd := &cobra.Command{
-		Use:   "register",
+		Use:   "register [module_name]",
 		Short: "Register",
 		Long:  "Register is a command to register modules",
-		Args:  cobra.ExactArgs(0),
+		Args:  cobra.RangeArgs(0, 1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if config.Name == "" {
+			moduleName := config.Name
+			if len(args) > 0 && args[0] != "" {
+				moduleName = args[0]
+			}
+			if moduleName == "" {
 				log.Fatalf("module name is required. see pbuf.yaml reference")
 			}
 
 			module, err := client.RegisterModule(cmd.Context(), &v1.RegisterModuleRequest{
-				Name: config.Name,
+				Name: moduleName,
 			})
 
 			if err != nil {

@@ -29,8 +29,10 @@ type textAreaModel struct {
 }
 
 func CreateInitCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "init",
+	var domainFlag string
+
+	cmd := &cobra.Command{
+		Use:   "init [module_name] [registry_url]",
 		Short: "Init",
 		Long:  "Init is a command to initialize pbuf.yaml",
 		Args:  cobra.RangeArgs(0, 2),
@@ -44,6 +46,8 @@ func CreateInitCmd() *cobra.Command {
 				moduleName = args[0]
 				if len(args) > 1 {
 					registryURL = args[1]
+				} else if domainFlag != "" {
+					registryURL = domainFlag
 				} else {
 					registryURL = "pbuf.cloud"
 				}
@@ -53,6 +57,8 @@ func CreateInitCmd() *cobra.Command {
 				modules = askMultiQuestionAndGetAnswer("Please provide modules", "domain/module-name")
 				paths = askMultiQuestionAndGetAnswer("Please provide paths", "api")
 			}
+
+			registryURL = sanitizeRegistryURL(registryURL)
 
 			var pbufModules []*model.Module
 			for _, module := range modules {
@@ -101,6 +107,19 @@ func CreateInitCmd() *cobra.Command {
 			}
 		},
 	}
+
+	cmd.Flags().StringVar(&domainFlag, "domain", "", "registry domain or address (e.g. pbuf.cloud or localhost:6777)")
+	cmd.Flags().StringVar(&domainFlag, "registry", "", "registry domain or address (e.g. pbuf.cloud or localhost:6777)")
+
+	return cmd
+}
+
+func sanitizeRegistryURL(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "https://")
+	s = strings.TrimPrefix(s, "http://")
+	s = strings.TrimRight(s, "/")
+	return s
 }
 
 func askQuestionAndGetAnswer(question, placeholder string) string {
