@@ -447,8 +447,8 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf vendor` | Vendor all dependencies (`pbuf-registry`, `buf.build`, Git) configured in `pbuf.yaml` |
 | `pbuf modules register` | Register the module defined in `pbuf.yaml` |
 | `pbuf modules push <tag> [--draft]` | Push `.proto` files from `export.paths` with a version tag |
-| `pbuf modules list` | List all registered modules in the registry |
-| `pbuf modules get [module_name]` | Get module details, tags, draft tags, packages, and dependencies |
+| `pbuf modules list [-o table\|json]` | List all registered modules in the registry |
+| `pbuf modules get [module_name] [-o table\|json]` | Get module details, tags, draft tags, packages, and dependencies |
 | `pbuf modules update` | Update `pbuf-registry` dependencies in `pbuf.yaml` to their latest published tags |
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
@@ -537,12 +537,13 @@ pbuf modules push v1.0.0
 # Push a temporary draft tag (mutable, auto-deleted after 7 days)
 pbuf modules push v1.1.0-rc1 --draft
 
-# List all modules in the registry
+# List all modules in the registry (table by default, or -o json)
 pbuf modules list
+pbuf modules list -o json
 
 # Get module metadata, tags, and dependencies (uses name from pbuf.yaml if omitted)
 pbuf modules get
-pbuf modules get myorg/payment-service
+pbuf modules get myorg/payment-service -o json
 
 # Update all pbuf-registry dependencies in pbuf.yaml to their latest published tag
 pbuf modules update

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -18,7 +19,11 @@ import (
 
 type fakeRegistryClient struct {
 	v1.RegistryClient
-	pulledFiles []*v1.ProtoFile
+	pulledFiles   []*v1.ProtoFile
+	listedModules []*v1.Module
+	emptyList     bool
+	gotModule     *v1.Module
+	gotDeps       []*v1.Dependency
 }
 
 func (f *fakeRegistryClient) PullModule(_ context.Context, _ *v1.PullModuleRequest, _ ...grpc.CallOption) (*v1.PullModuleResponse, error) {
@@ -42,14 +47,23 @@ func (f *fakeRegistryClient) DeleteModule(_ context.Context, _ *v1.DeleteModuleR
 }
 
 func (f *fakeRegistryClient) GetModule(_ context.Context, in *v1.GetModuleRequest, _ ...grpc.CallOption) (*v1.Module, error) {
+	if f.gotModule != nil {
+		return f.gotModule, nil
+	}
 	return &v1.Module{Name: in.Name, Tags: []string{"v1.2.0"}}, nil
 }
 
 func (f *fakeRegistryClient) GetModuleDependencies(_ context.Context, _ *v1.GetModuleDependenciesRequest, _ ...grpc.CallOption) (*v1.GetModuleDependenciesResponse, error) {
-	return &v1.GetModuleDependenciesResponse{}, nil
+	return &v1.GetModuleDependenciesResponse{Dependencies: f.gotDeps}, nil
 }
 
 func (f *fakeRegistryClient) ListModules(_ context.Context, _ *v1.ListModulesRequest, _ ...grpc.CallOption) (*v1.ListModulesResponse, error) {
+	if f.emptyList {
+		return &v1.ListModulesResponse{}, nil
+	}
+	if f.listedModules != nil {
+		return &v1.ListModulesResponse{Modules: f.listedModules}, nil
+	}
 	return &v1.ListModulesResponse{Modules: []*v1.Module{{Name: "org/mod"}}}, nil
 }
 
@@ -342,4 +356,134 @@ service PayService {
 	driftCmdBadFlag := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
 	driftCmdBadFlag.SetArgs([]string{"diff", "--fail-on", "typo"})
 	require.ErrorContains(t, driftCmdBadFlag.Execute(), "invalid --fail-on")
+}
+
+func TestModulesListAndGetOutputFormats(t *testing.T) {
+	cfg := &model.Config{Name: "acme/payment"}
+	populatedClient := &fakeRegistryClient{
+		listedModules: []*v1.Module{
+			{
+				Id:       "mod-1",
+				Name:     "acme/payment",
+				Tags:     []string{"v1.2.0", "v1.1.0"},
+				Packages: []string{"acme.pay.v1"},
+			},
+			{
+				Id:   "mod-2",
+				Name: "acme/empty",
+			},
+		},
+		gotModule: &v1.Module{
+			Id:        "mod-1",
+			Name:      "acme/payment",
+			Tags:      []string{"v1.2.0", "v1.1.0"},
+			DraftTags: []string{"v1.3.0-rc1"},
+			Packages:  []string{"acme.pay.v1"},
+		},
+		gotDeps: []*v1.Dependency{
+			{Name: "googleapis/googleapis", Tag: "v1.0.0", DependencyType: "direct"},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		client      *fakeRegistryClient
+		config      *model.Config
+		args        []string
+		wantSubstrs []string
+		wantJSON    bool
+		wantErr     string
+	}{
+		{
+			name:        "list default table",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"list"},
+			wantSubstrs: []string{"NAME", "ID", "acme/payment", "mod-1", "acme/empty", "mod-2"},
+		},
+		{
+			name:        "list empty table",
+			client:      &fakeRegistryClient{emptyList: true},
+			config:      cfg,
+			args:        []string{"list"},
+			wantSubstrs: []string{"No modules found."},
+		},
+		{
+			name:        "list json shorthand",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"list", "-o", "json"},
+			wantSubstrs: []string{`"modules"`, `"acme/payment"`},
+			wantJSON:    true,
+		},
+		{
+			name:        "get default table with dependencies",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"get"},
+			wantSubstrs: []string{"NAME:", "acme/payment", "ID:", "mod-1", "TAGS:", "v1.2.0, v1.1.0", "DRAFT TAGS:", "v1.3.0-rc1", "DEPENDENCY", "googleapis/googleapis", "direct"},
+		},
+		{
+			name:        "get table without dependencies",
+			client:      &fakeRegistryClient{},
+			config:      cfg,
+			args:        []string{"get", "acme/other"},
+			wantSubstrs: []string{"NAME:", "acme/other", "Dependencies: none"},
+		},
+		{
+			name:        "get json output",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"get", "--output", "json"},
+			wantSubstrs: []string{`"module"`, `"dependencies"`, `"googleapis/googleapis"`},
+			wantJSON:    true,
+		},
+		{
+			name:    "list invalid output format",
+			client:  populatedClient,
+			config:  cfg,
+			args:    []string{"list", "--output", "xml"},
+			wantErr: "invalid --output",
+		},
+		{
+			name:    "get invalid output format",
+			client:  populatedClient,
+			config:  cfg,
+			args:    []string{"get", "-o", "yaml"},
+			wantErr: "invalid --output",
+		},
+		{
+			name:    "get missing module name",
+			client:  populatedClient,
+			config:  &model.Config{},
+			args:    []string{"get"},
+			wantErr: "module name is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			modCmd := NewModuleCmd(tc.config, tc.client)
+			var out bytes.Buffer
+			modCmd.SetOut(&out)
+			modCmd.SetErr(&out)
+			modCmd.SetArgs(tc.args)
+
+			err := modCmd.Execute()
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			got := out.String()
+			for _, sub := range tc.wantSubstrs {
+				assert.Contains(t, got, sub)
+			}
+			if tc.wantJSON {
+				var parsed map[string]any
+				require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+			}
+		})
+	}
 }
