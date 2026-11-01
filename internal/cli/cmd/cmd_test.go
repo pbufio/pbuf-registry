@@ -21,6 +21,8 @@ type fakeRegistryClient struct {
 	v1.RegistryClient
 	pulledFiles   []*v1.ProtoFile
 	listedModules []*v1.Module
+	pages         map[string]*v1.ListModulesResponse
+	listRequests  []*v1.ListModulesRequest
 	emptyList     bool
 	gotModule     *v1.Module
 	gotDeps       []*v1.Dependency
@@ -57,8 +59,15 @@ func (f *fakeRegistryClient) GetModuleDependencies(_ context.Context, _ *v1.GetM
 	return &v1.GetModuleDependenciesResponse{Dependencies: f.gotDeps}, nil
 }
 
-func (f *fakeRegistryClient) ListModules(_ context.Context, _ *v1.ListModulesRequest, _ ...grpc.CallOption) (*v1.ListModulesResponse, error) {
+func (f *fakeRegistryClient) ListModules(_ context.Context, in *v1.ListModulesRequest, _ ...grpc.CallOption) (*v1.ListModulesResponse, error) {
+	f.listRequests = append(f.listRequests, in)
 	if f.emptyList {
+		return &v1.ListModulesResponse{}, nil
+	}
+	if f.pages != nil {
+		if resp, ok := f.pages[in.GetPageToken()]; ok {
+			return resp, nil
+		}
 		return &v1.ListModulesResponse{}, nil
 	}
 	if f.listedModules != nil {
@@ -399,7 +408,59 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			client:      populatedClient,
 			config:      cfg,
 			args:        []string{"list"},
-			wantSubstrs: []string{"NAME", "ID", "acme/payment", "mod-1", "acme/empty", "mod-2"},
+			wantSubstrs: []string{"NAME", "ID", "LATEST TAG", "TAGS", "acme/payment", "mod-1", "v1.2.0", "v1.2.0, v1.1.0", "acme/empty", "mod-2"},
+		},
+		{
+			name:        "list single page with page-size and page-token",
+			client: &fakeRegistryClient{
+				pages: map[string]*v1.ListModulesResponse{
+					"tok-1": {
+						Modules:       []*v1.Module{{Id: "m-2", Name: "acme/two", Tags: []string{"v2.0.0"}}},
+						NextPageToken: "tok-2",
+					},
+				},
+			},
+			config:      cfg,
+			args:        []string{"list", "--page-size", "1", "--page-token", "tok-1"},
+			wantSubstrs: []string{"acme/two", "v2.0.0", "Next page token: tok-2"},
+		},
+		{
+			name: "list --all aggregates all pages",
+			client: &fakeRegistryClient{
+				pages: map[string]*v1.ListModulesResponse{
+					"": {
+						Modules:       []*v1.Module{{Id: "m-1", Name: "acme/one", Tags: []string{"v1.0.0"}}},
+						NextPageToken: "tok-2",
+					},
+					"tok-2": {
+						Modules: []*v1.Module{{Id: "m-2", Name: "acme/two", Tags: []string{"v2.0.0"}}},
+					},
+				},
+			},
+			config:      cfg,
+			args:        []string{"list", "--all", "--page-size", "1", "-o", "json"},
+			wantSubstrs: []string{`"acme/one"`, `"acme/two"`},
+			wantJSON:    true,
+		},
+		{
+			name: "list --all detects multi-step token cycle",
+			client: &fakeRegistryClient{
+				pages: map[string]*v1.ListModulesResponse{
+					"":      {Modules: []*v1.Module{{Name: "acme/a"}}, NextPageToken: "tok-b"},
+					"tok-b": {Modules: []*v1.Module{{Name: "acme/b"}}, NextPageToken: "tok-a"},
+					"tok-a": {Modules: []*v1.Module{{Name: "acme/a"}}, NextPageToken: "tok-b"},
+				},
+			},
+			config:  cfg,
+			args:    []string{"list", "--all"},
+			wantErr: "pagination cycle detected",
+		},
+		{
+			name:    "list invalid non-positive page-size",
+			client:  populatedClient,
+			config:  cfg,
+			args:    []string{"list", "--page-size", "0"},
+			wantErr: "--page-size must be positive",
 		},
 		{
 			name:        "list empty table",

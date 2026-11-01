@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultPageSize = 10
+	defaultPageSize = 50
 )
 
 type RegistryServer struct {

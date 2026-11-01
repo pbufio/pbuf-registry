@@ -25,6 +25,7 @@ test.describe('pbuf-registry Web UI', () => {
   })
 
   test('lists modules, filters by search, appends on Load More, and supports keyboard navigation', async ({ page }) => {
+    let getModuleCalls = 0
     await page.route('**/api/v1/modules?*', async (route) => {
       const url = new URL(route.request().url())
       const pageToken = url.searchParams.get('page_token')
@@ -33,7 +34,10 @@ test.describe('pbuf-registry Web UI', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            modules: [{ id: '2', name: 'pbufio/pbuf-registry', tags: ['v0.7.0'] }],
+            modules: [
+              { id: '2', name: 'pbufio/pbuf-registry', tags: ['v0.7.0'] },
+              { id: '3', name: 'yourorg/empty-proto', tags: [] }
+            ],
             next_page_token: ''
           })
         })
@@ -50,6 +54,7 @@ test.describe('pbuf-registry Web UI', () => {
     })
 
     await page.route('**/api/v1/modules/get', async (route) => {
+      getModuleCalls += 1
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -74,10 +79,12 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page.getByText('yourorg/hello-proto')).toBeVisible()
     await expect(page.getByText('v1.0.0')).toBeVisible()
 
-    // Load More appends page 2 while keeping page 1 visible
+    // Load More appends page 2 while keeping page 1 visible without N+1 getModule requests
     await page.getByRole('button', { name: 'Load More' }).click()
     await expect(page.getByText('yourorg/hello-proto')).toBeVisible()
     await expect(page.getByText('pbufio/pbuf-registry')).toBeVisible()
+    await expect(page.getByText('yourorg/empty-proto')).toBeVisible()
+    expect(getModuleCalls).toBe(0)
 
     // Search filters modules
     const searchInput = page.getByPlaceholder('Search modules...')
