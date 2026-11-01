@@ -72,7 +72,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 	// fetch tags
 	tags, err := r.pool.Query(ctx,
-		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC LIMIT 10",
+		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
 		module.Id)
 	if err != nil {
 		// tags not found
@@ -99,7 +99,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 	// fetch draft tags
 	draftTags, err := r.pool.Query(ctx,
-		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC LIMIT 10",
+		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
 		module.Id)
 	if err != nil {
 		// tags not found
@@ -203,6 +203,7 @@ func (r *registryRepo) populateModulesDetails(ctx context.Context, modules []*v1
 		modulesByID[mod.Id] = mod
 	}
 
+	// shortcut: sorts per-module tags in memory via existing (module_id, tag) indexes, add (module_id, updated_at DESC, tag DESC) index if modules exceed thousands of tags
 	detailRows, err := r.pool.Query(ctx, `
 		SELECT
 			u.module_id::text,
@@ -266,9 +267,8 @@ func (r *registryRepo) populateModulesDetails(ctx context.Context, modules []*v1
 		if len(rawMeta) > 0 {
 			var meta model.TagMeta
 			if err := json.Unmarshal(rawMeta, &meta); err != nil {
-				return fmt.Errorf("could not unmarshal module tag meta: %w", err)
-			}
-			if len(meta.Packages) > 0 {
+				r.logger.Warnf("skipping corrupt tag meta for module %s: %v", mod.Name, err)
+			} else if len(meta.Packages) > 0 {
 				mod.Packages = meta.Packages
 			}
 		}
@@ -645,7 +645,7 @@ func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, t
 	// find the latest tag if tag is empty
 	if tag == "" {
 		err := r.pool.QueryRow(ctx,
-			"SELECT tag FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) ORDER BY updated_at DESC LIMIT 1",
+			"SELECT tag FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) ORDER BY updated_at DESC, tag DESC LIMIT 1",
 			name).Scan(&tag)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

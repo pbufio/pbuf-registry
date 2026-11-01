@@ -479,9 +479,14 @@ func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command
 
 			var modulesList *v1.ListModulesResponse
 			if fetchAll {
+				const maxPages = 1000
 				var allModules []*v1.Module
+				seen := map[string]struct{}{pageToken: {}}
 				curToken := pageToken
-				for {
+				for page := 0; ; page++ {
+					if page >= maxPages {
+						return fmt.Errorf("aborted after %d pages; increase --page-size", maxPages)
+					}
 					resp, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{
 						PageSize:  pageSize,
 						PageToken: curToken,
@@ -491,9 +496,13 @@ func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command
 					}
 					allModules = append(allModules, resp.GetModules()...)
 					next := resp.GetNextPageToken()
-					if next == "" || next == curToken {
+					if next == "" {
 						break
 					}
+					if _, dup := seen[next]; dup {
+						return fmt.Errorf("pagination cycle detected at token %q", next)
+					}
+					seen[next] = struct{}{}
 					curToken = next
 				}
 				modulesList = &v1.ListModulesResponse{Modules: allModules}

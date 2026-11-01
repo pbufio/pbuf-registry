@@ -1301,5 +1301,19 @@ func Test_registryRepository_ListModules_PopulatesTagsDraftsAndPackages(t *testi
 	assert.Equal(t, modUnparsedLatest, modsPage2[0].Name)
 	assert.Equal(t, []string{"v2.0.0", "v1.0.0"}, modsPage2[0].Tags)
 	assert.Nil(t, modsPage2[0].Packages)
+
+	// Corrupt JSON shape in tag_meta must degrade gracefully (Packages = nil) rather than failing ListModules
+	unparsedV2TagID, err := r.GetModuleTagId(ctx, modUnparsedLatest, "v2.0.0")
+	require.NoError(t, err)
+	_, err = suite.pool.Exec(ctx,
+		"INSERT INTO tag_meta (tag_id, meta) VALUES ($1, '\"corrupt-not-an-object\"'::jsonb)",
+		unparsedV2TagID)
+	require.NoError(t, err)
+
+	modsCorrupt, _, err := r.ListModules(ctx, 2, nextTok)
+	require.NoError(t, err)
+	require.NotEmpty(t, modsCorrupt)
+	assert.Equal(t, modUnparsedLatest, modsCorrupt[0].Name)
+	assert.Nil(t, modsCorrupt[0].Packages)
 }
 

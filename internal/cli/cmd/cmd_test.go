@@ -443,6 +443,19 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			wantJSON:    true,
 		},
 		{
+			name: "list --all detects multi-step token cycle",
+			client: &fakeRegistryClient{
+				pages: map[string]*v1.ListModulesResponse{
+					"":      {Modules: []*v1.Module{{Name: "acme/a"}}, NextPageToken: "tok-b"},
+					"tok-b": {Modules: []*v1.Module{{Name: "acme/b"}}, NextPageToken: "tok-a"},
+					"tok-a": {Modules: []*v1.Module{{Name: "acme/a"}}, NextPageToken: "tok-b"},
+				},
+			},
+			config:  cfg,
+			args:    []string{"list", "--all"},
+			wantErr: "pagination cycle detected",
+		},
+		{
 			name:    "list invalid non-positive page-size",
 			client:  populatedClient,
 			config:  cfg,
