@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/jdx/go-netrc"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
@@ -305,83 +309,199 @@ func NewDeleteModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.C
 	return deleteModuleCmd
 }
 
+type moduleDetailsOutput struct {
+	Module       *v1.Module       `json:"module"`
+	Dependencies []*v1.Dependency `json:"dependencies"`
+}
+
+func parseOutputFormat(cmd *cobra.Command) (string, error) {
+	raw, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return "", err
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "table", "":
+		return "table", nil
+	case "json":
+		return "json", nil
+	default:
+		return "", fmt.Errorf("invalid --output value %q (must be table or json)", raw)
+	}
+}
+
+func joinOrDash(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	return strings.Join(values, ", ")
+}
+
 // NewGetModuleCmd creates cobra command for get module
 func NewGetModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
-	// create get module command
 	getModuleCmd := &cobra.Command{
 		Use:   "get [module_name]",
 		Short: "Get",
 		Long:  "Get is a command to get modules",
 		Args:  cobra.RangeArgs(0, 1),
-		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 0 {
-				if config.Name == "" {
-					log.Fatalf("module name is required. see pbuf.yaml reference")
-				}
-				args = append(args, config.Name)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			outputFormat, err := parseOutputFormat(cmd)
+			if err != nil {
+				return err
 			}
 
-			moduleName := args[0]
+			var moduleName string
+			if len(args) > 0 && args[0] != "" {
+				moduleName = args[0]
+			} else if config != nil {
+				moduleName = config.Name
+			}
+			if moduleName == "" {
+				return fmt.Errorf("module name is required. see pbuf.yaml reference")
+			}
 
 			module, err := client.GetModule(cmd.Context(), &v1.GetModuleRequest{
 				Name: moduleName,
 			})
-
 			if err != nil {
-				log.Fatalf("failed to get: %v", err)
+				return fmt.Errorf("failed to get: %w", err)
 			}
 
 			moduleDependencies, err := client.GetModuleDependencies(cmd.Context(), &v1.GetModuleDependenciesRequest{
 				Name: moduleName,
 			})
-
 			if err != nil {
-				log.Fatalf("failed to fetch dependencies: %v", err)
+				return fmt.Errorf("failed to fetch dependencies: %w", err)
 			}
 
-			// print as json pretty
-			marshalled, err := json.MarshalIndent(module, "", "  ")
-			if err != nil {
-				log.Fatalf("failed to marshal module: %v", err)
-			}
-			log.Printf("module:\n%+v\n", string(marshalled))
-
-			// print deps as json pretty
-			marshalled, err = json.MarshalIndent(moduleDependencies, "", "  ")
-			if err != nil {
-				log.Fatalf("failed to marshal module dependencies: %v", err)
-			}
-			log.Printf("module dependencies:\n%+v\n", string(marshalled))
+			return renderModuleDetails(cmd.OutOrStdout(), module, moduleDependencies.GetDependencies(), outputFormat)
 		},
 	}
 
+	getModuleCmd.Flags().StringP("output", "o", "table", "output format: table|json")
 	return getModuleCmd
 }
 
+func renderModuleDetails(w io.Writer, module *v1.Module, dependencies []*v1.Dependency, outputFormat string) error {
+	if outputFormat == "json" {
+		deps := dependencies
+		if deps == nil {
+			deps = []*v1.Dependency{}
+		}
+		marshalled, err := json.MarshalIndent(moduleDetailsOutput{
+			Module:       module,
+			Dependencies: deps,
+		}, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal module: %w", err)
+		}
+		_, err = fmt.Fprintln(w, string(marshalled))
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintf(tw, "NAME:\t%s\n", module.GetName()); err != nil {
+		return err
+	}
+	if module.GetId() != "" {
+		if _, err := fmt.Fprintf(tw, "ID:\t%s\n", module.GetId()); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(tw, "TAGS:\t%s\n", joinOrDash(module.GetTags())); err != nil {
+		return err
+	}
+	if len(module.GetDraftTags()) > 0 {
+		if _, err := fmt.Fprintf(tw, "DRAFT TAGS:\t%s\n", strings.Join(module.GetDraftTags(), ", ")); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(tw, "PACKAGES:\t%s\n", joinOrDash(module.GetPackages())); err != nil {
+		return err
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+
+	if len(dependencies) == 0 {
+		_, err := fmt.Fprintln(w, "\nDependencies: none")
+		return err
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+
+	depTW := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(depTW, "DEPENDENCY\tTAG\tTYPE"); err != nil {
+		return err
+	}
+	for _, dep := range dependencies {
+		depType := dep.GetDependencyType()
+		if depType == "" {
+			depType = "direct"
+		}
+		if _, err := fmt.Fprintf(depTW, "%s\t%s\t%s\n", dep.GetName(), dep.GetTag(), depType); err != nil {
+			return err
+		}
+	}
+	return depTW.Flush()
+}
+
 // NewListModulesCmd creates cobra command for list modules
-func NewListModulesCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
-	// create list modules command
+func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command {
 	listModulesCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List",
 		Long:  "List is a command to list modules",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			modulesList, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{})
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			outputFormat, err := parseOutputFormat(cmd)
 			if err != nil {
-				log.Fatalf("failed to fetch modules list: %v", err)
+				return err
 			}
 
-			// print as json pretty
-			marshalled, err := json.MarshalIndent(modulesList, "", "  ")
+			modulesList, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{})
 			if err != nil {
-				log.Fatalf("failed to marshal modules list: %v", err)
+				return fmt.Errorf("failed to fetch modules list: %w", err)
 			}
-			log.Printf("%+v", string(marshalled))
+
+			return renderModulesList(cmd.OutOrStdout(), modulesList, outputFormat)
 		},
 	}
 
+	listModulesCmd.Flags().StringP("output", "o", "table", "output format: table|json")
 	return listModulesCmd
+}
+
+func renderModulesList(w io.Writer, modulesList *v1.ListModulesResponse, outputFormat string) error {
+	if outputFormat == "json" {
+		marshalled, err := json.MarshalIndent(modulesList, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal modules list: %w", err)
+		}
+		_, err = fmt.Fprintln(w, string(marshalled))
+		return err
+	}
+
+	modules := modulesList.GetModules()
+	if len(modules) == 0 {
+		_, err := fmt.Fprintln(w, "No modules found.")
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "NAME\tID"); err != nil {
+		return err
+	}
+	for _, mod := range modules {
+		modID := mod.GetId()
+		if modID == "" {
+			modID = "-"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\n", mod.GetName(), modID); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func NewModuleUpdateCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
