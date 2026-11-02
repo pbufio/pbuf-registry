@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
+	"github.com/pbufio/pbuf-registry/internal/model"
 )
 
 var ErrTagNotFound = errors.New("tag not found")
@@ -71,7 +72,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 	// fetch tags
 	tags, err := r.pool.Query(ctx,
-		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC LIMIT 10",
+		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
 		module.Id)
 	if err != nil {
 		// tags not found
@@ -98,7 +99,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 
 	// fetch draft tags
 	draftTags, err := r.pool.Query(ctx,
-		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC LIMIT 10",
+		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
 		module.Id)
 	if err != nil {
 		// tags not found
@@ -130,7 +131,7 @@ func (r *registryRepo) GetModule(ctx context.Context, name string) (*v1.Module, 
 // Token is the base64 encoded module name
 func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token string) ([]*v1.Module, string, error) {
 	if pageSize <= 0 {
-		pageSize = 10
+		pageSize = 50
 	}
 	if pageSize > 1000 {
 		pageSize = 1000
@@ -181,8 +182,102 @@ func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token stri
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("could not iterate modules: %w", err)
 	}
+	rows.Close()
+
+	if err := r.populateModulesDetails(ctx, modules); err != nil {
+		return nil, "", err
+	}
 
 	return modules, nextPageToken, nil
+}
+
+func (r *registryRepo) populateModulesDetails(ctx context.Context, modules []*v1.Module) error {
+	if len(modules) == 0 {
+		return nil
+	}
+
+	moduleIDs := make([]string, len(modules))
+	modulesByID := make(map[string]*v1.Module, len(modules))
+	for i, mod := range modules {
+		moduleIDs[i] = mod.Id
+		modulesByID[mod.Id] = mod
+	}
+
+	// shortcut: sorts per-module tags in memory via existing (module_id, tag) indexes, add (module_id, updated_at DESC, tag DESC) index if modules exceed thousands of tags
+	detailRows, err := r.pool.Query(ctx, `
+		SELECT
+			u.module_id::text,
+			COALESCE((
+				SELECT array_agg(t.tag ORDER BY t.updated_at DESC, t.tag DESC)
+				FROM (
+					SELECT tag, updated_at
+					FROM tags
+					WHERE module_id = u.module_id
+					ORDER BY updated_at DESC, tag DESC
+					LIMIT 10
+				) t
+			), '{}'::text[]),
+			COALESCE((
+				SELECT array_agg(dt.tag ORDER BY dt.updated_at DESC, dt.tag DESC)
+				FROM (
+					SELECT tag, updated_at
+					FROM draft_tags
+					WHERE module_id = u.module_id
+					ORDER BY updated_at DESC, tag DESC
+					LIMIT 10
+				) dt
+			), '{}'::text[]),
+			(
+				SELECT tm.meta
+				FROM (
+					SELECT id
+					FROM tags
+					WHERE module_id = u.module_id
+					ORDER BY updated_at DESC, tag DESC
+					LIMIT 1
+				) lt
+				LEFT JOIN tag_meta tm ON tm.tag_id = lt.id
+			)
+		FROM unnest($1::uuid[]) AS u(module_id)`, moduleIDs)
+	if err != nil {
+		return fmt.Errorf("could not select module details from database: %w", err)
+	}
+	defer detailRows.Close()
+
+	for detailRows.Next() {
+		var (
+			modID     string
+			tags      []string
+			draftTags []string
+			rawMeta   []byte
+		)
+		if err := detailRows.Scan(&modID, &tags, &draftTags, &rawMeta); err != nil {
+			return fmt.Errorf("could not scan module details: %w", err)
+		}
+		mod := modulesByID[modID]
+		if mod == nil {
+			continue
+		}
+		if len(tags) > 0 {
+			mod.Tags = tags
+		}
+		if len(draftTags) > 0 {
+			mod.DraftTags = draftTags
+		}
+		if len(rawMeta) > 0 {
+			var meta model.TagMeta
+			if err := json.Unmarshal(rawMeta, &meta); err != nil {
+				r.logger.Warnf("skipping corrupt tag meta for module %s: %v", mod.Name, err)
+			} else if len(meta.Packages) > 0 {
+				mod.Packages = meta.Packages
+			}
+		}
+	}
+	if err := detailRows.Err(); err != nil {
+		return fmt.Errorf("could not iterate module details: %w", err)
+	}
+
+	return nil
 }
 
 func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
@@ -550,7 +645,7 @@ func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, t
 	// find the latest tag if tag is empty
 	if tag == "" {
 		err := r.pool.QueryRow(ctx,
-			"SELECT tag FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) ORDER BY updated_at DESC LIMIT 1",
+			"SELECT tag FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) ORDER BY updated_at DESC, tag DESC LIMIT 1",
 			name).Scan(&tag)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

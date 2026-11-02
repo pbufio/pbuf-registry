@@ -19,26 +19,7 @@ const loadModules = async () => {
   try {
     const response = await registryApi.listModules(50, pageToken.value)
     const modulesList = response.modules || []
-    
-    // Fetch full details for modules with empty tags
-    const modulesWithDetails = await Promise.all(
-      modulesList.map(async (module) => {
-        // If tags and draftTags are both empty, fetch full module details
-        if ((!module.tags || module.tags.length === 0) && 
-            (!module.draftTags || module.draftTags.length === 0)) {
-          try {
-            const fullModule = await registryApi.getModule(module.name, true)
-            return fullModule
-          } catch (error) {
-            console.error(`Failed to load details for module ${module.name}:`, error)
-            return module // Return original module on error
-          }
-        }
-        return module
-      })
-    )
-    
-    modules.value = pageToken.value ? [...modules.value, ...modulesWithDetails] : modulesWithDetails
+    modules.value = pageToken.value ? [...modules.value, ...modulesList] : modulesList
     nextPageToken.value = response.next_page_token || ''
   } catch (error) {
     console.error('Failed to load modules:', error)

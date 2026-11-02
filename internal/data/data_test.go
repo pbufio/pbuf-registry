@@ -1234,3 +1234,86 @@ func Test_registryRepository_PushModule_MoreThan10TagsAndAtomicDeps(t *testing.T
 	require.NoError(t, err)
 }
 
+func Test_registryRepository_ListModules_PopulatesTagsDraftsAndPackages(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+
+	prefix := "zz-list-meta-" + time.Now().Format("20060102150405")
+	modFull := prefix + "-a-full"
+	modEmpty := prefix + "-b-empty"
+	modUnparsedLatest := prefix + "-c-unparsed-latest"
+
+	for _, name := range []string{modFull, modEmpty, modUnparsedLatest} {
+		require.NoError(t, r.RegisterModule(ctx, name))
+	}
+
+	v1Protos := []*v1.ProtoFile{
+		{Filename: "pay.proto", Content: `syntax = "proto3"; package acme.pay.v1; message Pay {}`},
+	}
+	v2Protos := []*v1.ProtoFile{
+		{Filename: "pay.proto", Content: `syntax = "proto3"; package acme.pay.v2; message Pay {}`},
+	}
+
+	_, err := r.PushModule(ctx, modFull, "v1.0.0", v1Protos)
+	require.NoError(t, err)
+	_, err = r.PushModule(ctx, modFull, "v2.0.0", v2Protos)
+	require.NoError(t, err)
+	_, err = r.PushDraftModule(ctx, modFull, "v2.1.0-rc1", v2Protos, nil)
+	require.NoError(t, err)
+
+	fullV2TagID, err := r.GetModuleTagId(ctx, modFull, "v2.0.0")
+	require.NoError(t, err)
+	parsedV2, err := utils.ParseProtoFilesContents(v2Protos)
+	require.NoError(t, err)
+	require.NoError(t, suite.metadataRepository.SaveParsedProtoFiles(ctx, fullV2TagID, parsedV2))
+
+	// modUnparsedLatest has parsed metadata on v1.0.0, then pushes v2.0.0 without parsing yet;
+	// ListModules must not leak stale v1.0.0 packages onto v2.0.0.
+	_, err = r.PushModule(ctx, modUnparsedLatest, "v1.0.0", v1Protos)
+	require.NoError(t, err)
+	unparsedV1TagID, err := r.GetModuleTagId(ctx, modUnparsedLatest, "v1.0.0")
+	require.NoError(t, err)
+	parsedV1, err := utils.ParseProtoFilesContents(v1Protos)
+	require.NoError(t, err)
+	require.NoError(t, suite.metadataRepository.SaveParsedProtoFiles(ctx, unparsedV1TagID, parsedV1))
+	_, err = r.PushModule(ctx, modUnparsedLatest, "v2.0.0", v2Protos)
+	require.NoError(t, err)
+
+	startToken := base64.StdEncoding.EncodeToString([]byte(prefix))
+	mods, nextTok, err := r.ListModules(ctx, 2, startToken)
+	require.NoError(t, err)
+	require.Len(t, mods, 2)
+	assert.NotEmpty(t, nextTok)
+
+	assert.Equal(t, modFull, mods[0].Name)
+	assert.Equal(t, []string{"v2.0.0", "v1.0.0"}, mods[0].Tags)
+	assert.Equal(t, []string{"v2.1.0-rc1"}, mods[0].DraftTags)
+	assert.Equal(t, []string{"acme.pay.v2"}, mods[0].Packages)
+
+	assert.Equal(t, modEmpty, mods[1].Name)
+	assert.Nil(t, mods[1].Tags)
+	assert.Nil(t, mods[1].DraftTags)
+	assert.Nil(t, mods[1].Packages)
+
+	modsPage2, _, err := r.ListModules(ctx, 2, nextTok)
+	require.NoError(t, err)
+	require.NotEmpty(t, modsPage2)
+	assert.Equal(t, modUnparsedLatest, modsPage2[0].Name)
+	assert.Equal(t, []string{"v2.0.0", "v1.0.0"}, modsPage2[0].Tags)
+	assert.Nil(t, modsPage2[0].Packages)
+
+	// Corrupt JSON shape in tag_meta must degrade gracefully (Packages = nil) rather than failing ListModules
+	unparsedV2TagID, err := r.GetModuleTagId(ctx, modUnparsedLatest, "v2.0.0")
+	require.NoError(t, err)
+	_, err = suite.pool.Exec(ctx,
+		"INSERT INTO tag_meta (tag_id, meta) VALUES ($1, '\"corrupt-not-an-object\"'::jsonb)",
+		unparsedV2TagID)
+	require.NoError(t, err)
+
+	modsCorrupt, _, err := r.ListModules(ctx, 2, nextTok)
+	require.NoError(t, err)
+	require.NotEmpty(t, modsCorrupt)
+	assert.Equal(t, modUnparsedLatest, modsCorrupt[0].Name)
+	assert.Nil(t, modsCorrupt[0].Packages)
+}
+

@@ -75,11 +75,29 @@ func TestListModules_PageSizeClamping(t *testing.T) {
 	metadataRepository := &mocks.MetadataRepository{}
 	srv := NewRegistryServer(registryRepository, metadataRepository, nil)
 
-	// Negative pageSize should clamp to defaultPageSize (10)
-	registryRepository.On("ListModules", mock.Anything, 10, "tok-1").
+	// Zero or negative pageSize should clamp to defaultPageSize (50) and preserve populated metadata
+	populated := &v1.Module{
+		Id:        "id-1",
+		Name:      "m1",
+		Tags:      []string{"v1.1.0", "v1.0.0"},
+		DraftTags: []string{"v1.2.0-rc1"},
+		Packages:  []string{"acme.m1.v1"},
+	}
+	registryRepository.On("ListModules", mock.Anything, 50, "").
+		Return([]*v1.Module{populated}, "", nil).Once()
+
+	resp, err := srv.ListModules(ctx, &v1.ListModulesRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Modules) != 1 || len(resp.Modules[0].Tags) != 2 || len(resp.Modules[0].DraftTags) != 1 || len(resp.Modules[0].Packages) != 1 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	registryRepository.On("ListModules", mock.Anything, 50, "tok-1").
 		Return([]*v1.Module{{Name: "m1"}}, "next-1", nil).Once()
 
-	resp, err := srv.ListModules(ctx, &v1.ListModulesRequest{PageSize: -10, PageToken: "tok-1"})
+	resp, err = srv.ListModules(ctx, &v1.ListModulesRequest{PageSize: -10, PageToken: "tok-1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -459,9 +459,62 @@ func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command
 				return err
 			}
 
-			modulesList, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{})
+			pageSize, err := cmd.Flags().GetInt32("page-size")
 			if err != nil {
-				return fmt.Errorf("failed to fetch modules list: %w", err)
+				return err
+			}
+			if cmd.Flags().Changed("page-size") && pageSize <= 0 {
+				return fmt.Errorf("--page-size must be positive")
+			}
+
+			pageToken, err := cmd.Flags().GetString("page-token")
+			if err != nil {
+				return err
+			}
+
+			fetchAll, err := cmd.Flags().GetBool("all")
+			if err != nil {
+				return err
+			}
+
+			var modulesList *v1.ListModulesResponse
+			if fetchAll {
+				const maxPages = 1000
+				var allModules []*v1.Module
+				seen := map[string]struct{}{pageToken: {}}
+				curToken := pageToken
+				for page := 0; ; page++ {
+					if page >= maxPages {
+						return fmt.Errorf("aborted after %d pages; increase --page-size", maxPages)
+					}
+					resp, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{
+						PageSize:  pageSize,
+						PageToken: curToken,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to fetch modules list: %w", err)
+					}
+					allModules = append(allModules, resp.GetModules()...)
+					next := resp.GetNextPageToken()
+					if next == "" {
+						break
+					}
+					if _, dup := seen[next]; dup {
+						return fmt.Errorf("pagination cycle detected at token %q", next)
+					}
+					seen[next] = struct{}{}
+					curToken = next
+				}
+				modulesList = &v1.ListModulesResponse{Modules: allModules}
+			} else {
+				resp, err := client.ListModules(cmd.Context(), &v1.ListModulesRequest{
+					PageSize:  pageSize,
+					PageToken: pageToken,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to fetch modules list: %w", err)
+				}
+				modulesList = resp
 			}
 
 			return renderModulesList(cmd.OutOrStdout(), modulesList, outputFormat)
@@ -469,6 +522,9 @@ func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command
 	}
 
 	listModulesCmd.Flags().StringP("output", "o", "table", "output format: table|json")
+	listModulesCmd.Flags().Int32("page-size", 50, "max number of modules per page")
+	listModulesCmd.Flags().String("page-token", "", "page token for pagination")
+	listModulesCmd.Flags().Bool("all", false, "fetch all pages of modules")
 	return listModulesCmd
 }
 
@@ -488,20 +544,51 @@ func renderModulesList(w io.Writer, modulesList *v1.ListModulesResponse, outputF
 		return err
 	}
 
+	hasTags := false
+	for _, mod := range modules {
+		if len(mod.GetTags()) > 0 {
+			hasTags = true
+			break
+		}
+	}
+
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "NAME\tID"); err != nil {
-		return err
+	if hasTags {
+		if _, err := fmt.Fprintln(tw, "NAME\tID\tLATEST TAG\tTAGS"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprintln(tw, "NAME\tID"); err != nil {
+			return err
+		}
 	}
 	for _, mod := range modules {
 		modID := mod.GetId()
 		if modID == "" {
 			modID = "-"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\n", mod.GetName(), modID); err != nil {
-			return err
+		if hasTags {
+			latestTag := "-"
+			if len(mod.GetTags()) > 0 {
+				latestTag = mod.GetTags()[0]
+			}
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", mod.GetName(), modID, latestTag, joinOrDash(mod.GetTags())); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(tw, "%s\t%s\n", mod.GetName(), modID); err != nil {
+				return err
+			}
 		}
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if modulesList.GetNextPageToken() != "" {
+		_, err := fmt.Fprintf(w, "\nNext page token: %s\n", modulesList.GetNextPageToken())
+		return err
+	}
+	return nil
 }
 
 func NewModuleUpdateCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
