@@ -207,8 +207,13 @@ func saveTokenToNetrc(config *model.Config, usr *user.User, auth *netrc.Netrc, t
 				return fmt.Errorf("failed to resolve current user: %w", err)
 			}
 		}
-		auth = &netrc.Netrc{
-			Path: filepath.Join(usr.HomeDir, ".netrc"),
+		netrcPath := filepath.Join(usr.HomeDir, ".netrc")
+		if parsed, err := netrc.Parse(netrcPath); err == nil {
+			auth = parsed
+		} else {
+			auth = &netrc.Netrc{
+				Path: netrcPath,
+			}
 		}
 	}
 

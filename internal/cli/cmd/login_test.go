@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os/user"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
+	"github.com/jdx/go-netrc"
+	"github.com/pbufio/pbuf-registry/internal/cli/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,4 +73,23 @@ func TestRunDeviceCodeFlow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "eyJhbGciOiJSUzI1NiJ9.test.signature", token)
 	assert.Contains(t, out.String(), "ABCD-EFGH")
+}
+
+func TestSaveTokenToNetrcPreservesExistingMachinesWhenLazy(t *testing.T) {
+	homeDir := t.TempDir()
+	netrcPath := filepath.Join(homeDir, ".netrc")
+
+	existing := &netrc.Netrc{Path: netrcPath}
+	existing.AddMachine("github.com", "git", "gh-token")
+	require.NoError(t, existing.Save())
+
+	cfg := &model.Config{Registry: model.Registry{Addr: "pbuf.cloud:6777"}}
+	require.NoError(t, saveTokenToNetrc(cfg, &user.User{HomeDir: homeDir}, nil, "pbuf-token"))
+
+	parsed, err := netrc.Parse(netrcPath)
+	require.NoError(t, err)
+	require.NotNil(t, parsed.Machine("github.com"))
+	assert.Equal(t, "gh-token", parsed.Machine("github.com").Get("password"))
+	require.NotNil(t, parsed.Machine("pbuf.cloud"))
+	assert.Equal(t, "pbuf-token", parsed.Machine("pbuf.cloud").Get("token"))
 }

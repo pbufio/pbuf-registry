@@ -143,7 +143,11 @@ func TestClientAddrAndNetrcHelpers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "secret-tok", md["authorization"])
 
-	conn := NewInsecureConn(&model.Config{Registry: model.Registry{Addr: "localhost:6777", Insecure: true}}, parsedNrc)
+	conn, err := NewInsecureConn(&model.Config{Registry: model.Registry{Addr: "localhost:6777", Insecure: true}}, parsedNrc)
+	require.NoError(t, err)
 	require.NotNil(t, conn)
 	_ = conn.Close()
+
+	_, err = NewInsecureConn(&model.Config{Registry: model.Registry{Addr: "%zz:6777", Insecure: true}}, nil)
+	require.ErrorContains(t, err, "failed to create grpc client")
 }

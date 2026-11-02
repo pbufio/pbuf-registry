@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 
 	"github.com/jdx/go-netrc"
@@ -22,13 +24,91 @@ import (
 	"google.golang.org/grpc"
 )
 
+type lazyClientConn struct {
+	get func() (*grpc.ClientConn, error)
+}
+
+func (l *lazyClientConn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
+	conn, err := l.get()
+	if err != nil {
+		return err
+	}
+	return conn.Invoke(ctx, method, args, reply, opts...)
+}
+
+func (l *lazyClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	conn, err := l.get()
+	if err != nil {
+		return nil, err
+	}
+	return conn.NewStream(ctx, desc, method, opts...)
+}
+
 // NewRootCmd creates cobra root command via function
 func NewRootCmd() *cobra.Command {
-	// read the file (PbufConfigFilename) and call ModulesConfig.Vendor()
-	file, err := os.ReadFile(model.PbufConfigFilename)
-	configNotFound := os.IsNotExist(err)
-	if err != nil && !configNotFound {
-		log.Fatalf("failed to read %s file: %v", model.PbufConfigFilename, err)
+	modulesConfig := &model.Config{}
+	var (
+		configOnce     sync.Once
+		configNotFound bool
+		configErr      error
+	)
+	loadConfig := func() {
+		configOnce.Do(func() {
+			file, readErr := os.ReadFile(model.PbufConfigFilename)
+			configNotFound = os.IsNotExist(readErr)
+			if readErr != nil && !configNotFound {
+				configErr = fmt.Errorf("failed to read %s file: %w", model.PbufConfigFilename, readErr)
+			} else if !configNotFound {
+				parsed, err := modules.NewConfig(file)
+				if err != nil {
+					configErr = fmt.Errorf("failed to parse %s: %w", model.PbufConfigFilename, err)
+				} else {
+					*modulesConfig = *parsed
+				}
+			}
+
+			if envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR"); envRegistryAddr != "" {
+				modulesConfig.Registry.Addr = envRegistryAddr
+				if os.Getenv("PBUF_REGISTRY_INSECURE") == "true" {
+					modulesConfig.Registry.Insecure = true
+				}
+			}
+		})
+	}
+
+	var (
+		netrcOnce sync.Once
+		netrcAuth *netrc.Netrc
+	)
+	loadNetrc := func() *netrc.Netrc {
+		netrcOnce.Do(func() {
+			usr, err := user.Current()
+			if err == nil {
+				netrcAuth, _ = netrc.Parse(filepath.Join(usr.HomeDir, ".netrc"))
+				// Ignore error if .netrc doesn't exist - auth command will create it
+			} else {
+				log.Printf("failed to fetch current user: %v", err)
+			}
+		})
+		return netrcAuth
+	}
+
+	var (
+		connOnce sync.Once
+		grpcConn *grpc.ClientConn
+		connErr  error
+	)
+	ensureConn := func() (*grpc.ClientConn, error) {
+		connOnce.Do(func() {
+			loadConfig()
+			auth := loadNetrc()
+			if modulesConfig.Registry.Insecure {
+				grpcConn, connErr = registry.NewInsecureConn(modulesConfig, auth)
+			} else {
+				grpcConn, connErr = registry.NewSecureConn(modulesConfig, auth)
+			}
+		})
+		return grpcConn, connErr
 	}
 
 	// create root command
@@ -37,6 +117,7 @@ func NewRootCmd() *cobra.Command {
 		Short: "PowerBuf CLI",
 		Long:  "PowerBuf CLI is a command line interface for PowerBuf",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			loadConfig()
 			if configNotFound {
 				log.Printf("no %s file found. please use `init` command", model.PbufConfigFilename)
 			}
@@ -45,64 +126,71 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
-	var netrcAuth *netrc.Netrc
+	lazyConn := &lazyClientConn{get: ensureConn}
+	registryClient := v1.NewRegistryClient(lazyConn)
+	usersClient := v1.NewUserServiceClient(lazyConn)
+	driftClient := v1.NewDriftServiceClient(lazyConn)
+	metadataClient := v1.NewMetadataServiceClient(lazyConn)
 
-	usr, err := user.Current()
-	if err == nil {
-		netrcAuth, _ = netrc.Parse(filepath.Join(usr.HomeDir, ".netrc"))
-		// Ignore error if .netrc doesn't exist - auth command will create it
-	} else {
-		log.Printf("failed to fetch current user: %v", err)
-	}
-
-	envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR")
-	if configNotFound && envRegistryAddr == "" {
-		rootCmd.AddCommand(CreateInitCmd())
-		rootCmd.AddCommand(NewAuthCmd(nil, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(nil, usr, netrcAuth))
-		return rootCmd
-	}
-
-	modulesConfig := &model.Config{}
-	if !configNotFound {
-		modulesConfig, err = modules.NewConfig(file)
-		if err != nil {
-			log.Fatalf("failed to create modules config: %v", err)
+	requireRegistry := func(cmd *cobra.Command, _ []string) error {
+		if cmd.HasSubCommands() {
+			return nil
 		}
-	}
-	if envRegistryAddr != "" {
-		modulesConfig.Registry.Addr = envRegistryAddr
-		if os.Getenv("PBUF_REGISTRY_INSECURE") == "true" {
-			modulesConfig.Registry.Insecure = true
+		if help, _ := cmd.Flags().GetBool("help"); help {
+			return nil
 		}
-	}
-
-	if modulesConfig.HasRegistry() {
-		var conn grpc.ClientConnInterface
-		if modulesConfig.Registry.Insecure {
-			conn = registry.NewInsecureConn(modulesConfig, netrcAuth)
-		} else {
-			conn = registry.NewSecureConn(modulesConfig, netrcAuth)
+		loadConfig()
+		if configErr != nil {
+			return configErr
 		}
-
-		registryClient := v1.NewRegistryClient(conn)
-		usersClient := v1.NewUserServiceClient(conn)
-		driftClient := v1.NewDriftServiceClient(conn)
-		metadataClient := v1.NewMetadataServiceClient(conn)
-
-		rootCmd.AddCommand(NewModuleCmd(modulesConfig, registryClient))
-		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, registryClient))
-		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewUsersCmd(modulesConfig, usersClient))
-		rootCmd.AddCommand(NewDriftCmd(modulesConfig, driftClient, registryClient))
-		rootCmd.AddCommand(NewMetadataCmd(modulesConfig, metadataClient))
-		rootCmd.AddCommand(NewMCPCmd(registryClient, metadataClient, driftClient))
-	} else {
-		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, nil))
-		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
+		if !modulesConfig.HasRegistry() {
+			return fmt.Errorf("no registry configured: run 'pbuf init' or set PBUF_REGISTRY_ADDR")
+		}
+		_, err := ensureConn()
+		return err
 	}
+
+	vendorCmd := newVendorCmd(modulesConfig, loadNetrc, registryClient)
+	vendorCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		if help, _ := cmd.Flags().GetBool("help"); help {
+			return nil
+		}
+		loadConfig()
+		if configErr != nil {
+			return configErr
+		}
+		if configNotFound {
+			return fmt.Errorf("no %s file found: run 'pbuf init'", model.PbufConfigFilename)
+		}
+		if modulesConfig.HasRegistry() {
+			_, err := ensureConn()
+			return err
+		}
+		return nil
+	}
+
+	authCmd := NewAuthCmd(modulesConfig, nil, nil)
+	authCmd.PreRun = func(_ *cobra.Command, _ []string) { loadConfig() }
+
+	loginCmd := NewLoginCmd(modulesConfig, nil, nil)
+	loginCmd.PreRun = func(_ *cobra.Command, _ []string) { loadConfig() }
+
+	registryCmds := []*cobra.Command{
+		NewModuleCmd(modulesConfig, registryClient),
+		NewUsersCmd(modulesConfig, usersClient),
+		NewDriftCmd(modulesConfig, driftClient, registryClient),
+		NewMetadataCmd(modulesConfig, metadataClient),
+		NewMCPCmd(registryClient, metadataClient, driftClient),
+	}
+	for _, c := range registryCmds {
+		c.PersistentPreRunE = requireRegistry
+	}
+
+	rootCmd.AddCommand(CreateInitCmd())
+	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(vendorCmd)
+	rootCmd.AddCommand(registryCmds...)
 
 	return rootCmd
 }
@@ -627,13 +715,17 @@ func NewModuleUpdateCmd(config *model.Config, client v1.RegistryClient) *cobra.C
 
 // NewVendorCmd creates cobra command for vendor
 func NewVendorCmd(modulesConfig *model.Config, netrcAuth *netrc.Netrc, client v1.RegistryClient) *cobra.Command {
+	return newVendorCmd(modulesConfig, func() *netrc.Netrc { return netrcAuth }, client)
+}
+
+func newVendorCmd(modulesConfig *model.Config, getNetrc func() *netrc.Netrc, client v1.RegistryClient) *cobra.Command {
 	// create vendor command
 	vendorCmd := &cobra.Command{
 		Use:   "vendor",
 		Short: "Vendor",
 		Long:  "Vendor is a command to vendor modules",
 		Run: func(cmd *cobra.Command, args []string) {
-			err := modules.Vendor(modulesConfig, netrcAuth, client)
+			err := modules.Vendor(modulesConfig, getNetrc(), client)
 			if err != nil {
 				log.Fatalf("failed to vendor: %v", err)
 			}
