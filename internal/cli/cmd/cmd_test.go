@@ -625,4 +625,64 @@ func TestShellCompletionCommand(t *testing.T) {
 		vendorCmd.SetArgs([]string{"vendor"})
 		require.ErrorContains(t, vendorCmd.Execute(), "no pbuf.yaml file found")
 	})
+
+	t.Run("leaf help succeeds when unconfigured", func(t *testing.T) {
+		for _, args := range [][]string{
+			{"modules", "list", "--help"},
+			{"help", "modules", "list"},
+			{"vendor", "--help"},
+		} {
+			rootCmd := NewRootCmd()
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&out)
+			rootCmd.SetArgs(args)
+			require.NoError(t, rootCmd.Execute(), "args: %v", args)
+			assert.Contains(t, out.String(), "Usage:")
+		}
+	})
+
+	t.Run("invalid registry addr or malformed pbuf.yaml does not break completion or help", func(t *testing.T) {
+		t.Setenv("PBUF_REGISTRY_ADDR", "%zz:6777")
+		t.Setenv("PBUF_REGISTRY_INSECURE", "true")
+
+		for _, args := range [][]string{
+			{"completion", "zsh"},
+			{"__complete", ""},
+			{"modules", "list", "--help"},
+		} {
+			rootCmd := NewRootCmd()
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&out)
+			rootCmd.SetArgs(args)
+			require.NoError(t, rootCmd.Execute(), "args: %v", args)
+		}
+
+		badAddrCmd := NewRootCmd()
+		var out bytes.Buffer
+		badAddrCmd.SetOut(&out)
+		badAddrCmd.SetErr(&out)
+		badAddrCmd.SetArgs([]string{"modules", "list"})
+		require.ErrorContains(t, badAddrCmd.Execute(), "failed to create grpc client")
+
+		t.Setenv("PBUF_REGISTRY_ADDR", "")
+		require.NoError(t, os.WriteFile(model.PbufConfigFilename, []byte(":::invalid:yaml:[\n"), 0o644))
+		t.Cleanup(func() { _ = os.Remove(model.PbufConfigFilename) })
+
+		compCmd := NewRootCmd()
+		out.Reset()
+		compCmd.SetOut(&out)
+		compCmd.SetErr(&out)
+		compCmd.SetArgs([]string{"__complete", "modules", ""})
+		require.NoError(t, compCmd.Execute())
+		assert.Contains(t, out.String(), "list")
+
+		badConfigCmd := NewRootCmd()
+		out.Reset()
+		badConfigCmd.SetOut(&out)
+		badConfigCmd.SetErr(&out)
+		badConfigCmd.SetArgs([]string{"modules", "list"})
+		require.ErrorContains(t, badConfigCmd.Execute(), "failed to parse pbuf.yaml")
+	})
 }

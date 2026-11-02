@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"log"
+	"fmt"
 	"net"
 
 	"github.com/jdx/go-netrc"
@@ -15,20 +15,20 @@ import (
 )
 
 // NewInsecureConn creates an insecure gRPC connection to registry.
-func NewInsecureConn(config *model.Config, netrcAuth *netrc.Netrc) *grpc.ClientConn {
+func NewInsecureConn(config *model.Config, netrcAuth *netrc.Netrc) (*grpc.ClientConn, error) {
 	return newConn(config, netrcAuth, insecure.NewCredentials())
 }
 
 // NewSecureConn creates a secure (TLS) gRPC connection to registry.
-func NewSecureConn(config *model.Config, netrcAuth *netrc.Netrc) *grpc.ClientConn {
+func NewSecureConn(config *model.Config, netrcAuth *netrc.Netrc) (*grpc.ClientConn, error) {
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
-		log.Fatalf("failed to load system cert pool: %v", err)
+		return nil, fmt.Errorf("failed to load system cert pool: %w", err)
 	}
 	return newConn(config, netrcAuth, credentials.NewTLS(&tls.Config{RootCAs: certPool}))
 }
 
-func newConn(config *model.Config, netrcAuth *netrc.Netrc, creds credentials.TransportCredentials) *grpc.ClientConn {
+func newConn(config *model.Config, netrcAuth *netrc.Netrc, creds credentials.TransportCredentials) (*grpc.ClientConn, error) {
 	addr := canonicalizeAddr(config.Registry.Addr)
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
 	if perRPCCredentials := credentialsFromNetrc(getRegistryHost(addr), netrcAuth); perRPCCredentials != nil {
@@ -36,9 +36,9 @@ func newConn(config *model.Config, netrcAuth *netrc.Netrc, creds credentials.Tra
 	}
 	grpcClient, err := grpc.NewClient(addr, opts...)
 	if err != nil {
-		log.Fatalf("failed to create grpc client: %v", err)
+		return nil, fmt.Errorf("failed to create grpc client: %w", err)
 	}
-	return grpcClient
+	return grpcClient, nil
 }
 
 // canonicalizeAddr check has the address port or not
