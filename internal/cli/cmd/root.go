@@ -24,12 +24,8 @@ import (
 
 // NewRootCmd creates cobra root command via function
 func NewRootCmd() *cobra.Command {
-	// read the file (PbufConfigFilename) and call ModulesConfig.Vendor()
-	file, err := os.ReadFile(model.PbufConfigFilename)
-	configNotFound := os.IsNotExist(err)
-	if err != nil && !configNotFound {
-		log.Fatalf("failed to read %s file: %v", model.PbufConfigFilename, err)
-	}
+	file, readErr := os.ReadFile(model.PbufConfigFilename)
+	configNotFound := os.IsNotExist(readErr)
 
 	// create root command
 	rootCmd := &cobra.Command{
@@ -55,29 +51,32 @@ func NewRootCmd() *cobra.Command {
 		log.Printf("failed to fetch current user: %v", err)
 	}
 
-	envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR")
-	if configNotFound && envRegistryAddr == "" {
-		rootCmd.AddCommand(CreateInitCmd())
-		rootCmd.AddCommand(NewAuthCmd(nil, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(nil, usr, netrcAuth))
-		return rootCmd
-	}
-
 	modulesConfig := &model.Config{}
-	if !configNotFound {
-		modulesConfig, err = modules.NewConfig(file)
-		if err != nil {
-			log.Fatalf("failed to create modules config: %v", err)
+	var configErr error
+	if readErr != nil && !configNotFound {
+		configErr = fmt.Errorf("failed to read %s file: %w", model.PbufConfigFilename, readErr)
+	} else if !configNotFound {
+		modulesConfig, configErr = modules.NewConfig(file)
+		if configErr != nil {
+			configErr = fmt.Errorf("failed to parse %s: %w", model.PbufConfigFilename, configErr)
+			modulesConfig = &model.Config{}
 		}
 	}
-	if envRegistryAddr != "" {
+
+	if envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR"); envRegistryAddr != "" {
 		modulesConfig.Registry.Addr = envRegistryAddr
 		if os.Getenv("PBUF_REGISTRY_INSECURE") == "true" {
 			modulesConfig.Registry.Insecure = true
 		}
 	}
 
-	if modulesConfig.HasRegistry() {
+	var (
+		registryClient v1.RegistryClient
+		usersClient    v1.UserServiceClient
+		driftClient    v1.DriftServiceClient
+		metadataClient v1.MetadataServiceClient
+	)
+	if configErr == nil && modulesConfig.HasRegistry() {
 		var conn grpc.ClientConnInterface
 		if modulesConfig.Registry.Insecure {
 			conn = registry.NewInsecureConn(modulesConfig, netrcAuth)
@@ -85,24 +84,52 @@ func NewRootCmd() *cobra.Command {
 			conn = registry.NewSecureConn(modulesConfig, netrcAuth)
 		}
 
-		registryClient := v1.NewRegistryClient(conn)
-		usersClient := v1.NewUserServiceClient(conn)
-		driftClient := v1.NewDriftServiceClient(conn)
-		metadataClient := v1.NewMetadataServiceClient(conn)
-
-		rootCmd.AddCommand(NewModuleCmd(modulesConfig, registryClient))
-		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, registryClient))
-		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewUsersCmd(modulesConfig, usersClient))
-		rootCmd.AddCommand(NewDriftCmd(modulesConfig, driftClient, registryClient))
-		rootCmd.AddCommand(NewMetadataCmd(modulesConfig, metadataClient))
-		rootCmd.AddCommand(NewMCPCmd(registryClient, metadataClient, driftClient))
-	} else {
-		rootCmd.AddCommand(NewVendorCmd(modulesConfig, netrcAuth, nil))
-		rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
-		rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
+		registryClient = v1.NewRegistryClient(conn)
+		usersClient = v1.NewUserServiceClient(conn)
+		driftClient = v1.NewDriftServiceClient(conn)
+		metadataClient = v1.NewMetadataServiceClient(conn)
 	}
+
+	requireRegistry := func(cmd *cobra.Command, _ []string) error {
+		if cmd.HasSubCommands() {
+			return nil
+		}
+		if configErr != nil {
+			return configErr
+		}
+		if !modulesConfig.HasRegistry() {
+			return fmt.Errorf("no registry configured: run 'pbuf init' or set PBUF_REGISTRY_ADDR")
+		}
+		return nil
+	}
+
+	vendorCmd := NewVendorCmd(modulesConfig, netrcAuth, registryClient)
+	vendorCmd.PreRunE = func(_ *cobra.Command, _ []string) error {
+		if configErr != nil {
+			return configErr
+		}
+		if configNotFound {
+			return fmt.Errorf("no %s file found: run 'pbuf init'", model.PbufConfigFilename)
+		}
+		return nil
+	}
+
+	registryCmds := []*cobra.Command{
+		NewModuleCmd(modulesConfig, registryClient),
+		NewUsersCmd(modulesConfig, usersClient),
+		NewDriftCmd(modulesConfig, driftClient, registryClient),
+		NewMetadataCmd(modulesConfig, metadataClient),
+		NewMCPCmd(registryClient, metadataClient, driftClient),
+	}
+	for _, c := range registryCmds {
+		c.PersistentPreRunE = requireRegistry
+	}
+
+	rootCmd.AddCommand(CreateInitCmd())
+	rootCmd.AddCommand(NewAuthCmd(modulesConfig, usr, netrcAuth))
+	rootCmd.AddCommand(NewLoginCmd(modulesConfig, usr, netrcAuth))
+	rootCmd.AddCommand(vendorCmd)
+	rootCmd.AddCommand(registryCmds...)
 
 	return rootCmd
 }

@@ -309,6 +309,27 @@ make build-cli
 # Binary is output to ./bin/pbuf
 ```
 
+### Shell Completion
+
+Enable tab-completion for all `pbuf` subcommands and flags:
+
+```shell
+# Bash
+source <(pbuf completion bash)
+
+# Zsh
+source <(pbuf completion zsh)
+# Or persist across sessions (macOS / Homebrew):
+pbuf completion zsh > "$(brew --prefix)/share/zsh/site-functions/_pbuf"
+
+# Fish
+pbuf completion fish | source
+pbuf completion fish > ~/.config/fish/completions/pbuf.fish
+
+# PowerShell
+pbuf completion powershell | Out-String | Invoke-Expression
+```
+
 ---
 
 ## Configuration (`pbuf.yaml`)
@@ -459,6 +480,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf drift dependencies <module_name> [--tag <tag>]` | Check dependency drift status and upgrade recommendations for a module |
 | `pbuf drift acknowledge <event_id> --by <user>` | Acknowledge a schema drift event by ID |
 | `pbuf mcp` | Start a Model Context Protocol (MCP) server over `stdio` for AI coding agents |
+| `pbuf completion [bash\|zsh\|fish\|powershell]` | Generate shell autocompletion script |
 | `pbuf users create <name> [--type user\|bot]` | Create a user or bot and output its one-time token |
 | `pbuf users list [--page-size 50] [--page 0]` | List users and bots |
 | `pbuf users get <id>` | Get user or bot details by ID |

@@ -548,3 +548,81 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 		})
 	}
 }
+
+func TestShellCompletionCommand(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(t.TempDir()))
+	t.Setenv("PBUF_REGISTRY_ADDR", "")
+
+	shells := []struct {
+		shell      string
+		wantMarker string
+	}{
+		{shell: "bash", wantMarker: "__start_pbuf"},
+		{shell: "zsh", wantMarker: "#compdef pbuf"},
+		{shell: "fish", wantMarker: "complete -c pbuf"},
+		{shell: "powershell", wantMarker: "Register-ArgumentCompleter"},
+	}
+
+	for _, tc := range shells {
+		t.Run(tc.shell, func(t *testing.T) {
+			rootCmd := NewRootCmd()
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&out)
+			rootCmd.SetArgs([]string{"completion", tc.shell})
+
+			require.NoError(t, rootCmd.Execute())
+			assert.Contains(t, out.String(), tc.wantMarker)
+		})
+	}
+
+	t.Run("dynamic __complete suggests all subcommands and flags outside pbuf.yaml dir", func(t *testing.T) {
+		rootCmd := NewRootCmd()
+		var out, errBuf bytes.Buffer
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&errBuf)
+		rootCmd.SetArgs([]string{"__complete", ""})
+		require.NoError(t, rootCmd.Execute())
+
+		got := out.String()
+		for _, sub := range []string{"init", "auth", "login", "vendor", "modules", "drift", "metadata", "users", "mcp", "completion"} {
+			assert.Contains(t, got, sub)
+		}
+
+		rootFlagsCmd := NewRootCmd()
+		out.Reset()
+		errBuf.Reset()
+		rootFlagsCmd.SetOut(&out)
+		rootFlagsCmd.SetErr(&errBuf)
+		rootFlagsCmd.SetArgs([]string{"__complete", "modules", "list", "--"})
+		require.NoError(t, rootFlagsCmd.Execute())
+		assert.Contains(t, out.String(), "--all")
+		assert.Contains(t, out.String(), "--page-size")
+		assert.Contains(t, out.String(), "--output")
+	})
+
+	t.Run("unguarded leaf commands return clear error when unconfigured", func(t *testing.T) {
+		groupCmd := NewRootCmd()
+		var out bytes.Buffer
+		groupCmd.SetOut(&out)
+		groupCmd.SetErr(&out)
+		groupCmd.SetArgs([]string{"modules"})
+		require.NoError(t, groupCmd.Execute())
+		assert.Contains(t, out.String(), "Available Commands")
+
+		leafCmd := NewRootCmd()
+		leafCmd.SetOut(&out)
+		leafCmd.SetErr(&out)
+		leafCmd.SetArgs([]string{"modules", "list"})
+		require.ErrorContains(t, leafCmd.Execute(), "no registry configured")
+
+		vendorCmd := NewRootCmd()
+		vendorCmd.SetOut(&out)
+		vendorCmd.SetErr(&out)
+		vendorCmd.SetArgs([]string{"vendor"})
+		require.ErrorContains(t, vendorCmd.Execute(), "no pbuf.yaml file found")
+	})
+}
