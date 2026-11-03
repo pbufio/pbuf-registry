@@ -55,7 +55,7 @@ jobs:
           helm template pbuf-registry charts/pbuf-registry/ --set ui.enabled=true --set ingress.enabled=true > /dev/null
 
       - name: Docker build
-        run: make docker && make build-docker-ui
+        run: make build-docker && make build-docker-ui
 
   e2e-test:
     runs-on: ubuntu-latest
