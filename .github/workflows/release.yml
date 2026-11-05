@@ -20,8 +20,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
@@ -64,16 +62,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install doctl (Optional)
-        if: env.DO_TOKEN != ''
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Docker Login DO (Optional)
-        if: env.DO_TOKEN != ''
-        run: doctl registry login
-
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -95,10 +83,6 @@ jobs:
             docker push ghcr.io/pbufio/registry:latest
             docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} ghcr.io/pbufio/pbuf-registry:latest
             docker push ghcr.io/pbufio/pbuf-registry:latest
-          fi
-          if [ -n "$DO_TOKEN" ]; then
-            docker tag ghcr.io/pbufio/registry:${REGISTRY_VERSION} registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION}
-            docker push registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION}
           fi
 
       - name: Build and Push Web UI Image

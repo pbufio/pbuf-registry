@@ -103,11 +103,6 @@ build-in-docker:
       golang:1.25 \
       sh -c "CGO_ENABLED=0 GOOS=linux make build && CGO_ENABLED=0 GOOS=linux make build-cli && CGO_ENABLED=0 GOOS=linux make build-migrations"
 
-.PHONY: docker
-# docker
-docker:
-	docker build -t registry.digitalocean.com/pbuf/registry:${REGISTRY_VERSION} .
-
 .PHONY: build-docker
 # build-docker
 build-docker:
