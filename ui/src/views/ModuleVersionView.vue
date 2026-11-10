@@ -1,15 +1,20 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PCard from '@/components/PCard.vue'
 import PBadge from '@/components/PBadge.vue'
 import PButton from '@/components/PButton.vue'
 import PCodeBlock from '@/components/PCodeBlock.vue'
+import PDependencyGraph from '@/components/PDependencyGraph.vue'
 import { registryApi } from '@/services/registryApi'
 import { metadataApi } from '@/services/metadataApi'
 import { driftApi } from '@/services/driftApi'
+import { dependencyNodeId } from '@/utils/dependencyGraph'
+
+const MAX_GRAPH_EDGE_PARENTS = 20
 
 const route = useRoute()
+const router = useRouter()
 const protoFiles = ref([])
 const dependencies = ref([])
 const metadata = ref(null)
@@ -26,6 +31,11 @@ const driftLoaded = ref(false)
 const driftError = ref(null)
 const dependencyDriftStatuses = ref([])
 const dependencyDriftError = ref(null)
+
+const graphEdgesByParent = ref({})
+const graphTransitiveDriftStatuses = ref([])
+const graphEdgesLoaded = ref(false)
+const resolvingGraphEdges = ref(false)
 
 const moduleName = computed(() => {
   const name = route.params.name
@@ -47,6 +57,10 @@ watch([moduleName, tag], () => {
   driftError.value = null
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
+  graphEdgesByParent.value = {}
+  graphTransitiveDriftStatuses.value = []
+  graphEdgesLoaded.value = false
+  resolvingGraphEdges.value = false
 
   activeTab.value = 'files'
 
@@ -157,9 +171,14 @@ const formatEventType = (eventType) => {
   return eventType.replace('DRIFT_EVENT_TYPE_', '')
 }
 
+const allDependencyDriftStatuses = computed(() => [
+  ...(dependencyDriftStatuses.value || []),
+  ...(graphTransitiveDriftStatuses.value || [])
+])
+
 const dependencyDriftByKey = computed(() => {
   const map = new Map()
-  for (const status of dependencyDriftStatuses.value || []) {
+  for (const status of allDependencyDriftStatuses.value) {
     if (!status?.dependencyName) continue
     const key = `${status.dependencyName}@${status.currentTag || ''}`
     if (!map.has(key)) map.set(key, [])
@@ -199,7 +218,7 @@ const dependenciesTabDriftBadge = computed(() => {
 
   let hasAlerts = false
   let hasRecommendations = false
-  for (const status of dependencyDriftStatuses.value || []) {
+  for (const status of allDependencyDriftStatuses.value) {
     const severity = status?.severity || 'DRIFT_SEVERITY_UNSPECIFIED'
     const recommendation = status?.recommendation || 'DEPENDENCY_DRIFT_RECOMMENDATION_UNSPECIFIED'
 
@@ -231,18 +250,79 @@ const formatDateTime = (value) => {
   return d.toLocaleString()
 }
 
+const loadTransitiveGraphEdges = async () => {
+  if (graphEdgesLoaded.value || resolvingGraphEdges.value) return
+  const hasTransitive = (dependencies.value || []).some((d) => d?.dependencyType === 'transitive')
+  if (!hasTransitive) {
+    graphEdgesLoaded.value = true
+    return
+  }
+
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  resolvingGraphEdges.value = true
+  try {
+    const parents = (dependencies.value || [])
+      .filter((d) => d?.name && d?.tag)
+      .slice(0, MAX_GRAPH_EDGE_PARENTS)
+
+    const results = await Promise.allSettled(
+      parents.map(async (dep) => {
+        const [subDeps, subDrift] = await Promise.allSettled([
+          registryApi.getModuleDependencies(dep.name, dep.tag, false),
+          driftApi.getModuleDependencyDriftStatus(dep.name, dep.tag)
+        ])
+        return {
+          key: dependencyNodeId(dep.name, dep.tag),
+          deps: subDeps.status === 'fulfilled' ? (subDeps.value?.dependencies || []) : [],
+          statuses: subDrift.status === 'fulfilled' ? (subDrift.value?.statuses || []) : []
+        }
+      })
+    )
+
+    if (moduleName.value !== currentModule || tag.value !== currentTag) return
+
+    const nextEdges = {}
+    const extraStatuses = []
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue
+      if (r.value.deps.length > 0) {
+        nextEdges[r.value.key] = r.value.deps
+      }
+      extraStatuses.push(...r.value.statuses)
+    }
+    graphEdgesByParent.value = nextEdges
+    graphTransitiveDriftStatuses.value = extraStatuses
+    graphEdgesLoaded.value = true
+  } finally {
+    if (moduleName.value === currentModule && tag.value === currentTag) {
+      resolvingGraphEdges.value = false
+    }
+  }
+}
+
+const onSelectGraphNode = (node) => {
+  if (node?.route) {
+    router.push(node.route)
+  }
+}
+
 const loadVersionDetails = async () => {
   loading.value = true
   error.value = null
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
+  graphEdgesByParent.value = {}
+  graphTransitiveDriftStatuses.value = []
+  graphEdgesLoaded.value = false
+  resolvingGraphEdges.value = false
   try {
     // Get metadata (parsed proto structure) - Level 3
     const metadataResponse = await metadataApi.getMetadata(moduleName.value, tag.value)
     metadata.value = metadataResponse
 
-    // Get dependencies
-    const depsResponse = await registryApi.getModuleDependencies(moduleName.value, tag.value)
+    // Get direct + transitive dependencies
+    const depsResponse = await registryApi.getModuleDependencies(moduleName.value, tag.value, true)
     dependencies.value = depsResponse.dependencies || []
 
     try {
@@ -301,10 +381,13 @@ const retryLoadDriftEvents = async () => {
   await loadDriftEvents()
 }
 
-// Watch activeTab and load proto files when Files tab is clicked
+// Watch activeTab and load lazy tab data on demand
 watch(activeTab, (newTab) => {
   if (newTab === 'files' && !protoFilesLoaded.value) {
     loadProtoFiles()
+  }
+  if (newTab === 'graph' && !graphEdgesLoaded.value) {
+    loadTransitiveGraphEdges()
   }
   if (newTab === 'drift' && !driftLoaded.value) {
     loadDriftEvents()
@@ -409,6 +492,18 @@ modules:
               </span>
             </button>
             <button
+              v-if="dependencies.length > 0"
+              @click="activeTab = 'graph'"
+              :class="[
+                'pb-3 px-1 font-medium transition-colors cursor-pointer',
+                activeTab === 'graph'
+                  ? 'text-brand border-b-2 border-brand'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              ]"
+            >
+              Dependency Graph
+            </button>
+            <button
               @click="activeTab = 'metadata'"
               :class="[
                 'pb-3 px-1 font-medium transition-colors cursor-pointer',
@@ -480,6 +575,7 @@ modules:
                   <div class="flex items-center gap-3 flex-wrap">
                     <span class="font-mono text-zinc-200">{{ dep.name }}</span>
                     <PBadge variant="brand">{{ dep.tag }}</PBadge>
+                    <PBadge v-if="dep.dependencyType === 'transitive'" variant="draft">TRANSITIVE</PBadge>
                     <PBadge :variant="severityToVariant(dep.driftHighestSeverity)">
                       {{ formatEnumLabel(dep.driftHighestSeverity, 'DRIFT_SEVERITY_') }}
                     </PBadge>
@@ -513,6 +609,24 @@ modules:
             </div>
           </PCard>
           <p v-else class="text-zinc-400 text-center py-8">No dependencies for this version.</p>
+        </div>
+
+        <!-- Dependency Graph Tab -->
+        <div v-if="activeTab === 'graph'" class="space-y-4">
+          <PCard v-if="dependencies.length > 0">
+            <p v-if="dependencyDriftError" class="text-sm text-amber-300 mb-4">
+              Drift status unavailable: {{ dependencyDriftError }}
+            </p>
+            <PDependencyGraph
+              :root-module="moduleName"
+              :root-tag="tag"
+              :dependencies="dependencies"
+              :drift-statuses="allDependencyDriftStatuses"
+              :edges-by-parent="graphEdgesByParent"
+              :resolving-edges="resolvingGraphEdges"
+              @select="onSelectGraphNode"
+            />
+          </PCard>
         </div>
 
         <!-- Metadata Tab -->
