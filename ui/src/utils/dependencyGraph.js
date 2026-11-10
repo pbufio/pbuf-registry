@@ -155,8 +155,17 @@ export function buildDependencyGraph({
 
   for (const [parentKey, children] of Object.entries(edgesByParent || {})) {
     if (!nodeMap.has(parentKey) || !Array.isArray(children)) continue
+    const isRootParent = parentKey === rootId
     for (const child of children) {
-      const childId = ensureDepNode(child, 'transitive')
+      if (!child?.name) continue
+      const childId = ensureDepNode(
+        {
+          name: child.name,
+          tag: child.tag,
+          dependencyType: isRootParent ? 'direct' : 'transitive'
+        },
+        isRootParent ? 'direct' : 'transitive'
+      )
       addEdge(parentKey, childId, false)
     }
   }

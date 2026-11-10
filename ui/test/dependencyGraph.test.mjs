@@ -58,8 +58,8 @@ test('buildDependencyGraph: lays out diamond DAG with direct + transitive edges 
       }
     ],
     edgesByParent: {
-      'acme/order-service@v1.1.0': [{ name: 'googleapis/common-protos', tag: 'v1.0.0' }],
-      'acme/payment-service@v1.0.0': [{ name: 'googleapis/common-protos', tag: 'v1.0.0' }]
+      'acme/order-service@v1.1.0': [{ name: 'googleapis/common-protos', tag: 'v1.0.0', dependencyType: 'direct' }],
+      'acme/payment-service@v1.0.0': [{ name: 'googleapis/common-protos', tag: 'v1.0.0', dependencyType: 'direct' }]
     }
   })
 
