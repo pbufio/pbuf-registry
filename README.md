@@ -35,6 +35,7 @@
   - [Project & Authentication Commands](#project--authentication-commands)
   - [Module Commands (`pbuf modules`)](#module-commands-pbuf-modules)
   - [Metadata Commands (`pbuf metadata`)](#metadata-commands-pbuf-metadata)
+  - [Lint Command (`pbuf lint`)](#lint-command-pbuf-lint)
   - [Drift Detection Commands (`pbuf drift`)](#drift-detection-commands-pbuf-drift)
   - [AI Coding Assistants (`pbuf mcp`)](#ai-coding-assistants-pbuf-mcp)
   - [User, Bot & Permission Commands (`pbuf users`)](#user-bot--permission-commands-pbuf-users)
@@ -474,6 +475,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
 | `pbuf metadata get [module_name] [tag]` | Retrieve parsed AST metadata (packages, messages, services, enums) for a module tag |
+| `pbuf lint [paths...] [--format table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
 | `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
 | `pbuf drift module <module_name> [--tag <tag>]` | List schema drift events for a specific module |
@@ -587,6 +589,31 @@ Retrieves parsed AST metadata (packages, messages, fields, nested types, enums, 
 # Uses module name from pbuf.yaml when omitted
 pbuf metadata get
 pbuf metadata get myorg/payment-service v1.0.0
+```
+
+---
+
+### Lint Command (`pbuf lint`)
+
+Validates local `.proto` files completely offline, without a registry connection or any extra tooling. It reuses the `go-protoparser` AST that powers `pbuf drift diff`, so it is a good pre-commit and CI gate. By default it lints the directories in `export.paths` (falling back to `api/` and `proto/` when `pbuf.yaml` is absent), or you can pass explicit paths.
+
+It checks `.proto` syntax plus the following style rules and exits non-zero when any violation is found:
+
+- explicit `syntax` set to `proto3` or `proto2`
+- a non-empty `package` declaration
+- `PascalCase` message, enum, service, and RPC names
+- `snake_case` field names (including map and oneof fields)
+- `UPPER_SNAKE_CASE` enum value names, with a `0` value present in every enum
+
+```shell
+# Lint the directories in export.paths (table output)
+pbuf lint
+
+# Lint explicit paths
+pbuf lint api proto/payment
+
+# Machine-readable output for CI
+pbuf lint --format json
 ```
 
 ---

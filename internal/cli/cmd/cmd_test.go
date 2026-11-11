@@ -411,7 +411,7 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			wantSubstrs: []string{"NAME", "ID", "LATEST TAG", "TAGS", "acme/payment", "mod-1", "v1.2.0", "v1.2.0, v1.1.0", "acme/empty", "mod-2"},
 		},
 		{
-			name:        "list single page with page-size and page-token",
+			name: "list single page with page-size and page-token",
 			client: &fakeRegistryClient{
 				pages: map[string]*v1.ListModulesResponse{
 					"tok-1": {
@@ -544,6 +544,167 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			if tc.wantJSON {
 				var parsed map[string]any
 				require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+			}
+		})
+	}
+}
+
+func TestLintCommand(t *testing.T) {
+	const validProto = `syntax = "proto3";
+package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+}
+message Money {
+  Currency currency = 1;
+  int64 units = 2;
+}
+service PayService {
+  rpc GetBalance(Money) returns (Money);
+}
+`
+
+	const missingSyntaxProto = `package acme.pay.v1;
+message Money {
+  int64 units = 1;
+}
+`
+
+	const brokenProto = `syntax = "proto3"
+message Money {
+`
+
+	const styleViolationsProto = `syntax = "proto3";
+package acme.pay.v1;
+enum currency {
+  CURRENCY_USD = 1;
+  eur = 2;
+}
+message money {
+  int64 TotalUnits = 1;
+}
+service payService {
+  rpc get_balance(money) returns (money);
+}
+`
+
+	tests := []struct {
+		name        string
+		files       map[string]string
+		args        []string
+		wantErr     string
+		wantSubstrs []string
+		wantRules   []string
+		wantClean   bool
+		wantJSON    bool
+	}{
+		{
+			name:      "valid schema passes",
+			files:     map[string]string{"api/pay.proto": validProto},
+			args:      []string{"lint"},
+			wantClean: true,
+		},
+		{
+			name:    "syntax error reported",
+			files:   map[string]string{"api/broken.proto": brokenProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantSubstrs: []string{
+				"SYNTAX",
+			},
+			wantRules: []string{"SYNTAX"},
+		},
+		{
+			name:    "missing syntax and no zero enum value",
+			files:   map[string]string{"api/nosyntax.proto": missingSyntaxProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantSubstrs: []string{
+				"missing explicit syntax",
+			},
+			wantRules: []string{"SYNTAX"},
+		},
+		{
+			name:    "naming violations reported",
+			files:   map[string]string{"api/style.proto": styleViolationsProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantRules: []string{
+				"ENUM_NAME",
+				"ENUM_VALUE_NAME",
+				"ENUM_ZERO_VALUE",
+				"MESSAGE_NAME",
+				"FIELD_NAME",
+				"SERVICE_NAME",
+				"RPC_NAME",
+			},
+		},
+		{
+			name:     "json output for valid schema",
+			files:    map[string]string{"api/pay.proto": validProto},
+			args:     []string{"lint", "--format", "json"},
+			wantJSON: true,
+		},
+		{
+			name:    "invalid format rejected",
+			files:   map[string]string{"api/pay.proto": validProto},
+			args:    []string{"lint", "--format", "xml"},
+			wantErr: "invalid --format",
+		},
+		{
+			name:    "explicit path argument",
+			files:   map[string]string{"schemas/style.proto": styleViolationsProto},
+			args:    []string{"lint", "schemas"},
+			wantErr: "lint failed",
+			wantRules: []string{
+				"MESSAGE_NAME",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			origDir, err := os.Getwd()
+			require.NoError(t, err)
+			require.NoError(t, os.Chdir(tmpDir))
+			defer func() { _ = os.Chdir(origDir) }()
+
+			for name, content := range tc.files {
+				require.NoError(t, os.MkdirAll(filepath.Dir(name), 0o755))
+				require.NoError(t, os.WriteFile(name, []byte(content), 0o644))
+			}
+
+			lintCmd := NewLintCmd(&model.Config{Export: model.Export{Paths: []string{"api"}}})
+			var out bytes.Buffer
+			lintCmd.SetOut(&out)
+			lintCmd.SetErr(&out)
+			// drop the leading "lint" token since the command is executed directly
+			lintCmd.SetArgs(tc.args[1:])
+
+			err = lintCmd.Execute()
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			got := out.String()
+			if tc.wantClean {
+				assert.Contains(t, got, "No issues found.")
+			}
+			for _, sub := range tc.wantSubstrs {
+				assert.Contains(t, got, sub)
+			}
+			for _, rule := range tc.wantRules {
+				assert.Contains(t, got, rule)
+			}
+			if tc.wantJSON {
+				var parsed LintReport
+				require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+				assert.Equal(t, 1, parsed.Files)
+				assert.Empty(t, parsed.Findings)
 			}
 		})
 	}
