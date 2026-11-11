@@ -19,6 +19,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      - -X github.com/pbufio/pbuf-registry/internal/cli/cmd.version={{ .Version }}
+      - -X github.com/pbufio/pbuf-registry/internal/cli/cmd.commit={{ .Commit }}
+      - -X github.com/pbufio/pbuf-registry/internal/cli/cmd.date={{ .Date }}
 
 archives:
   - id: pbuf
@@ -70,3 +73,4 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     test: |
       system "#{bin}/pbuf --help"
+      system "#{bin}/pbuf version"
