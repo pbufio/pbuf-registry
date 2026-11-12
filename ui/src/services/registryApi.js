@@ -48,13 +48,15 @@ export const registryApi = {
    * Get module dependencies
    * @param {string} name - Module name
    * @param {string} tag - Version tag
+   * @param {boolean} resolveTransitive - Resolve transitive dependencies
    * @returns {Promise<Object>} Dependencies response
    */
-  async getModuleDependencies(name, tag) {
-    const response = await apiClient.post('/v1/modules/dependencies', {
-      name,
-      tag
-    })
+  async getModuleDependencies(name, tag, resolveTransitive = false) {
+    const body = { name, tag }
+    if (resolveTransitive) {
+      body.resolveTransitive = true
+    }
+    const response = await apiClient.post('/v1/modules/dependencies', body)
     return response.data
   }
 }

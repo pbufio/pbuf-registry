@@ -123,6 +123,121 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page).toHaveURL(/\/modules$/)
   })
 
+  test('renders interactive dependency graph with direct + transitive drift colors and navigates on node click', async ({ page }) => {
+    const depRequests = []
+
+    await page.route('**/api/v1/metadata', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packages: [] })
+      })
+    })
+
+    await page.route('**/api/v1/modules/pull', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ protofiles: [] })
+      })
+    })
+
+    await page.route('**/api/v1/drift/modules/events', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ events: [] })
+      })
+    })
+
+    await page.route('**/api/v1/modules/dependencies', async (route) => {
+      const body = route.request().postDataJSON()
+      depRequests.push(body)
+
+      if (body.name === 'acme/order-service') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            dependencies: [
+              { name: 'acme/payment-service', tag: 'v1.0.0', dependencyType: 'direct' },
+              { name: 'googleapis/common-protos', tag: 'v1.0.0', dependencyType: 'transitive' }
+            ]
+          })
+        })
+        return
+      }
+
+      if (body.name === 'acme/payment-service') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            dependencies: [{ name: 'googleapis/common-protos', tag: 'v1.0.0', dependencyType: 'direct' }]
+          })
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ dependencies: [] })
+      })
+    })
+
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.moduleName === 'acme/order-service') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            statuses: [
+              {
+                dependencyName: 'acme/payment-service',
+                currentTag: 'v1.0.0',
+                targetTag: 'v2.0.0',
+                severity: 'DRIFT_SEVERITY_CRITICAL',
+                recommendation: 'DEPENDENCY_DRIFT_RECOMMENDATION_ALERT_REVIEW'
+              }
+            ]
+          })
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ statuses: [] })
+      })
+    })
+
+    await page.goto('/modules/acme/order-service/tags/v1.0.0')
+
+    const graphTab = page.getByRole('button', { name: 'Dependency Graph' })
+    await expect(graphTab).toBeVisible()
+    expect(depRequests.some((r) => r.name === 'acme/order-service' && r.resolveTransitive === true)).toBe(true)
+
+    await graphTab.click()
+
+    const graphContainer = page.getByTestId('dependency-graph')
+    await expect(graphContainer).toBeVisible()
+    await expect(graphContainer).toContainText('1 direct • 1 transitive')
+
+    const paymentNode = graphContainer.locator('[data-node-id="acme/payment-service@v1.0.0"]')
+    const commonNode = graphContainer.locator('[data-node-id="googleapis/common-protos@v1.0.0"]')
+    await expect(paymentNode).toHaveAttribute('data-severity', 'CRITICAL')
+    await expect(commonNode).toHaveAttribute('data-severity', 'HEALTHY')
+    await expect(commonNode).toHaveAttribute('data-dependency-type', 'transitive')
+
+    // Clicking leaf transitive node navigates to its version view, where Dependency Graph tab is hidden (0 dependencies)
+    await commonNode.click()
+    await expect(page).toHaveURL(/\/modules\/googleapis\/common-protos\/tags\/v1\.0\.0$/)
+    await expect(page.getByRole('button', { name: 'Dependency Graph' })).toHaveCount(0)
+  })
+
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {
     test.skip(process.env.PLAYWRIGHT_LIVE_BACKEND !== '1', 'Requires live Docker Compose stack')
 
