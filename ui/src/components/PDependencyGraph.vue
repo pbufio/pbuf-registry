@@ -8,7 +8,9 @@ const props = defineProps({
   dependencies: { type: Array, default: () => [] },
   driftStatuses: { type: Array, default: () => [] },
   edgesByParent: { type: Object, default: () => ({}) },
-  resolvingEdges: { type: Boolean, default: false }
+  resolvingEdges: { type: Boolean, default: false },
+  directDriftUnavailable: { type: Boolean, default: false },
+  transitiveDriftUnavailable: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select'])
@@ -20,6 +22,12 @@ const SEVERITY_STYLES = {
     badgeBg: 'rgba(59, 130, 246, 0.16)',
     badgeText: '#93c5fd',
     label: 'CURRENT'
+  },
+  UNKNOWN: {
+    stroke: '#71717a',
+    badgeBg: 'rgba(113, 113, 122, 0.22)',
+    badgeText: '#d4d4d8',
+    label: 'UNKNOWN'
   },
   HEALTHY: {
     stroke: '#10b981',
@@ -53,7 +61,9 @@ const graph = computed(() =>
     rootTag: props.rootTag,
     dependencies: props.dependencies,
     driftStatuses: props.driftStatuses,
-    edgesByParent: props.edgesByParent
+    edgesByParent: props.edgesByParent,
+    directDriftUnavailable: props.directDriftUnavailable,
+    transitiveDriftUnavailable: props.transitiveDriftUnavailable
   })
 )
 
@@ -117,12 +127,12 @@ const handleKeydown = (event, node) => {
         :viewBox="`0 0 ${graph.width} ${graph.height}`"
         :style="{ minWidth: `${graph.width}px`, height: `${graph.height}px` }"
         class="block w-full"
-        role="img"
+        role="group"
         :aria-label="`Dependency graph for ${rootModule}@${rootTag}`"
       >
         <defs>
           <marker
-            v-for="key in ['HEALTHY', 'INFO', 'WARNING', 'CRITICAL']"
+            v-for="key in ['ROOT', 'UNKNOWN', 'HEALTHY', 'INFO', 'WARNING', 'CRITICAL']"
             :id="`dep-arrow-${key}`"
             :key="key"
             viewBox="0 0 10 10"

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildDependencyGraph,
   buildDependencyVersionRoute,
+  dedupeDriftStatuses,
   normalizeGraphSeverity,
   truncateGraphLabel
 } from '../src/utils/dependencyGraph.js'
@@ -118,4 +119,28 @@ test('buildDependencyGraph: renders fallback dashed edge for transitive dep with
 
   assert.equal(cyclicGraph.nodes.length, 3)
   assert.equal(cyclicGraph.edges.length, 3)
+})
+
+test('dedupeDriftStatuses and unavailable drift flags: deduplicates shared-child statuses and marks unverified nodes UNKNOWN', () => {
+  const deduped = dedupeDriftStatuses([
+    { dependencyName: 'googleapis/common-protos', currentTag: 'v1.0.0', targetTag: 'v1.1.0', severity: 'DRIFT_SEVERITY_INFO' },
+    { dependencyName: 'googleapis/common-protos', currentTag: 'v1.0.0', targetTag: 'v1.1.0', severity: 'DRIFT_SEVERITY_INFO' },
+    { dependencyName: 'googleapis/common-protos', currentTag: 'v1.0.0', targetTag: 'v2.0.0', severity: 'DRIFT_SEVERITY_CRITICAL' }
+  ])
+  assert.equal(deduped.length, 2)
+
+  const graph = buildDependencyGraph({
+    rootModule: 'acme/app',
+    rootTag: 'v1.0.0',
+    dependencies: [
+      { name: 'acme/direct-ok', tag: 'v1.0.0', dependencyType: 'direct' },
+      { name: 'acme/transitive-unverified', tag: 'v1.0.0', dependencyType: 'transitive' }
+    ],
+    directDriftUnavailable: false,
+    transitiveDriftUnavailable: true
+  })
+
+  const byName = new Map(graph.nodes.map((n) => [n.name, n]))
+  assert.equal(byName.get('acme/direct-ok').severity, 'HEALTHY')
+  assert.equal(byName.get('acme/transitive-unverified').severity, 'UNKNOWN')
 })

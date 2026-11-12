@@ -29,6 +29,8 @@ export function normalizeGraphSeverity(severity) {
     case 'DRIFT_SEVERITY_INFO':
     case 'INFO':
       return 'INFO'
+    case 'UNKNOWN':
+      return 'UNKNOWN'
     default:
       return 'HEALTHY'
   }
@@ -49,10 +51,22 @@ export function truncateGraphLabel(value, maxLen = 27) {
   return `${value.slice(0, maxLen - 1)}…`
 }
 
+export function dedupeDriftStatuses(statuses = []) {
+  const seen = new Set()
+  const result = []
+  for (const status of statuses || []) {
+    if (!status?.dependencyName) continue
+    const key = `${status.dependencyName}:${status.currentTag || ''}:${status.targetTag || ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(status)
+  }
+  return result
+}
+
 function indexDriftStatuses(driftStatuses = []) {
   const byKey = new Map()
-  for (const status of driftStatuses || []) {
-    if (!status?.dependencyName) continue
+  for (const status of dedupeDriftStatuses(driftStatuses)) {
     const key = dependencyNodeId(status.dependencyName, status.currentTag)
     if (!byKey.has(key)) byKey.set(key, [])
     byKey.get(key).push(status)
@@ -79,7 +93,9 @@ export function buildDependencyGraph({
   rootTag = '',
   dependencies = [],
   driftStatuses = [],
-  edgesByParent = {}
+  edgesByParent = {},
+  directDriftUnavailable = false,
+  transitiveDriftUnavailable = false
 }) {
   if (!rootModule) {
     return { width: 0, height: 0, nodes: [], edges: [], counts: { direct: 0, transitive: 0 } }
@@ -115,18 +131,28 @@ export function buildDependencyGraph({
     if (existing) {
       if (depType === 'direct' && existing.dependencyType === 'transitive') {
         existing.dependencyType = 'direct'
+        if (existing.driftStatuses.length === 0) {
+          existing.severity = directDriftUnavailable ? 'UNKNOWN' : 'HEALTHY'
+        }
       }
       return id
     }
 
     const statuses = driftByKey.get(id) || driftByKey.get(dependencyNodeId(dep.name, '')) || []
+    const unavailable = depType === 'transitive' ? transitiveDriftUnavailable : directDriftUnavailable
+    const severity = statuses.length > 0
+      ? highestSeverityForStatuses(statuses)
+      : unavailable
+        ? 'UNKNOWN'
+        : 'HEALTHY'
+
     nodeMap.set(id, {
       id,
       name: dep.name,
       tag: dep.tag || '',
       isRoot: false,
       dependencyType: depType,
-      severity: highestSeverityForStatuses(statuses),
+      severity,
       driftStatuses: statuses,
       route: buildDependencyVersionRoute(dep.name, dep.tag)
     })

@@ -9,7 +9,7 @@ import PDependencyGraph from '@/components/PDependencyGraph.vue'
 import { registryApi } from '@/services/registryApi'
 import { metadataApi } from '@/services/metadataApi'
 import { driftApi } from '@/services/driftApi'
-import { dependencyNodeId } from '@/utils/dependencyGraph'
+import { dedupeDriftStatuses, dependencyNodeId } from '@/utils/dependencyGraph'
 
 const MAX_GRAPH_EDGE_PARENTS = 20
 
@@ -35,6 +35,7 @@ const dependencyDriftError = ref(null)
 const graphEdgesByParent = ref({})
 const graphTransitiveDriftStatuses = ref([])
 const graphEdgesLoaded = ref(false)
+const graphEdgesError = ref(null)
 const resolvingGraphEdges = ref(false)
 
 const moduleName = computed(() => {
@@ -60,6 +61,7 @@ watch([moduleName, tag], () => {
   graphEdgesByParent.value = {}
   graphTransitiveDriftStatuses.value = []
   graphEdgesLoaded.value = false
+  graphEdgesError.value = null
   resolvingGraphEdges.value = false
 
   activeTab.value = 'files'
@@ -171,10 +173,12 @@ const formatEventType = (eventType) => {
   return eventType.replace('DRIFT_EVENT_TYPE_', '')
 }
 
-const allDependencyDriftStatuses = computed(() => [
-  ...(dependencyDriftStatuses.value || []),
-  ...(graphTransitiveDriftStatuses.value || [])
-])
+const allDependencyDriftStatuses = computed(() =>
+  dedupeDriftStatuses([
+    ...(dependencyDriftStatuses.value || []),
+    ...(graphTransitiveDriftStatuses.value || [])
+  ])
+)
 
 const dependencyDriftByKey = computed(() => {
   const map = new Map()
@@ -254,6 +258,7 @@ const loadTransitiveGraphEdges = async () => {
   if (graphEdgesLoaded.value || resolvingGraphEdges.value) return
   const hasTransitive = (dependencies.value || []).some((d) => d?.dependencyType === 'transitive')
   if (!hasTransitive) {
+    graphEdgesError.value = null
     graphEdgesLoaded.value = true
     return
   }
@@ -261,6 +266,7 @@ const loadTransitiveGraphEdges = async () => {
   const currentModule = moduleName.value
   const currentTag = tag.value
   resolvingGraphEdges.value = true
+  graphEdgesError.value = null
   try {
     const parents = (dependencies.value || [])
       .filter((d) => d?.name && d?.tag)
@@ -274,6 +280,7 @@ const loadTransitiveGraphEdges = async () => {
         ])
         return {
           key: dependencyNodeId(dep.name, dep.tag),
+          failed: subDeps.status !== 'fulfilled' || subDrift.status !== 'fulfilled',
           deps: subDeps.status === 'fulfilled' ? (subDeps.value?.dependencies || []) : [],
           statuses: subDrift.status === 'fulfilled' ? (subDrift.value?.statuses || []) : []
         }
@@ -284,16 +291,28 @@ const loadTransitiveGraphEdges = async () => {
 
     const nextEdges = {}
     const extraStatuses = []
+    let hadFailure = false
     for (const r of results) {
-      if (r.status !== 'fulfilled') continue
+      if (r.status !== 'fulfilled') {
+        hadFailure = true
+        continue
+      }
+      if (r.value.failed) {
+        hadFailure = true
+      }
       if (r.value.deps.length > 0) {
         nextEdges[r.value.key] = r.value.deps
       }
       extraStatuses.push(...r.value.statuses)
     }
     graphEdgesByParent.value = nextEdges
-    graphTransitiveDriftStatuses.value = extraStatuses
-    graphEdgesLoaded.value = true
+    graphTransitiveDriftStatuses.value = dedupeDriftStatuses(extraStatuses)
+    if (hadFailure) {
+      graphEdgesError.value = 'Some transitive dependency details or drift statuses could not be loaded.'
+      graphEdgesLoaded.value = false
+    } else {
+      graphEdgesLoaded.value = true
+    }
   } finally {
     if (moduleName.value === currentModule && tag.value === currentTag) {
       resolvingGraphEdges.value = false
@@ -315,6 +334,7 @@ const loadVersionDetails = async () => {
   graphEdgesByParent.value = {}
   graphTransitiveDriftStatuses.value = []
   graphEdgesLoaded.value = false
+  graphEdgesError.value = null
   resolvingGraphEdges.value = false
   try {
     // Get metadata (parsed proto structure) - Level 3
@@ -617,6 +637,16 @@ modules:
             <p v-if="dependencyDriftError" class="text-sm text-amber-300 mb-4">
               Drift status unavailable: {{ dependencyDriftError }}
             </p>
+            <div v-if="graphEdgesError" class="flex items-center justify-between gap-4 text-sm text-amber-300 mb-4">
+              <span>{{ graphEdgesError }}</span>
+              <button
+                type="button"
+                class="text-brand hover:underline cursor-pointer shrink-0"
+                @click="loadTransitiveGraphEdges"
+              >
+                Retry
+              </button>
+            </div>
             <PDependencyGraph
               :root-module="moduleName"
               :root-tag="tag"
@@ -624,6 +654,8 @@ modules:
               :drift-statuses="allDependencyDriftStatuses"
               :edges-by-parent="graphEdgesByParent"
               :resolving-edges="resolvingGraphEdges"
+              :direct-drift-unavailable="Boolean(dependencyDriftError)"
+              :transitive-drift-unavailable="Boolean(graphEdgesError)"
               @select="onSelectGraphNode"
             />
           </PCard>
