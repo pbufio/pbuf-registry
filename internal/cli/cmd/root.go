@@ -175,6 +175,17 @@ func NewRootCmd() *cobra.Command {
 	loginCmd := NewLoginCmd(modulesConfig, nil, nil)
 	loginCmd.PreRun = func(_ *cobra.Command, _ []string) { loadConfig() }
 
+	// lint runs fully offline: it only needs export.paths from pbuf.yaml and
+	// never requires a configured registry.
+	lintCmd := NewLintCmd(modulesConfig)
+	lintCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		if help, _ := cmd.Flags().GetBool("help"); help {
+			return nil
+		}
+		loadConfig()
+		return configErr
+	}
+
 	registryCmds := []*cobra.Command{
 		NewModuleCmd(modulesConfig, registryClient),
 		NewUsersCmd(modulesConfig, usersClient),
@@ -190,6 +201,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(vendorCmd)
+	rootCmd.AddCommand(lintCmd)
 	rootCmd.AddCommand(registryCmds...)
 
 	return rootCmd
