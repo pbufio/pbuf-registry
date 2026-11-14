@@ -14,9 +14,24 @@ export const buildAcknowledgeDriftEventRequest = (eventId, acknowledgedBy) => {
 export const canAcknowledgeDriftEvent = ({ isLoggedIn, event, pendingEventId }) =>
   Boolean(isLoggedIn) && Boolean(event) && !event.acknowledged && pendingEventId == null
 
+// Only copy the acknowledgement fields from the response. The server's event is
+// a sparse, zero-valued protobuf (Kratos emits unpopulated fields), so merging
+// the whole event would blank out filename, severity, hashes, etc.
 export const replaceDriftEvent = (events, eventId, response) => {
-  const updated = response?.event || { acknowledged: true }
-  return events.map((e) => (e.id === eventId ? { ...e, ...updated } : e))
+  const serverEvent = response?.event || {}
+  const serverBy = serverEvent.acknowledgedBy
+  const acknowledgedBy = serverBy && serverBy !== 'unknown' ? serverBy : null
+
+  return events.map((e) => {
+    if (e.id !== eventId) return e
+    const updated = {
+      ...e,
+      acknowledged: true,
+      acknowledgedAt: serverEvent.acknowledgedAt || new Date().toISOString()
+    }
+    if (acknowledgedBy) updated.acknowledgedBy = acknowledgedBy
+    return updated
+  })
 }
 
 export const getAcknowledgeDriftErrorMessage = (err) =>

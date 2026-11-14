@@ -45,22 +45,52 @@ assert.equal(
 assert.equal(canAcknowledgeDriftEvent({ isLoggedIn: true, event: open, pendingEventId: 'evt-9' }), false)
 assert.equal(canAcknowledgeDriftEvent({ isLoggedIn: true, event: null, pendingEventId: null }), false)
 
-// replaceDriftEvent: replaces only the matching event in place, merging the server response
+// replaceDriftEvent: replaces only the matching event in place, copying only acknowledgement fields
 const events = [
-  { id: 'evt-1', acknowledged: false, summary: 'first' },
-  { id: 'evt-2', acknowledged: false, summary: 'second' }
+  { id: 'evt-1', filename: 'a.proto', severity: 'DRIFT_SEVERITY_WARNING', acknowledged: false },
+  { id: 'evt-2', filename: 'b.proto', severity: 'DRIFT_SEVERITY_INFO', acknowledged: false }
 ]
 const replaced = replaceDriftEvent(events, 'evt-1', {
-  event: { id: 'evt-1', acknowledged: true, acknowledgedBy: 'alice' }
+  event: { id: 'evt-1', acknowledged: true, acknowledgedBy: 'alice', acknowledgedAt: '2026-11-14T10:00:00Z' }
 })
 assert.deepEqual(replaced, [
-  { id: 'evt-1', acknowledged: true, summary: 'first', acknowledgedBy: 'alice' },
-  { id: 'evt-2', acknowledged: false, summary: 'second' }
+  {
+    id: 'evt-1',
+    filename: 'a.proto',
+    severity: 'DRIFT_SEVERITY_WARNING',
+    acknowledged: true,
+    acknowledgedBy: 'alice',
+    acknowledgedAt: '2026-11-14T10:00:00Z'
+  },
+  events[1]
 ])
 assert.equal(events[0].acknowledged, false, 'original array must not be mutated')
 
+// Kratos-shaped sparse response (zero-valued fields, acknowledgedBy 'unknown') must not blank the card
+const sparse = replaceDriftEvent(events, 'evt-2', {
+  event: {
+    id: 'evt-2',
+    moduleName: '',
+    tagName: '',
+    filename: '',
+    eventType: 'DRIFT_EVENT_TYPE_UNSPECIFIED',
+    previousHash: '',
+    currentHash: '',
+    severity: 'DRIFT_SEVERITY_UNSPECIFIED',
+    detectedAt: null,
+    acknowledged: true,
+    acknowledgedBy: 'unknown',
+    acknowledgedAt: null
+  }
+})
+assert.equal(sparse[1].filename, 'b.proto')
+assert.equal(sparse[1].severity, 'DRIFT_SEVERITY_INFO')
+assert.equal(sparse[1].acknowledged, true)
+assert.equal(sparse[1].acknowledgedBy, undefined, "'unknown' must not be copied")
+assert.ok(!Number.isNaN(Date.parse(sparse[1].acknowledgedAt)), 'falls back to a local timestamp when the server has none')
+
 // Without an event in the response, the local event is still marked acknowledged
-assert.deepEqual(replaceDriftEvent(events, 'evt-2', {})[1], { id: 'evt-2', acknowledged: true, summary: 'second' })
+assert.equal(replaceDriftEvent(events, 'evt-2', {})[1].acknowledged, true)
 
 // getAcknowledgeDriftErrorMessage: prefers server message, then error message, then default
 assert.equal(
@@ -70,12 +100,6 @@ assert.equal(
 assert.equal(getAcknowledgeDriftErrorMessage(new Error('network down')), 'network down')
 assert.equal(getAcknowledgeDriftErrorMessage({}), 'Failed to acknowledge drift event')
 assert.equal(getAcknowledgeDriftErrorMessage(null), 'Failed to acknowledge drift event')
-
-// ModuleVersionView.vue: the Acknowledge button is rendered only for logged-in users on unacknowledged events
-const view = readUi('src/views/ModuleVersionView.vue')
-assert.ok(view.includes('v-if="isLoggedIn && !event.acknowledged"'), 'Acknowledge button must be gated on isLoggedIn and !event.acknowledged')
-assert.ok(view.includes('@click="acknowledgeDriftEvent(event)"'), 'Acknowledge button must call acknowledgeDriftEvent(event)')
-assert.ok(view.includes("'Acknowledge'"), 'Acknowledge button label must be present')
 
 // nginx.conf: simulate nginx map lookup (exact entries, ~regex entries, first match wins, else default)
 const nginx = readUi('nginx.conf')

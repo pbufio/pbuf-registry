@@ -65,6 +65,8 @@ watch([moduleName, tag], () => {
   driftLoaded.value = false
   driftEvents.value = []
   driftError.value = null
+  acknowledgingDriftEventId.value = null
+  driftAcknowledgeError.value = null
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
   graphEdgesByParent.value = {}
@@ -408,16 +410,23 @@ const loadDriftEvents = async () => {
 const acknowledgeDriftEvent = async (event) => {
   if (!canAcknowledgeDriftEvent({ isLoggedIn: isLoggedIn.value, event, pendingEventId: acknowledgingDriftEventId.value })) return
 
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  const isSameTag = () => moduleName.value === currentModule && tag.value === currentTag
+
   acknowledgingDriftEventId.value = event.id
   driftAcknowledgeError.value = null
   try {
     const response = await driftApi.acknowledgeDriftEvent(event.id)
+    // The user navigated to another tag while the request was in flight: drop the late response.
+    if (!isSameTag()) return
     driftEvents.value = replaceDriftEvent(driftEvents.value, event.id, response)
   } catch (err) {
+    if (!isSameTag()) return
     console.error('Failed to acknowledge drift event:', err)
     driftAcknowledgeError.value = getAcknowledgeDriftErrorMessage(err)
   } finally {
-    acknowledgingDriftEventId.value = null
+    if (isSameTag()) acknowledgingDriftEventId.value = null
   }
 }
 
