@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient'
+import { buildAcknowledgeDriftEventRequest } from '@/utils/driftAcknowledgeUtils'
 
 export const driftApi = {
   /**
@@ -36,6 +37,22 @@ export const driftApi = {
     if (tagName) body.tagName = tagName
 
     const response = await apiClient.post('/v1/drift/modules/dependencies/status', body)
+    return response.data
+  },
+
+  /**
+   * Acknowledge a drift event. Requires an authenticated session.
+   * Swagger: POST /v1/drift/events/{event_id}/acknowledge
+   * Body: { acknowledgedBy }
+   *
+   * @param {string} eventId - Drift event ID
+   * @param {string} acknowledgedBy - Who is acknowledging the event
+   * @returns {Promise<Object>} Response with `event`
+   */
+  async acknowledgeDriftEvent(eventId, acknowledgedBy) {
+    const { path, body } = buildAcknowledgeDriftEventRequest(eventId, acknowledgedBy)
+
+    const response = await apiClient.post(path, body)
     return response.data
   }
 }

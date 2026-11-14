@@ -238,6 +238,122 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page.getByRole('button', { name: 'Dependency Graph' })).toHaveCount(0)
   })
 
+  test('acknowledges an unacknowledged drift event from the drift tab and keeps the card intact', async ({ page }) => {
+    // Signed-in session so the Acknowledge button is rendered (authToken reads sessionStorage)
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem('pbuf_registry_ui_token', 'pbuf_user_validToken123456')
+    })
+
+    const ackRequests = []
+    const driftEvent = {
+      id: 'evt-1',
+      moduleName: 'acme/order-service',
+      tagName: 'v1.0.0',
+      filename: 'order/v1/order.proto',
+      eventType: 'DRIFT_EVENT_TYPE_MODIFIED',
+      previousHash: 'aaa111',
+      currentHash: 'bbb222',
+      severity: 'DRIFT_SEVERITY_WARNING',
+      detectedAt: '2026-11-01T09:30:00Z',
+      acknowledged: false,
+      acknowledgedBy: '',
+      acknowledgedAt: null
+    }
+
+    await page.route('**/api/v1/metadata', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) })
+    })
+    await page.route('**/api/v1/modules/pull', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ protofiles: [] }) })
+    })
+    await page.route('**/api/v1/modules/dependencies', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ dependencies: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ statuses: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [driftEvent] }) })
+    })
+    await page.route('**/api/v1/drift/events/evt-1/acknowledge', async (route) => {
+      ackRequests.push({ method: route.request().method(), body: route.request().postDataJSON() })
+      // Kratos marshals with EmitUnpopulated, so unset fields arrive as zero values / null
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          event: {
+            id: 'evt-1',
+            moduleName: '',
+            tagName: '',
+            filename: '',
+            eventType: 'DRIFT_EVENT_TYPE_UNSPECIFIED',
+            previousHash: '',
+            currentHash: '',
+            severity: 'DRIFT_SEVERITY_UNSPECIFIED',
+            detectedAt: null,
+            acknowledged: true,
+            acknowledgedBy: 'unknown',
+            acknowledgedAt: null
+          }
+        })
+      })
+    })
+
+    await page.goto('/modules/acme/order-service/tags/v1.0.0')
+    await page.getByRole('button', { name: /^Drift \(/ }).click()
+
+    const card = page.locator('.space-y-3 > div').filter({ hasText: 'order/v1/order.proto' })
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('UNACKNOWLEDGED')
+
+    const ackButton = card.getByRole('button', { name: 'Acknowledge', exact: true })
+    await expect(ackButton).toBeVisible()
+    await ackButton.click()
+
+    await expect(card).toContainText('ACKNOWLEDGED')
+    await expect(card).not.toContainText('UNACKNOWLEDGED')
+    await expect(card.getByRole('button', { name: 'Acknowledge', exact: true })).toHaveCount(0)
+    // Sparse server response must not blank the card; 'unknown' must not be shown as the acknowledger
+    await expect(card).toContainText('order/v1/order.proto')
+    await expect(card).toContainText('WARNING')
+    await expect(card).not.toContainText('by unknown')
+
+    expect(ackRequests).toHaveLength(1)
+    expect(ackRequests[0].method).toBe('POST')
+    expect(ackRequests[0].body).toEqual({})
+  })
+
+  test('hides the Acknowledge button for signed-out visitors', async ({ page }) => {
+    await page.route('**/api/v1/metadata', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) })
+    })
+    await page.route('**/api/v1/modules/pull', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ protofiles: [] }) })
+    })
+    await page.route('**/api/v1/modules/dependencies', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ dependencies: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ statuses: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/events', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          events: [{ id: 'evt-1', filename: 'order/v1/order.proto', eventType: 'DRIFT_EVENT_TYPE_MODIFIED', severity: 'DRIFT_SEVERITY_WARNING', acknowledged: false }]
+        })
+      })
+    })
+
+    await page.goto('/modules/acme/order-service/tags/v1.0.0')
+    await page.getByRole('button', { name: /^Drift \(/ }).click()
+
+    await expect(page.getByText('order/v1/order.proto')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Acknowledge', exact: true })).toHaveCount(0)
+  })
+
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {
     test.skip(process.env.PLAYWRIGHT_LIVE_BACKEND !== '1', 'Requires live Docker Compose stack')
 
