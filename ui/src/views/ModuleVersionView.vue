@@ -10,6 +10,12 @@ import { registryApi } from '@/services/registryApi'
 import { metadataApi } from '@/services/metadataApi'
 import { driftApi } from '@/services/driftApi'
 import { dedupeDriftStatuses, dependencyNodeId } from '@/utils/dependencyGraph'
+import { authToken } from '@/auth/authToken'
+import {
+  canAcknowledgeDriftEvent,
+  getAcknowledgeDriftErrorMessage,
+  replaceDriftEvent
+} from '@/utils/driftAcknowledgeUtils'
 
 const MAX_GRAPH_EDGE_PARENTS = 20
 
@@ -31,6 +37,9 @@ const driftLoaded = ref(false)
 const driftError = ref(null)
 const dependencyDriftStatuses = ref([])
 const dependencyDriftError = ref(null)
+const isLoggedIn = authToken.isLoggedIn
+const acknowledgingDriftEventId = ref(null)
+const driftAcknowledgeError = ref(null)
 
 const graphEdgesByParent = ref({})
 const graphTransitiveDriftStatuses = ref([])
@@ -56,6 +65,8 @@ watch([moduleName, tag], () => {
   driftLoaded.value = false
   driftEvents.value = []
   driftError.value = null
+  acknowledgingDriftEventId.value = null
+  driftAcknowledgeError.value = null
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
   graphEdgesByParent.value = {}
@@ -393,6 +404,29 @@ const loadDriftEvents = async () => {
     driftError.value = err.response?.data?.message || err.message || 'Failed to load drift events'
   } finally {
     driftLoading.value = false
+  }
+}
+
+const acknowledgeDriftEvent = async (event) => {
+  if (!canAcknowledgeDriftEvent({ isLoggedIn: isLoggedIn.value, event, pendingEventId: acknowledgingDriftEventId.value })) return
+
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  const isSameTag = () => moduleName.value === currentModule && tag.value === currentTag
+
+  acknowledgingDriftEventId.value = event.id
+  driftAcknowledgeError.value = null
+  try {
+    const response = await driftApi.acknowledgeDriftEvent(event.id)
+    // The user navigated to another tag while the request was in flight: drop the late response.
+    if (!isSameTag()) return
+    driftEvents.value = replaceDriftEvent(driftEvents.value, event.id, response)
+  } catch (err) {
+    if (!isSameTag()) return
+    console.error('Failed to acknowledge drift event:', err)
+    driftAcknowledgeError.value = getAcknowledgeDriftErrorMessage(err)
+  } finally {
+    if (isSameTag()) acknowledgingDriftEventId.value = null
   }
 }
 
@@ -750,6 +784,10 @@ modules:
               </div>
             </PCard>
 
+            <p v-if="driftAcknowledgeError" class="text-sm text-amber-300 mb-3">
+              Failed to acknowledge drift event: {{ driftAcknowledgeError }}
+            </p>
+
             <div v-if="driftEvents.length > 0" class="space-y-3">
               <PCard v-for="event in driftEvents" :key="event.id">
                 <div class="flex items-start justify-between gap-4">
@@ -771,6 +809,14 @@ modules:
                     <PBadge :variant="event.acknowledged ? 'default' : 'brand'">
                       {{ event.acknowledged ? 'ACKNOWLEDGED' : 'UNACKNOWLEDGED' }}
                     </PBadge>
+                    <PButton
+                      v-if="isLoggedIn && !event.acknowledged"
+                      variant="secondary"
+                      :disabled="acknowledgingDriftEventId !== null"
+                      @click="acknowledgeDriftEvent(event)"
+                    >
+                      {{ acknowledgingDriftEventId === event.id ? 'Acknowledging...' : 'Acknowledge' }}
+                    </PButton>
                   </div>
                 </div>
                 <div v-if="event.acknowledged" class="mt-3 text-xs text-zinc-500">
