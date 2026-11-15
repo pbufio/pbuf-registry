@@ -849,31 +849,59 @@ Configuration is loaded from the embedded [`internal/config/config.yaml`](intern
 | `SERVER_DEBUG_ADDR` | `server.debug.addr` | `0.0.0.0:8082` | Debug & Prometheus `/metrics` listen address |
 | `DAEMONS_COMPACTION_CRON` | `daemons.compaction.cron` | `0 * * * *` | Cron schedule for draft tag compaction |
 | `DAEMONS_PROTOPARSING_CRON` | `daemons.protoparsing.cron` | `*/1 * * * *` | Cron schedule for proto parsing & drift detection |
+| `DAEMONS_PROTOPARSING_WEBHOOK_URL` | `daemons.protoparsing.webhook.url` | `""` | Optional Slack Incoming Webhook or HTTP endpoint for new drift alerts |
+| `DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY` | `daemons.protoparsing.webhook.min_severity` | `WARNING` | Minimum drift severity to notify (`INFO`, `WARNING`, `CRITICAL`) |
+| `DAEMONS_PROTOPARSING_WEBHOOK_FORMAT` | `daemons.protoparsing.webhook.format` | `""` | Payload format: `""` (auto-detects `hooks.slack.com` Block Kit vs JSON), `json`, or `slack` |
+| `DAEMONS_PROTOPARSING_WEBHOOK_TIMEOUT` | `daemons.protoparsing.webhook.timeout` | `10s` | HTTP timeout for drift webhook delivery |
 
 ---
 
 ## CI/CD Integration
 
-### GitHub Actions
+### GitHub Actions (`pbufio/pbuf-setup-action`)
+
+Use [`pbufio/pbuf-setup-action`](https://github.com/pbufio/pbuf-setup-action) to install `pbuf`, post/update sticky pull request schema drift reports (`pbuf drift diff --format=markdown`), and push versioned modules on release tags:
 
 ```yaml
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+name: Protobuf CI
 
-  - name: Install pbuf CLI
-    run: |
-      curl -fsSL https://raw.githubusercontent.com/pbufio/pbuf-registry/main/scripts/install.sh | sh -s -- -v v0.9.0
-      pbuf auth "${{ secrets.PBUF_TOKEN }}"
+on:
+  pull_request:
+    paths:
+      - '**.proto'
+      - 'pbuf.yaml'
+  push:
+    tags:
+      - 'v*'
 
-  - name: Vendor dependencies
-    run: pbuf vendor
+permissions:
+  contents: read
+  pull-requests: write
 
-  - name: Push schema on release tag
-    if: startsWith(github.ref, 'refs/tags/v')
-    run: |
-      pbuf modules register || true
-      pbuf modules push "${{ github.ref_name }}"
+jobs:
+  drift-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pbuf & Run PR Drift Check
+        uses: pbufio/pbuf-setup-action@v1
+        with:
+          version: 'v0.16.0'
+          pbuf_token: ${{ secrets.PBUF_TOKEN }}
+          drift_diff: ${{ github.event_name == 'pull_request' }}
+          fail_on: critical
+          comment_on_pr: ${{ github.event_name == 'pull_request' }}
+
+      - name: Vendor dependencies
+        run: pbuf vendor
+
+      - name: Push schema on release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pbuf modules register || true
+          pbuf modules push "${{ github.ref_name }}"
 ```
 
 ### GitLab CI

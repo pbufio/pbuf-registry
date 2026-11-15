@@ -138,12 +138,16 @@ func TestDriftRepository_SaveDriftEvents_Idempotent(t *testing.T) {
 	}
 
 	// Save events first time
-	err = suite.driftRepository.SaveDriftEvents(ctx, events)
+	inserted, err := suite.driftRepository.SaveDriftEvents(ctx, events)
 	require.NoError(t, err)
+	require.Len(t, inserted, 1)
+	assert.Equal(t, moduleName, inserted[0].ModuleName)
+	assert.Equal(t, "v1.0.0", inserted[0].TagName)
 
-	// Save same events second time (should not error due to ON CONFLICT DO NOTHING)
-	err = suite.driftRepository.SaveDriftEvents(ctx, events)
+	// Save same events second time (should return empty slice due to ON CONFLICT DO NOTHING)
+	insertedAgain, err := suite.driftRepository.SaveDriftEvents(ctx, events)
 	require.NoError(t, err)
+	assert.Empty(t, insertedAgain)
 
 	// Verify only one event was created (idempotent)
 	moduleEvents, err := suite.driftRepository.GetDriftEventsForModule(ctx, moduleName, "")
@@ -285,7 +289,7 @@ func TestDriftRepository_AcknowledgeDriftEvent(t *testing.T) {
 		},
 	}
 
-	err = suite.driftRepository.SaveDriftEvents(ctx, events)
+	_, err = suite.driftRepository.SaveDriftEvents(ctx, events)
 	require.NoError(t, err)
 
 	// Get unacknowledged events
@@ -402,7 +406,7 @@ func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {
 	require.NoError(t, err)
 
 	// Seed drift events for newer dependency tags.
-	err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
+	_, err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
 		{
 			ModuleID:    moduleBID,
 			TagID:       tagBV11ID,
@@ -512,7 +516,7 @@ func TestDriftRepository_GetUnacknowledgedDriftEvents(t *testing.T) {
 			DetectedAt:   time.Now(),
 		},
 	}
-	err = suite.driftRepository.SaveDriftEvents(ctx, events)
+	_, err = suite.driftRepository.SaveDriftEvents(ctx, events)
 	require.NoError(t, err)
 
 	// Get unacknowledged events - our events should be in the list
@@ -561,7 +565,7 @@ func TestDriftRepository_GetDriftEventsForModule(t *testing.T) {
 	require.NoError(t, err)
 
 	// Save events for both tags
-	err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
+	_, err = suite.driftRepository.SaveDriftEvents(ctx, []model.DriftEvent{
 		{
 			ModuleID:    moduleID,
 			TagID:       tag1ID,

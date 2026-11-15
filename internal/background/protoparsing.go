@@ -15,13 +15,21 @@ const (
 type protoParsingDaemon struct {
 	metadataRepository data.MetadataRepository
 	driftRepository    data.DriftRepository
+	notifiers          []DriftNotifier
 	log                *log.Helper
 }
 
-func NewProtoParsingDaemon(metadataRepository data.MetadataRepository, driftRepository data.DriftRepository, logger log.Logger) Daemon {
+func NewProtoParsingDaemon(metadataRepository data.MetadataRepository, driftRepository data.DriftRepository, logger log.Logger, notifiers ...DriftNotifier) Daemon {
+	var activeNotifiers []DriftNotifier
+	for _, n := range notifiers {
+		if n != nil {
+			activeNotifiers = append(activeNotifiers, n)
+		}
+	}
 	return &protoParsingDaemon{
 		metadataRepository: metadataRepository,
 		driftRepository:    driftRepository,
+		notifiers:          activeNotifiers,
 		log:                log.NewHelper(log.With(logger, "module", "background/ProtoParsingDaemon")),
 	}
 }
@@ -127,16 +135,24 @@ func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []stri
 			events := append(result.Added, result.Modified...)
 			events = append(events, result.Deleted...)
 
-			err = p.driftRepository.SaveDriftEvents(ctx, events)
+			inserted, err := p.driftRepository.SaveDriftEvents(ctx, events)
 			if err != nil {
 				p.log.Errorf("SaveDriftEvents error for tag %s: %v", tagID, err)
 				continue
 			}
 
-			p.log.Infof("Saved %d drift events for tag %s", len(events), tagID)
+			p.log.Infof("Saved %d new drift events (out of %d detected) for tag %s", len(inserted), len(events), tagID)
 
 			// Log significant changes for visibility
 			driftDetector.logSignificantChanges(result)
+
+			if len(inserted) > 0 {
+				for _, notifier := range p.notifiers {
+					if notifyErr := notifier.NotifyDriftEvents(ctx, inserted); notifyErr != nil {
+						p.log.Errorf("NotifyDriftEvents error for tag %s: %v", tagID, notifyErr)
+					}
+				}
+			}
 		} else {
 			p.log.Infof("No drift detected for tag %s", tagID)
 		}

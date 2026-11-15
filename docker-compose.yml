@@ -85,6 +85,9 @@ services:
       retries: 5
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:${PBUF_POSTGRES_PASSWORD:-pbuf}@db:5432/pbuf_registry?sslmode=disable"
+      DAEMONS_PROTOPARSING_WEBHOOK_URL: "${DAEMONS_PROTOPARSING_WEBHOOK_URL:-}"
+      DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY: "${DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY:-WARNING}"
+      DAEMONS_PROTOPARSING_WEBHOOK_FORMAT: "${DAEMONS_PROTOPARSING_WEBHOOK_FORMAT:-}"
     command: >
       sh -c "/app/pbuf-registry proto-parsing"
   pbuf-registry-ui:

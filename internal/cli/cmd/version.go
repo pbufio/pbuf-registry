@@ -41,7 +41,7 @@ func buildInfo() versionInfo {
 	}
 
 	if bi, ok := debug.ReadBuildInfo(); ok {
-		if info.Version == "" && bi.Main.Version != "" {
+		if info.Version == "" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 			info.Version = bi.Main.Version
 		}
 		for _, setting := range bi.Settings {

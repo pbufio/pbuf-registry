@@ -19,6 +19,12 @@ spec:
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
         property: {{ .Values.secrets.eso.serverStaticTokenProperty }}
+{{- if .Values.secrets.eso.driftWebhookUrlProperty }}
+    - secretKey: DAEMONS_PROTOPARSING_WEBHOOK_URL
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.driftWebhookUrlProperty }}
+{{- end }}
     - secretKey: server-cert.pem
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}

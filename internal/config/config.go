@@ -50,6 +50,13 @@ type Server struct {
 	} `mapstructure:"debug"`
 }
 
+type DriftWebhookConfig struct {
+	URL         string        `mapstructure:"url"`
+	MinSeverity string        `mapstructure:"min_severity"`
+	Format      string        `mapstructure:"format"`
+	Timeout     time.Duration `mapstructure:"timeout"`
+}
+
 type Config struct {
 	Server Server `mapstructure:"server"`
 
@@ -64,7 +71,8 @@ type Config struct {
 			CronSchedule string `mapstructure:"cron"`
 		} `mapstructure:"compaction"`
 		ProtoParsing struct {
-			CronSchedule string `mapstructure:"cron"`
+			CronSchedule string             `mapstructure:"cron"`
+			Webhook      DriftWebhookConfig `mapstructure:"webhook"`
 		} `mapstructure:"protoparsing"`
 		DriftDetection struct {
 			CronSchedule string `mapstructure:"cron"`
