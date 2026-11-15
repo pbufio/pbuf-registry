@@ -64,7 +64,7 @@ func newListDriftEventsCmd(client v1.DriftServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -97,7 +97,7 @@ func newGetModuleDriftEventsCmd(client v1.DriftServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -199,7 +199,7 @@ func newAcknowledgeDriftEventCmd(client v1.DriftServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -502,12 +502,7 @@ func computeLocalDriftDiff(baseFiles, localFiles []*v1.ProtoFile) ([]LocalDriftD
 func renderDriftDiffReport(w io.Writer, report LocalDriftDiffReport, format string) error {
 	switch strings.ToLower(format) {
 	case "json":
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(data))
-		return err
+		return printJSON(w, report)
 	case "markdown", "md":
 		if _, err := fmt.Fprintf(w, "### Schema Drift Diff: `%s` (against `%s`)\n\n", report.ModuleName, report.BaseTag); err != nil {
 			return err

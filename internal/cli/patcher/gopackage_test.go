@@ -107,6 +107,54 @@ func TestGoPackagePatcher_Patch(t *testing.T) {
 			want:    withPackageProtoFilePatched,
 			wantErr: false,
 		},
+		{
+			name: "hyphenated directory name sanitized to valid Go identifier",
+			fields: fields{
+				goModule: "github.com/pbufio/pbuf-registry",
+			},
+			args: args{
+				outputPath: "gen/api/pbuf-registry",
+				content:    "syntax = \"proto3\";\nmessage Module {}",
+			},
+			want:    "syntax = \"proto3\";\noption go_package = \"github.com/pbufio/pbuf-registry/gen/api/pbuf-registry;pbuf_registry\";\nmessage Module {}",
+			wantErr: false,
+		},
+		{
+			name: "leading digit and keyword directory names sanitized",
+			fields: fields{
+				goModule: "github.com/acme/app",
+			},
+			args: args{
+				outputPath: "gen/type",
+				content:    "syntax = \"proto3\";\nmessage Kind {}",
+			},
+			want:    "syntax = \"proto3\";\noption go_package = \"github.com/acme/app/gen/type;type_pb\";\nmessage Kind {}",
+			wantErr: false,
+		},
+		{
+			name: "leading digit directory name prefixed",
+			fields: fields{
+				goModule: "github.com/acme/app",
+			},
+			args: args{
+				outputPath: "gen/2fa.v1",
+				content:    "syntax = \"proto3\";\nmessage Token {}",
+			},
+			want:    "syntax = \"proto3\";\noption go_package = \"github.com/acme/app/gen/2fa.v1;pb_2fa_v1\";\nmessage Token {}",
+			wantErr: false,
+		},
+		{
+			name: "root outputPath uses goModule without trailing dot",
+			fields: fields{
+				goModule: "github.com/pbufio/pbuf-registry",
+			},
+			args: args{
+				outputPath: ".",
+				content:    "syntax = \"proto3\";\nmessage Root {}",
+			},
+			want:    "syntax = \"proto3\";\noption go_package = \"github.com/pbufio/pbuf-registry;pbuf_registry\";\nmessage Root {}",
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

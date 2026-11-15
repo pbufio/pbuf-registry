@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -824,5 +825,45 @@ func TestShellCompletionCommand(t *testing.T) {
 		badConfigCmd.SetErr(&out)
 		badConfigCmd.SetArgs([]string{"modules", "list"})
 		require.ErrorContains(t, badConfigCmd.Execute(), "failed to parse pbuf.yaml")
+	})
+
+	t.Run("PBUF_REGISTRY_INSECURE overrides pbuf.yaml in both directions", func(t *testing.T) {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		srv := grpc.NewServer()
+		v1.RegisterRegistryServer(srv, v1.UnimplementedRegistryServer{})
+		go func() { _ = srv.Serve(ln) }()
+		t.Cleanup(srv.Stop)
+
+		origDir, err := os.Getwd()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.Chdir(origDir) })
+		require.NoError(t, os.Chdir(t.TempDir()))
+		t.Setenv("PBUF_REGISTRY_ADDR", "")
+
+		require.NoError(t, os.WriteFile(model.PbufConfigFilename, []byte("version: v1\nregistry:\n  addr: "+ln.Addr().String()+"\n"), 0o644))
+		t.Setenv("PBUF_REGISTRY_INSECURE", "true")
+		insecureCmd := NewRootCmd()
+		insecureCmd.SetOut(&bytes.Buffer{})
+		insecureCmd.SetErr(&bytes.Buffer{})
+		insecureCmd.SetArgs([]string{"modules", "list"})
+		require.ErrorContains(t, insecureCmd.Execute(), "Unimplemented")
+
+		require.NoError(t, os.WriteFile(model.PbufConfigFilename, []byte("version: v1\nregistry:\n  addr: "+ln.Addr().String()+"\n  insecure: true\n"), 0o644))
+		t.Setenv("PBUF_REGISTRY_INSECURE", "false")
+		secureCmd := NewRootCmd()
+		secureCmd.SetOut(&bytes.Buffer{})
+		secureCmd.SetErr(&bytes.Buffer{})
+		secureCmd.SetArgs([]string{"modules", "list"})
+		err = secureCmd.Execute()
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "Unimplemented")
+
+		t.Setenv("PBUF_REGISTRY_INSECURE", "not-a-bool")
+		invalidCmd := NewRootCmd()
+		invalidCmd.SetOut(&bytes.Buffer{})
+		invalidCmd.SetErr(&bytes.Buffer{})
+		invalidCmd.SetArgs([]string{"modules", "list"})
+		require.ErrorContains(t, invalidCmd.Execute(), "invalid PBUF_REGISTRY_INSECURE value")
 	})
 }

@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -69,8 +69,15 @@ func NewRootCmd() *cobra.Command {
 
 			if envRegistryAddr := os.Getenv("PBUF_REGISTRY_ADDR"); envRegistryAddr != "" {
 				modulesConfig.Registry.Addr = envRegistryAddr
-				if os.Getenv("PBUF_REGISTRY_INSECURE") == "true" {
-					modulesConfig.Registry.Insecure = true
+			}
+			if rawInsecure := strings.TrimSpace(os.Getenv("PBUF_REGISTRY_INSECURE")); rawInsecure != "" && modulesConfig.Registry.Addr != "" {
+				val, err := strconv.ParseBool(rawInsecure)
+				if err != nil {
+					if configErr == nil {
+						configErr = fmt.Errorf("invalid PBUF_REGISTRY_INSECURE value %q: %w", rawInsecure, err)
+					}
+				} else {
+					modulesConfig.Registry.Insecure = val
 				}
 			}
 		})
@@ -490,15 +497,10 @@ func renderModuleDetails(w io.Writer, module *v1.Module, dependencies []*v1.Depe
 		if deps == nil {
 			deps = []*v1.Dependency{}
 		}
-		marshalled, err := json.MarshalIndent(moduleDetailsOutput{
+		return printJSON(w, moduleDetailsOutput{
 			Module:       module,
 			Dependencies: deps,
-		}, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal module: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(marshalled))
-		return err
+		})
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -633,12 +635,7 @@ func NewListModulesCmd(_ *model.Config, client v1.RegistryClient) *cobra.Command
 
 func renderModulesList(w io.Writer, modulesList *v1.ListModulesResponse, outputFormat string) error {
 	if outputFormat == "json" {
-		marshalled, err := json.MarshalIndent(modulesList, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal modules list: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(marshalled))
-		return err
+		return printJSON(w, modulesList)
 	}
 
 	modules := modulesList.GetModules()

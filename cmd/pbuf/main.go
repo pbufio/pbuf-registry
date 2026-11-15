@@ -17,7 +17,7 @@ const (
 func main() {
 	log.SetFlags(noFlags)
 	log.SetPrefix(noPrefix)
-	log.SetOutput(os.Stdout)
+	log.SetOutput(os.Stderr)
 
 	err := cmd.NewRootCmd().Execute()
 	if err != nil {
@@ -29,7 +29,7 @@ func init() {
 	log.SetOutput(io.Discard)
 	_, err := maxprocs.Set(maxprocs.Logger(log.Printf))
 	if err != nil {
-		log.SetOutput(os.Stdout)
+		log.SetOutput(os.Stderr)
 		log.Printf("failed to set maxprocs: %v", err)
 	}
 }
