@@ -5,6 +5,42 @@ entries:
       artifacthub.io/category: integration-delivery
       artifacthub.io/images: |
         - name: pbuf-registry
+          image: ghcr.io/pbufio/registry:v0.17.1
+        - name: pbuf-registry-ui
+          image: ghcr.io/pbufio/pbuf-registry-ui:v0.17.1
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://github.com/pbufio/pbuf-registry#readme
+        - name: Live Demo Registry
+          url: https://pbuf.io/modules
+    apiVersion: v2
+    appVersion: v0.17.1
+    created: "2026-11-15T09:53:14.453140935Z"
+    description: Self-hosted Protocol Buffers schema registry with OIDC SSO, RBAC,
+      drift detection, and Web UI
+    digest: 238b1f4ee6e9046689d2947be7b6f5b0a02b8ef49b726b364b3a67826389f1fb
+    home: https://pbuf.io
+    keywords:
+    - protobuf
+    - grpc
+    - schema-registry
+    - pbuf
+    - microservices
+    maintainers:
+    - email: aatarasoff@gmail.com
+      name: aatarasoff
+    name: pbuf-registry
+    sources:
+    - https://github.com/pbufio/pbuf-registry
+    type: application
+    urls:
+    - https://github.com/pbufio/pbuf-registry/releases/download/v0.17.1/pbuf-registry-0.17.1.tgz
+    version: 0.17.1
+  - annotations:
+      artifacthub.io/category: integration-delivery
+      artifacthub.io/images: |
+        - name: pbuf-registry
           image: ghcr.io/pbufio/registry:v0.17.0
         - name: pbuf-registry-ui
           image: ghcr.io/pbufio/pbuf-registry-ui:v0.17.0
@@ -305,4 +341,4 @@ entries:
     urls:
     - https://github.com/pbufio/pbuf-registry/releases/download/v0.9.0/pbuf-registry-0.9.0.tgz
     version: 0.9.0
-generated: "2026-11-15T09:24:58.071247761Z"
+generated: "2026-11-15T09:53:14.45115405Z"
