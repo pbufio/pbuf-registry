@@ -1,17 +1,21 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
+	"github.com/pbufio/pbuf-registry/internal/cli/modules"
 	"github.com/pbufio/pbuf-registry/internal/cli/registry"
+	"github.com/pbufio/pbuf-registry/internal/mcp"
 	"github.com/pbufio/pbuf-registry/internal/utils"
 	"github.com/spf13/cobra"
 	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
@@ -208,9 +212,146 @@ type LocalDriftDiffItem = utils.ProtoDiffItem
 
 // LocalDriftDiffReport represents the full result of `pbuf drift diff`.
 type LocalDriftDiffReport struct {
-	ModuleName string               `json:"module_name"`
-	BaseTag    string               `json:"base_tag"`
-	Items      []LocalDriftDiffItem `json:"items"`
+	ModuleName         string               `json:"module_name"`
+	BaseTag            string               `json:"base_tag"`
+	HasBreakingChanges bool                 `json:"has_breaking_changes"`
+	Items              []LocalDriftDiffItem `json:"items"`
+}
+
+func runLocalDriftDiff(
+	ctx context.Context,
+	regClient v1.RegistryClient,
+	fallbackCfg *model.Config,
+	directory, moduleName, baseTag string,
+) (LocalDriftDiffReport, int, bool, error) {
+	if regClient == nil {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("registry client is not configured")
+	}
+
+	rootDir := strings.TrimSpace(directory)
+	if rootDir == "" {
+		rootDir = "."
+	}
+	if info, err := os.Stat(rootDir); err != nil {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to access directory %s: %w", rootDir, err)
+	} else if !info.IsDir() {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("%s is not a directory", rootDir)
+	}
+
+	cfg := fallbackCfg
+	cfgPath := filepath.Join(rootDir, model.PbufConfigFilename)
+	if rawCfg, err := os.ReadFile(cfgPath); err == nil {
+		parsed, parseErr := modules.NewConfig(rawCfg)
+		if parseErr != nil {
+			return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to parse %s: %w", cfgPath, parseErr)
+		}
+		cfg = parsed
+	} else if !os.IsNotExist(err) {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to read %s: %w", cfgPath, err)
+	} else if filepath.Clean(rootDir) != "." {
+		cfg = nil
+	}
+
+	moduleName = strings.TrimSpace(moduleName)
+	if moduleName == "" && cfg != nil {
+		moduleName = strings.TrimSpace(cfg.Name)
+	}
+	if moduleName == "" {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("module name is required (set 'name' in pbuf.yaml or pass as argument)")
+	}
+
+	var exportPaths []string
+	if cfg != nil && len(cfg.Export.Paths) > 0 {
+		exportPaths = cfg.Export.Paths
+	} else {
+		for _, dir := range []string{"api", "proto"} {
+			if info, err := os.Stat(filepath.Join(rootDir, dir)); err == nil && info.IsDir() {
+				exportPaths = append(exportPaths, dir)
+			}
+		}
+		if len(exportPaths) == 0 {
+			exportPaths = []string{"api"}
+		}
+	}
+
+	localFiles, err := registry.CollectProtoFilesInRoot(rootDir, exportPaths)
+	if err != nil {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to collect local proto files: %w", err)
+	}
+
+	baseTag = strings.TrimSpace(baseTag)
+	if baseTag == "" {
+		mod, getErr := regClient.GetModule(ctx, &v1.GetModuleRequest{Name: moduleName})
+		if getErr != nil {
+			return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to fetch module %s from registry: %w", moduleName, getErr)
+		}
+		if len(mod.GetTags()) == 0 {
+			return LocalDriftDiffReport{
+				ModuleName: moduleName,
+				Items:      []LocalDriftDiffItem{},
+			}, len(localFiles), true, nil
+		}
+		baseTag = mod.GetTags()[0]
+	}
+
+	pulled, err := regClient.PullModule(ctx, &v1.PullModuleRequest{
+		Name: moduleName,
+		Tag:  baseTag,
+	})
+	if err != nil {
+		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("failed to pull baseline %s@%s: %w", moduleName, baseTag, err)
+	}
+
+	items, err := computeLocalDriftDiff(pulled.GetProtofiles(), localFiles)
+	if err != nil {
+		return LocalDriftDiffReport{}, 0, false, err
+	}
+	if items == nil {
+		items = []LocalDriftDiffItem{}
+	}
+
+	return LocalDriftDiffReport{
+		ModuleName:         moduleName,
+		BaseTag:            baseTag,
+		HasBreakingChanges: shouldFailDriftDiff(items, 3),
+		Items:              items,
+	}, len(localFiles), false, nil
+}
+
+func registerLocalMCPTools(srv *mcp.Server, fallbackCfg *model.Config, regClient v1.RegistryClient) {
+	srv.RegisterTool(
+		"diff_local_protos",
+		"Compare local .proto files against a published registry tag to detect wire-breaking and schema drift changes before pushing.",
+		map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"directory":   map[string]any{"type": "string", "description": "Local project directory containing pbuf.yaml or .proto files (defaults to '.')."},
+				"module_name": map[string]any{"type": "string", "description": "Module name in the registry (defaults to 'name' in pbuf.yaml)."},
+				"against":     map[string]any{"type": "string", "description": "Baseline registry tag to compare against (defaults to latest published tag)."},
+			},
+		},
+		func(ctx context.Context, rawArgs json.RawMessage) (string, error) {
+			var args struct {
+				Directory  string `json:"directory"`
+				ModuleName string `json:"module_name"`
+				Against    string `json:"against"`
+			}
+			if len(rawArgs) > 0 && string(rawArgs) != "null" {
+				if err := json.Unmarshal(rawArgs, &args); err != nil {
+					return "", &mcp.InvalidArgumentError{Message: err.Error()}
+				}
+			}
+			report, _, _, err := runLocalDriftDiff(ctx, regClient, fallbackCfg, args.Directory, args.ModuleName, args.Against)
+			if err != nil {
+				return "", err
+			}
+			data, err := json.MarshalIndent(report, "", "  ")
+			if err != nil {
+				return "", err
+			}
+			return string(data), nil
+		},
+	)
 }
 
 func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.Command {
@@ -221,33 +362,9 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 		Long:    "Compare local .proto files in export.paths against the latest (or specified) registry tag and detect breaking changes before pushing",
 		Args:    cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if regClient == nil {
-				return fmt.Errorf("registry client is not configured")
-			}
-
-			moduleName := ""
-			if config != nil {
-				moduleName = config.Name
-			}
-			if len(args) > 0 && args[0] != "" {
-				moduleName = args[0]
-			}
-			if moduleName == "" {
-				return fmt.Errorf("module name is required (set 'name' in pbuf.yaml or pass as argument)")
-			}
-
-			var exportPaths []string
-			if config != nil && len(config.Export.Paths) > 0 {
-				exportPaths = config.Export.Paths
-			} else {
-				for _, dir := range []string{"api", "proto"} {
-					if info, err := os.Stat(dir); err == nil && info.IsDir() {
-						exportPaths = append(exportPaths, dir)
-					}
-				}
-				if len(exportPaths) == 0 {
-					exportPaths = []string{"api"}
-				}
+			argModule := ""
+			if len(args) > 0 {
+				argModule = args[0]
 			}
 
 			baseTag, err := cmd.Flags().GetString("against")
@@ -275,53 +392,23 @@ func newDriftDiffCmd(config *model.Config, regClient v1.RegistryClient) *cobra.C
 				return err
 			}
 
-			localFiles, err := registry.CollectProtoFilesInDirs(exportPaths)
-			if err != nil {
-				return fmt.Errorf("failed to collect local proto files: %w", err)
-			}
-
-			if baseTag == "" {
-				mod, getErr := regClient.GetModule(cmd.Context(), &v1.GetModuleRequest{Name: moduleName})
-				if getErr != nil {
-					return fmt.Errorf("failed to fetch module %s from registry: %w", moduleName, getErr)
-				}
-				if len(mod.GetTags()) == 0 {
-					if strings.EqualFold(format, "json") {
-						return renderDriftDiffReport(cmd.OutOrStdout(), LocalDriftDiffReport{
-							ModuleName: moduleName,
-							Items:      []LocalDriftDiffItem{},
-						}, format)
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No prior published tags found for %s; skipping diff (%d local file(s)).\n", moduleName, len(localFiles))
-					return nil
-				}
-				baseTag = mod.GetTags()[0]
-			}
-
-			pulled, err := regClient.PullModule(cmd.Context(), &v1.PullModuleRequest{
-				Name: moduleName,
-				Tag:  baseTag,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to pull baseline %s@%s: %w", moduleName, baseTag, err)
-			}
-
-			items, err := computeLocalDriftDiff(pulled.GetProtofiles(), localFiles)
+			report, localCount, noPriorTags, err := runLocalDriftDiff(cmd.Context(), regClient, config, ".", argModule, baseTag)
 			if err != nil {
 				return err
 			}
-
-			report := LocalDriftDiffReport{
-				ModuleName: moduleName,
-				BaseTag:    baseTag,
-				Items:      items,
+			if noPriorTags {
+				if strings.EqualFold(format, "json") {
+					return renderDriftDiffReport(cmd.OutOrStdout(), report, format)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No prior published tags found for %s; skipping diff (%d local file(s)).\n", report.ModuleName, localCount)
+				return nil
 			}
 
 			if err := renderDriftDiffReport(cmd.OutOrStdout(), report, format); err != nil {
 				return err
 			}
 
-			if shouldFailDriftDiff(items, failThreshold) {
+			if shouldFailDriftDiff(report.Items, failThreshold) {
 				return fmt.Errorf("schema drift check failed: detected changes meeting or exceeding %s severity", strings.ToUpper(failOn))
 			}
 

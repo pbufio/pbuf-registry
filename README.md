@@ -668,6 +668,7 @@ pbuf drift acknowledge <event-id> --by alice
 | `list_drift_events` | List schema drift and breaking-change events across the registry (`unacknowledged_only`). |
 | `get_module_drift_events` | List schema drift events for a specific module (`module_name`, `tag_name`). |
 | `get_dependency_drift_status` | Evaluate dependency drift severities and upgrade recommendations for a module (`module_name`, `tag_name`). |
+| `diff_local_protos` | *(CLI `stdio` only)* Compare local `.proto` files against a published registry tag to catch wire-breaking changes before pushing (`directory`, `module_name`, `against`). |
 
 ---
 
