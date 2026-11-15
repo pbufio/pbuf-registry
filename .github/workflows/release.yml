@@ -53,7 +53,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v6
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Docker Login GHCR
         uses: docker/login-action@v3
@@ -65,7 +65,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.7
+          version: v2.15
 
       - name: Test
         run: make test && make test-ui
@@ -198,7 +198,7 @@ jobs:
         if: env.PBUF_TOKEN != ''
         uses: actions/setup-go@v6
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Build pbuf CLI
         if: env.PBUF_TOKEN != ''
