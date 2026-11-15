@@ -1,6 +1,6 @@
 # multi-stage build for go lang application
 # 1. build stage
-FROM golang:1.25 as builder
+FROM golang:1.26 as builder
 
 WORKDIR /app
 COPY . .
