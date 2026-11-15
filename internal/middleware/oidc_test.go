@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -295,4 +297,32 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 		_, err := handler(sCtx, nil)
 		require.Error(t, err)
 	})
+}
+
+func TestParseJWKECDSAValidation(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	rawPub, err := priv.PublicKey.Bytes()
+	require.NoError(t, err)
+
+	validKey := jwkKey{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString(rawPub[1:33]),
+		Y:   base64.RawURLEncoding.EncodeToString(rawPub[33:65]),
+	}
+	pub, err := parseJWK(validKey)
+	require.NoError(t, err)
+	assert.IsType(t, &ecdsa.PublicKey{}, pub)
+
+	// Off-curve point (1, 1) must be rejected by ParseUncompressedPublicKey.
+	offCurve := jwkKey{
+		Kty: "EC",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString([]byte{1}),
+		Y:   base64.RawURLEncoding.EncodeToString([]byte{1}),
+	}
+	_, err = parseJWK(offCurve)
+	require.Error(t, err)
 }

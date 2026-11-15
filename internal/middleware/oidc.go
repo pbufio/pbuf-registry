@@ -319,11 +319,15 @@ func parseJWK(k jwkKey) (crypto.PublicKey, error) {
 		default:
 			return nil, fmt.Errorf("unsupported EC curve: %s", k.Crv)
 		}
-		return &ecdsa.PublicKey{
-			Curve: curve,
-			X:     new(big.Int).SetBytes(xBytes),
-			Y:     new(big.Int).SetBytes(yBytes),
-		}, nil
+		coordLen := (curve.Params().BitSize + 7) / 8
+		if len(xBytes) == 0 || len(xBytes) > coordLen || len(yBytes) == 0 || len(yBytes) > coordLen {
+			return nil, errors.New("invalid EC coordinate length")
+		}
+		uncompressed := make([]byte, 1+2*coordLen)
+		uncompressed[0] = 0x04
+		copy(uncompressed[1+coordLen-len(xBytes):1+coordLen], xBytes)
+		copy(uncompressed[1+2*coordLen-len(yBytes):], yBytes)
+		return ecdsa.ParseUncompressedPublicKey(curve, uncompressed)
 	default:
 		return nil, fmt.Errorf("unsupported key type: %s", k.Kty)
 	}
