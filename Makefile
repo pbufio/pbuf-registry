@@ -1,6 +1,12 @@
 API_PATH=api/pbuf-registry
 REGISTRY_VERSION?=latest
 
+CLI_PKG=github.com/pbufio/pbuf-registry/internal/cli/cmd
+CLI_VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+CLI_COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+CLI_DATE?=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+CLI_LDFLAGS=-s -w -X $(CLI_PKG).version=$(CLI_VERSION) -X $(CLI_PKG).commit=$(CLI_COMMIT) -X $(CLI_PKG).date=$(CLI_DATE)
+
 .PHONY: init
 # init env
 init:
@@ -85,7 +91,7 @@ build:
 .PHONY: build-cli
 # build pbuf CLI
 build-cli:
-	mkdir -p bin/ && go build -o ./bin/pbuf ./cmd/pbuf
+	mkdir -p bin/ && go build -ldflags "$(CLI_LDFLAGS)" -o ./bin/pbuf ./cmd/pbuf
 
 .PHONY: build-migrations
 # build migrations

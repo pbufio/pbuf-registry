@@ -463,6 +463,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | Command | Description |
 |---|---|
 | `pbuf init [name] [registry-url]` | Initialize `pbuf.yaml` interactively or via arguments |
+| `pbuf version [-o text\|json]` | Print the CLI version, commit, build date, and Go runtime details (also `pbuf --version`) |
 | `pbuf auth <token>` | Save registry token to `~/.netrc` (`0600` permissions) |
 | `pbuf login [--issuer <url>] [--client-id <id>] [--scope <scopes>]` | Authenticate via OAuth 2.0 / OIDC Device Authorization Flow |
 | `pbuf vendor` | Vendor all dependencies (`pbuf-registry`, `buf.build`, Git) configured in `pbuf.yaml` |
@@ -508,6 +509,21 @@ pbuf init
 # Non-interactive (defaults registry to pbuf.cloud when omitted)
 pbuf init myorg/payment-service
 pbuf init myorg/payment-service registry.example.com:6777
+```
+
+#### `pbuf version`
+
+Prints the installed CLI version along with the build commit, build date, and Go runtime details. Version metadata is injected at release time via GoReleaser `ldflags`, with a `runtime/debug.ReadBuildInfo()` fallback for `go install` builds so the command still reports the module version and VCS stamp.
+
+```shell
+# Human-readable output
+pbuf version
+
+# Short single line (handy in scripts)
+pbuf --version
+
+# Machine-readable output for CI
+pbuf version -o json
 ```
 
 #### `pbuf auth`

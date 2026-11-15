@@ -411,7 +411,7 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			wantSubstrs: []string{"NAME", "ID", "LATEST TAG", "TAGS", "acme/payment", "mod-1", "v1.2.0", "v1.2.0, v1.1.0", "acme/empty", "mod-2"},
 		},
 		{
-			name:        "list single page with page-size and page-token",
+			name: "list single page with page-size and page-token",
 			client: &fakeRegistryClient{
 				pages: map[string]*v1.ListModulesResponse{
 					"tok-1": {
@@ -547,6 +547,69 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	t.Run("text output", func(t *testing.T) {
+		versionCmd := NewVersionCmd()
+		var out bytes.Buffer
+		versionCmd.SetOut(&out)
+		versionCmd.SetArgs(nil)
+		require.NoError(t, versionCmd.Execute())
+
+		got := out.String()
+		for _, sub := range []string{"pbuf ", "commit:", "built:", "go:", "platform:"} {
+			assert.Contains(t, got, sub)
+		}
+	})
+
+	t.Run("json output", func(t *testing.T) {
+		versionCmd := NewVersionCmd()
+		var out bytes.Buffer
+		versionCmd.SetOut(&out)
+		versionCmd.SetArgs([]string{"-o", "json"})
+		require.NoError(t, versionCmd.Execute())
+
+		var parsed versionInfo
+		require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+		assert.NotEmpty(t, parsed.Version)
+		assert.NotEmpty(t, parsed.Commit)
+		assert.NotEmpty(t, parsed.Date)
+		assert.NotEmpty(t, parsed.GoVersion)
+		assert.NotEmpty(t, parsed.Platform)
+	})
+
+	t.Run("invalid output format", func(t *testing.T) {
+		versionCmd := NewVersionCmd()
+		var out bytes.Buffer
+		versionCmd.SetOut(&out)
+		versionCmd.SetErr(&out)
+		versionCmd.SetArgs([]string{"-o", "xml"})
+		require.ErrorContains(t, versionCmd.Execute(), "invalid --output")
+	})
+
+	t.Run("root --version flag", func(t *testing.T) {
+		origDir, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(origDir) }()
+		require.NoError(t, os.Chdir(t.TempDir()))
+
+		rootCmd := NewRootCmd()
+		var out bytes.Buffer
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		rootCmd.SetArgs([]string{"--version"})
+		require.NoError(t, rootCmd.Execute())
+		assert.Contains(t, out.String(), "pbuf ")
+	})
+
+	t.Run("build info falls back without ldflags", func(t *testing.T) {
+		info := buildInfo()
+		assert.NotEmpty(t, info.Version)
+		assert.NotEmpty(t, info.Commit)
+		assert.NotEmpty(t, info.Date)
+		assert.NotEmpty(t, info.GoVersion)
+	})
 }
 
 func TestShellCompletionCommand(t *testing.T) {

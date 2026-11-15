@@ -126,6 +126,10 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
+	// enable `pbuf --version` alongside the `pbuf version` subcommand
+	rootCmd.Version = buildInfo().Version
+	rootCmd.SetVersionTemplate("pbuf {{.Version}}\n")
+
 	lazyConn := &lazyClientConn{get: ensureConn}
 	registryClient := v1.NewRegistryClient(lazyConn)
 	usersClient := v1.NewUserServiceClient(lazyConn)
@@ -187,6 +191,7 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	rootCmd.AddCommand(CreateInitCmd())
+	rootCmd.AddCommand(NewVersionCmd())
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(vendorCmd)
