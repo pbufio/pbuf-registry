@@ -1,6 +1,7 @@
 package background
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -17,7 +18,13 @@ func TestProtoParsingDaemon_Run_PoisonPillDoesNotBlockValidTagsOrDriftDetection(
 	metaRepo := mocks.NewMetadataRepository(t)
 	driftRepo := mocks.NewDriftRepository(t)
 
-	daemon := NewProtoParsingDaemon(metaRepo, driftRepo, log.DefaultLogger)
+	var notifiedEvents []model.DriftEvent
+	notifier := driftNotifierFunc(func(_ context.Context, events []model.DriftEvent) error {
+		notifiedEvents = append(notifiedEvents, events...)
+		return nil
+	})
+
+	daemon := NewProtoParsingDaemon(metaRepo, driftRepo, log.DefaultLogger, notifier)
 	assert.Equal(t, "proto parsing", daemon.Name())
 
 	// 4 unprocessed tags:
@@ -125,11 +132,28 @@ func TestProtoParsingDaemon_Run_PoisonPillDoesNotBlockValidTagsOrDriftDetection(
 			byFile["deleted.proto"].EventType == model.DriftEventTypeDeleted &&
 			byFile["deleted.proto"].Severity == model.DriftSeverityCritical
 	})).
-		Return(nil).
+		Return([]model.DriftEvent{
+			{
+				ID:         "ev-1",
+				ModuleName: "acme/users",
+				TagName:    "v2.0.0",
+				Filename:   "user.proto",
+				EventType:  model.DriftEventTypeModified,
+				Severity:   model.DriftSeverityCritical,
+			},
+		}, nil).
 		Once()
 
 	err := daemon.Run()
 	require.NoError(t, err)
+	require.Len(t, notifiedEvents, 1)
+	assert.Equal(t, "acme/users", notifiedEvents[0].ModuleName)
+}
+
+type driftNotifierFunc func(ctx context.Context, events []model.DriftEvent) error
+
+func (f driftNotifierFunc) NotifyDriftEvents(ctx context.Context, events []model.DriftEvent) error {
+	return f(ctx, events)
 }
 
 func TestProtoParsingDaemon_Run_GetUnprocessedTagIdsError(t *testing.T) {

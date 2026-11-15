@@ -325,21 +325,31 @@ func (_m *DriftRepository) GetDriftEvents(ctx context.Context, unacknowledgedOnl
 }
 
 // SaveDriftEvents provides a mock function with given fields: ctx, events
-func (_m *DriftRepository) SaveDriftEvents(ctx context.Context, events []model.DriftEvent) error {
+func (_m *DriftRepository) SaveDriftEvents(ctx context.Context, events []model.DriftEvent) ([]model.DriftEvent, error) {
 	ret := _m.Called(ctx, events)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveDriftEvents")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []model.DriftEvent) error); ok {
+	var r0 []model.DriftEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []model.DriftEvent) ([]model.DriftEvent, error)); ok {
+		return rf(ctx, events)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []model.DriftEvent) []model.DriftEvent); ok {
 		r0 = rf(ctx, events)
-	} else {
-		r0 = ret.Error(0)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.DriftEvent)
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, []model.DriftEvent) error); ok {
+		r1 = rf(ctx, events)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // NewDriftRepository creates a new instance of DriftRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

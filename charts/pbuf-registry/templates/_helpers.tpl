@@ -154,6 +154,26 @@ Environment variables helper
 - name: SERVER_HTTP_AUTH_OIDC_AUTOPROVISION
   value: "{{ .Values.service.http.auth.oidc.autoProvision }}"
 {{- end }}
+- name: DAEMONS_PROTOPARSING_WEBHOOK_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "pbuf-registry.fullname" . }}
+      key: DAEMONS_PROTOPARSING_WEBHOOK_URL
+      optional: true
+{{- if .Values.background.protoparser.webhook }}
+{{- if .Values.background.protoparser.webhook.minSeverity }}
+- name: DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY
+  value: "{{ .Values.background.protoparser.webhook.minSeverity }}"
+{{- end }}
+{{- if .Values.background.protoparser.webhook.format }}
+- name: DAEMONS_PROTOPARSING_WEBHOOK_FORMAT
+  value: "{{ .Values.background.protoparser.webhook.format }}"
+{{- end }}
+{{- if .Values.background.protoparser.webhook.timeout }}
+- name: DAEMONS_PROTOPARSING_WEBHOOK_TIMEOUT
+  value: "{{ .Values.background.protoparser.webhook.timeout }}"
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*

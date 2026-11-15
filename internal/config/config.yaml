@@ -44,5 +44,10 @@ daemons:
     cron: "0 * * * *"
   protoparsing:
     cron: "*/1 * * * *"
+    webhook:
+      url: ""
+      min_severity: "WARNING"
+      format: ""
+      timeout: 10s
   driftdetection:
     cron: "*/5 * * * *"

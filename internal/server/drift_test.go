@@ -12,6 +12,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
+	"github.com/pbufio/pbuf-registry/internal/middleware"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/stretchr/testify/mock"
@@ -327,6 +328,34 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 		}
 		if resp.GetEvent().GetAcknowledgedBy() != "unknown" {
 			t.Fatalf("expected acknowledged by unknown, got %s", resp.GetEvent().GetAcknowledgedBy())
+		}
+		if resp.GetEvent().GetAcknowledgedAt() == nil {
+			t.Fatalf("expected acknowledged_at to be populated")
+		}
+	})
+
+	t.Run("empty acknowledged_by resolves authenticated user or admin from context", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		srv := NewDriftServer(driftRepo, log.NewStdLogger(io.Discard))
+
+		userCtx := middleware.ContextWithUser(ctx, &model.User{Name: "alice@example.com"})
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-user", "alice@example.com").Return(nil).Once()
+		userResp, err := srv.AcknowledgeDriftEvent(userCtx, &v1.AcknowledgeDriftEventRequest{EventId: "event-user"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if userResp.GetEvent().GetAcknowledgedBy() != "alice@example.com" {
+			t.Fatalf("expected alice@example.com, got %s", userResp.GetEvent().GetAcknowledgedBy())
+		}
+
+		adminCtx := middleware.ContextWithAdmin(ctx, true)
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-admin", "admin").Return(nil).Once()
+		adminResp, err := srv.AcknowledgeDriftEvent(adminCtx, &v1.AcknowledgeDriftEventRequest{EventId: "event-admin"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if adminResp.GetEvent().GetAcknowledgedBy() != "admin" {
+			t.Fatalf("expected admin, got %s", adminResp.GetEvent().GetAcknowledgedBy())
 		}
 	})
 

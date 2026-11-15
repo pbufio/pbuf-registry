@@ -29,8 +29,9 @@ type DriftRepository interface {
 	GetFileHashesForTag(ctx context.Context, tagID string) (map[string]string, error)
 	// GetProtoFileContents returns filename to content mapping for a tag
 	GetProtoFileContents(ctx context.Context, tagID string) (map[string]string, error)
-	// SaveDriftEvents saves drift events to the database
-	SaveDriftEvents(ctx context.Context, events []model.DriftEvent) error
+	// SaveDriftEvents saves drift events to the database and returns only the newly inserted events
+	// populated with module and tag names.
+	SaveDriftEvents(ctx context.Context, events []model.DriftEvent) ([]model.DriftEvent, error)
 	// GetUnacknowledgedDriftEvents returns all unacknowledged drift events
 	GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error)
 	// GetDriftEvents returns drift events, optionally filtered to only unacknowledged events
@@ -264,12 +265,29 @@ func (d *driftRepo) GetProtoFileContents(ctx context.Context, tagID string) (map
 	return files, nil
 }
 
-func (d *driftRepo) SaveDriftEvents(ctx context.Context, events []model.DriftEvent) error {
+func (d *driftRepo) SaveDriftEvents(ctx context.Context, events []model.DriftEvent) ([]model.DriftEvent, error) {
 	if len(events) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	// Build batch insert query for better performance
+	const maxBatchRows = 1000
+	var allInserted []model.DriftEvent
+	for start := 0; start < len(events); start += maxBatchRows {
+		end := start + maxBatchRows
+		if end > len(events) {
+			end = len(events)
+		}
+		inserted, err := d.saveDriftEventsBatch(ctx, events[start:end])
+		if err != nil {
+			return nil, err
+		}
+		allInserted = append(allInserted, inserted...)
+	}
+
+	return allInserted, nil
+}
+
+func (d *driftRepo) saveDriftEventsBatch(ctx context.Context, events []model.DriftEvent) ([]model.DriftEvent, error) {
 	// Each event has 8 columns: module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at
 	const columnsPerRow = 8
 	args := make([]interface{}, 0, len(events)*columnsPerRow)
@@ -301,18 +319,53 @@ func (d *driftRepo) SaveDriftEvents(ctx context.Context, events []model.DriftEve
 	}
 
 	query := fmt.Sprintf(`
-		INSERT INTO drift_events (module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at)
-		VALUES %s
-		ON CONFLICT (tag_id, filename, event_type, COALESCE(previous_hash, ''), COALESCE(current_hash, '')) DO NOTHING
+		WITH inserted AS (
+			INSERT INTO drift_events (module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at)
+			VALUES %s
+			ON CONFLICT (tag_id, filename, event_type, COALESCE(previous_hash, ''), COALESCE(current_hash, '')) DO NOTHING
+			RETURNING id, module_id, tag_id, filename, event_type, previous_hash, current_hash, severity, detected_at
+		)
+		SELECT i.id, i.module_id, m.name, i.tag_id, t.tag, i.filename, i.event_type, COALESCE(i.previous_hash, ''), COALESCE(i.current_hash, ''), i.severity, i.detected_at
+		FROM inserted i
+		JOIN modules m ON i.module_id = m.id
+		JOIN tags t ON i.tag_id = t.id
+		ORDER BY i.filename, i.event_type
 	`, strings.Join(valueStrings, ", "))
 
-	_, err := d.pool.Exec(ctx, query, args...)
+	rows, err := d.pool.Query(ctx, query, args...)
 	if err != nil {
 		d.logger.Errorf("error batch inserting drift events: %v", err)
-		return err
+		return nil, err
+	}
+	defer rows.Close()
+
+	var inserted []model.DriftEvent
+	for rows.Next() {
+		var event model.DriftEvent
+		if err := rows.Scan(
+			&event.ID,
+			&event.ModuleID,
+			&event.ModuleName,
+			&event.TagID,
+			&event.TagName,
+			&event.Filename,
+			&event.EventType,
+			&event.PreviousHash,
+			&event.CurrentHash,
+			&event.Severity,
+			&event.DetectedAt,
+		); err != nil {
+			d.logger.Errorf("error scanning inserted drift event: %v", err)
+			return nil, err
+		}
+		inserted = append(inserted, event)
+	}
+	if err := rows.Err(); err != nil {
+		d.logger.Errorf("error iterating inserted drift events: %v", err)
+		return nil, err
 	}
 
-	return nil
+	return inserted, nil
 }
 
 func (d *driftRepo) GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error) {

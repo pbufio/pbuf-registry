@@ -225,6 +225,16 @@ func (a *aclAuth) authenticateOIDC(ctx context.Context, req interface{}, handler
 	return handler(ctx, req)
 }
 
+// ContextWithUser stores an authenticated user in context.
+func ContextWithUser(ctx context.Context, user *model.User) context.Context {
+	return context.WithValue(ctx, userContextKey, user)
+}
+
+// ContextWithAdmin marks whether the request in context has global admin privileges.
+func ContextWithAdmin(ctx context.Context, isAdmin bool) context.Context {
+	return context.WithValue(ctx, isAdminKey, isAdmin)
+}
+
 // GetUserFromContext extracts the user from context
 func GetUserFromContext(ctx context.Context) (*model.User, bool) {
 	user, ok := ctx.Value(userContextKey).(*model.User)

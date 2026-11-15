@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
+	"github.com/pbufio/pbuf-registry/internal/middleware"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -126,9 +128,15 @@ func (s *DriftServer) AcknowledgeDriftEvent(ctx context.Context, request *v1.Ack
 		return nil, ErrInvalidRequest
 	}
 
-	acknowledgedBy := request.AcknowledgedBy
+	acknowledgedBy := strings.TrimSpace(request.AcknowledgedBy)
 	if acknowledgedBy == "" {
-		acknowledgedBy = "unknown"
+		if user, ok := middleware.GetUserFromContext(ctx); ok && user != nil && user.Name != "" {
+			acknowledgedBy = user.Name
+		} else if middleware.IsAdmin(ctx) {
+			acknowledgedBy = "admin"
+		} else {
+			acknowledgedBy = "unknown"
+		}
 	}
 
 	err := s.driftRepo.AcknowledgeDriftEvent(ctx, request.EventId, acknowledgedBy)
@@ -144,6 +152,7 @@ func (s *DriftServer) AcknowledgeDriftEvent(ctx context.Context, request *v1.Ack
 		Event: &v1.DriftEvent{
 			Id:             request.EventId,
 			Acknowledged:   true,
+			AcknowledgedAt: timestamppb.Now(),
 			AcknowledgedBy: acknowledgedBy,
 		},
 	}, nil

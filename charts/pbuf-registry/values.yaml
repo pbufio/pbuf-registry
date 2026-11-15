@@ -72,6 +72,7 @@ secrets:
   create: true
   databaseDSN: ""
   staticToken: ""
+  driftWebhookUrl: ""
   grpcTlsCert: ""
   grpcTlsKey: ""
 
@@ -82,6 +83,7 @@ secrets:
     remoteRefKey: ""
     databaseDSNProperty: ""
     serverStaticTokenProperty: ""
+    driftWebhookUrlProperty: ""
     serverGrpcTlsCertFileProperty: ""
     serverGrpcTlsKeyFileProperty: ""
 
@@ -201,6 +203,11 @@ background:
       - /app/pbuf-registry
     args:
       - proto-parsing
+    webhook:
+      url: ""
+      minSeverity: "WARNING"
+      format: ""
+      timeout: "10s"
 
 ui:
   enabled: false

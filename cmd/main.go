@@ -80,6 +80,13 @@ func main() {
 		),
 	)
 
+	driftNotifier, err := background.NewWebhookDriftNotifier(config.Cfg.Daemons.ProtoParsing.Webhook, logger)
+	if err != nil {
+		logHelper.Errorf("invalid drift webhook configuration: %v", err)
+		pool.Close()
+		os.Exit(1)
+	}
+
 	launcher := &Launcher{
 		config: config.Cfg,
 
@@ -87,7 +94,7 @@ func main() {
 		debugApp: debugApp,
 
 		compactionDaemon:   background.NewCompactionDaemon(registryRepository, logger),
-		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger),
+		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger, driftNotifier),
 	}
 
 	err = CreateRootCommand(launcher).Execute()
