@@ -52,7 +52,7 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		ReferenceName: reference,
 		SingleBranch:  true,
 		Depth:         1,
-		Progress:      os.Stdout,
+		Progress:      os.Stderr,
 	})
 	if err != nil {
 		log.Printf("failed to clone repository: %s", module.Repository)
@@ -74,7 +74,7 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 			log.Printf("failed to walk by path: %s", path)
 			return walkErr
 		}
-		if info.IsDir() || !strings.HasSuffix(path, ".proto") {
+		if !info.Mode().IsRegular() || !strings.HasSuffix(path, ".proto") {
 			return nil
 		}
 

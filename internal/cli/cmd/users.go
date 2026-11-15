@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"io"
 	"strings"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
@@ -60,7 +60,7 @@ func newCreateUserCmd(client v1.UserServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -92,7 +92,7 @@ func newListUsersCmd(client v1.UserServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -113,7 +113,7 @@ func newGetUserCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(user)
+			return printJSON(cmd.OutOrStdout(), user)
 		},
 	}
 
@@ -171,7 +171,7 @@ func newUpdateUserCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(updated)
+			return printJSON(cmd.OutOrStdout(), updated)
 		},
 	}
 
@@ -193,7 +193,7 @@ func newDeleteUserCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -212,7 +212,7 @@ func newRegenerateTokenCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -245,7 +245,7 @@ func newGrantPermissionCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -270,7 +270,7 @@ func newRevokePermissionCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -289,7 +289,7 @@ func newListUserPermissionsCmd(client v1.UserServiceClient) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 
@@ -322,11 +322,11 @@ func parsePermission(s string) (v1.Permission, error) {
 	}
 }
 
-func printJSON(v any) error {
+func printJSON(w io.Writer, v any) error {
 	marshalled, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	log.Printf("%+v", string(marshalled))
-	return nil
+	_, err = fmt.Fprintln(w, string(marshalled))
+	return err
 }

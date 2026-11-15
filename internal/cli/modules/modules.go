@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jdx/go-netrc"
@@ -15,7 +17,8 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/cli/patcher"
 	"github.com/pbufio/pbuf-registry/internal/cli/registry"
 	"golang.org/x/mod/modfile"
-	"gopkg.in/yaml.v2"
+	"golang.org/x/mod/semver"
+	"gopkg.in/yaml.v3"
 )
 
 // NewConfig create a struct for bytes array
@@ -48,19 +51,29 @@ func newProtoPatchers() []patcher.Patcher {
 
 const depsTimeout = 60 * time.Second
 
-// resolveTransitiveDependencies fetches transitive dependencies from the registry
-// for each configured registry module and returns additional modules to vendor.
-// Only "direct" type transitive dependencies are returned (needed for compilation).
+func depOutputKey(name, outputFolder string) string {
+	return name + "\x00" + filepath.Clean(outputFolder)
+}
+
+func normalizeSemver(tag string) string {
+	if strings.HasPrefix(tag, "v") {
+		return tag
+	}
+	return "v" + tag
+}
+
+// resolveTransitiveDependencies fetches direct and multi-hop transitive dependencies
+// from the registry for each configured registry module so protoc has the full import closure.
 func resolveTransitiveDependencies(config *model.Config, client v1.RegistryClient) []*model.Module {
 	configured := make(map[string]bool)
 	for _, m := range config.Modules {
-		if m.Name != "" {
-			configured[m.Name] = true
+		if m.Name != "" && !bsr.IsBSRModule(m) && m.Repository == "" {
+			configured[depOutputKey(m.Name, m.OutputFolder)] = true
 		}
 	}
 
 	var additional []*model.Module
-	seen := make(map[string]bool)
+	seenIdx := make(map[string]int)
 
 	for _, module := range config.Modules {
 		if bsr.IsBSRModule(module) || module.Repository != "" || module.Name == "" || module.Tag == "" {
@@ -81,18 +94,34 @@ func resolveTransitiveDependencies(config *model.Config, client v1.RegistryClien
 		}
 
 		for _, dep := range resp.Dependencies {
-			if dep.DependencyType != "direct" {
+			if dep.Name == "" || dep.Tag == "" || dep.Name == config.Name {
 				continue
 			}
 
-			if configured[dep.Name] || seen[dep.Name] {
+			seenKey := depOutputKey(dep.Name, module.OutputFolder)
+			if configured[seenKey] {
+				continue
+			}
+			if idx, exists := seenIdx[seenKey]; exists {
+				existing := additional[idx]
+				if existing.Tag != dep.Tag {
+					oldVer, newVer := normalizeSemver(existing.Tag), normalizeSemver(dep.Tag)
+					if semver.IsValid(newVer) && (!semver.IsValid(oldVer) || semver.Compare(newVer, oldVer) > 0) {
+						log.Printf("warning: transitive dependency %s version mismatch (%s vs %s); using %s", dep.Name, existing.Tag, dep.Tag, dep.Tag)
+						existing.Tag = dep.Tag
+					} else {
+						log.Printf("warning: transitive dependency %s version mismatch (%s vs %s); keeping %s", dep.Name, existing.Tag, dep.Tag, existing.Tag)
+					}
+				}
 				continue
 			}
 
-			seen[dep.Name] = true
+			seenIdx[seenKey] = len(additional)
 			additional = append(additional, &model.Module{
-				Name: dep.Name,
-				Tag:  dep.Tag,
+				Name:                 dep.Name,
+				Tag:                  dep.Tag,
+				OutputFolder:         module.OutputFolder,
+				GenerateOutputFolder: module.GenerateOutputFolder,
 			})
 		}
 	}

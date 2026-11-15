@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"runtime"
@@ -108,12 +107,7 @@ func parseVersionFormat(cmd *cobra.Command) (string, error) {
 
 func renderVersion(w io.Writer, info versionInfo, outputFormat string) error {
 	if outputFormat == "json" {
-		marshalled, err := json.MarshalIndent(info, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal version: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(marshalled))
-		return err
+		return printJSON(w, info)
 	}
 
 	_, err := fmt.Fprintf(

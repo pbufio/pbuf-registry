@@ -49,7 +49,7 @@ func newGetMetadataCmd(config *model.Config, client v1.MetadataServiceClient) *c
 				return err
 			}
 
-			return printJSON(resp)
+			return printJSON(cmd.OutOrStdout(), resp)
 		},
 	}
 

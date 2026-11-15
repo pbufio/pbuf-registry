@@ -2,7 +2,8 @@ package patcher
 
 import (
 	"fmt"
-	"path/filepath"
+	"go/token"
+	"path"
 	"strings"
 
 	"github.com/yoheimuta/go-protoparser/v4"
@@ -19,6 +20,29 @@ func NewGoPackagePatcher(goModule string) *GoPackagePatcher {
 	}
 }
 
+func sanitizeGoPackageIdent(raw string) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+	for _, r := range raw {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	ident := strings.Trim(b.String(), "_")
+	if ident == "" {
+		return "pb"
+	}
+	if ident[0] >= '0' && ident[0] <= '9' {
+		ident = "pb_" + ident
+	}
+	if token.Lookup(ident).IsKeyword() {
+		ident += "_pb"
+	}
+	return ident
+}
+
 func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 	parsed, err := protoparser.Parse(strings.NewReader(content))
 	if err != nil {
@@ -30,9 +54,16 @@ func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 		return "", err
 	}
 
-	normalizedPath := strings.Trim(strings.ReplaceAll(filepath.ToSlash(outputPath), `\`, "/"), "/")
-	dirs := strings.Split(normalizedPath, "/")
-	goPackage := fmt.Sprintf(`option go_package = "%s/%s;%s";`, p.goModule, normalizedPath, dirs[len(dirs)-1])
+	cleaned := path.Clean(strings.ReplaceAll(outputPath, `\`, "/"))
+	normalizedPath := strings.Trim(cleaned, "/")
+	var goPackage string
+	if normalizedPath == "" || normalizedPath == "." {
+		pkgAlias := sanitizeGoPackageIdent(path.Base(p.goModule))
+		goPackage = fmt.Sprintf(`option go_package = "%s;%s";`, p.goModule, pkgAlias)
+	} else {
+		pkgAlias := sanitizeGoPackageIdent(path.Base(normalizedPath))
+		goPackage = fmt.Sprintf(`option go_package = "%s/%s;%s";`, p.goModule, normalizedPath, pkgAlias)
+	}
 
 	for _, option := range proto.ProtoBody.Options {
 		if option.OptionName == "go_package" {
