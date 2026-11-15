@@ -184,7 +184,7 @@ func NewRootCmd() *cobra.Command {
 		NewUsersCmd(modulesConfig, usersClient),
 		NewDriftCmd(modulesConfig, driftClient, registryClient),
 		NewMetadataCmd(modulesConfig, metadataClient),
-		NewMCPCmd(registryClient, metadataClient, driftClient),
+		NewMCPCmd(registryClient, metadataClient, driftClient, modulesConfig),
 	}
 	for _, c := range registryCmds {
 		c.PersistentPreRunE = requireRegistry
@@ -201,14 +201,24 @@ func NewRootCmd() *cobra.Command {
 }
 
 // NewMCPCmd creates the `pbuf mcp` command running the MCP server over stdio.
-func NewMCPCmd(registryClient v1.RegistryClient, metadataClient v1.MetadataServiceClient, driftClient v1.DriftServiceClient) *cobra.Command {
+func NewMCPCmd(registryClient v1.RegistryClient, metadataClient v1.MetadataServiceClient, driftClient v1.DriftServiceClient, configs ...*model.Config) *cobra.Command {
+	var cfg *model.Config
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
 	return &cobra.Command{
 		Use:   "mcp",
 		Short: "Start MCP server over stdio",
 		Long:  "Start a Model Context Protocol (MCP) server over stdio for AI coding assistants",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return mcp.NewServer(registryClient, metadataClient, driftClient).ServeStdio(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout())
+			prevLogOut := log.Writer()
+			log.SetOutput(cmd.ErrOrStderr())
+			defer log.SetOutput(prevLogOut)
+
+			srv := mcp.NewServer(registryClient, metadataClient, driftClient)
+			registerLocalMCPTools(srv, cfg, registryClient)
+			return srv.ServeStdio(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 }

@@ -365,6 +365,83 @@ service PayService {
 	driftCmdBadFlag := NewDriftCmd(cfg, &fakeDriftClient{}, regClient)
 	driftCmdBadFlag.SetArgs([]string{"diff", "--fail-on", "typo"})
 	require.ErrorContains(t, driftCmdBadFlag.Execute(), "invalid --fail-on")
+
+	// Verify `pbuf mcp` exposes and executes `diff_local_protos` against an explicit project directory
+	extDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(extDir, "proto"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, "pbuf.yaml"), []byte("version: v1\nname: acme/orders\nexport:\n  paths:\n    - proto\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, "proto", "order.proto"), []byte("syntax = \"proto3\";\npackage acme.orders.v1;\nmessage Order {\n  string id = 1;\n}\n"), 0o644))
+
+	mcpRegClient := &fakeRegistryClient{
+		gotModule: &v1.Module{Name: "acme/orders", Tags: []string{"v1.0.0"}},
+		pulledFiles: []*v1.ProtoFile{
+			{
+				Filename: "proto/order.proto",
+				Content:  "syntax = \"proto3\";\npackage acme.orders.v1;\nmessage Order {\n  string id = 1;\n  int64 total_cents = 2;\n}\n",
+			},
+		},
+	}
+	mcpCmd := NewMCPCmd(mcpRegClient, &fakeMetadataClient{}, &fakeDriftClient{})
+	callReq, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "diff_local_protos",
+			"arguments": map[string]any{
+				"directory": extDir,
+			},
+		},
+	})
+	require.NoError(t, err)
+	mcpIn := "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n" + string(callReq) + "\n"
+	var mcpOut bytes.Buffer
+	mcpCmd.SetIn(bytes.NewBufferString(mcpIn))
+	mcpCmd.SetOut(&mcpOut)
+	require.NoError(t, mcpCmd.Execute())
+
+	mcpLines := bytes.Split(bytes.TrimSpace(mcpOut.Bytes()), []byte("\n"))
+	require.Len(t, mcpLines, 2)
+	assert.Contains(t, string(mcpLines[0]), `"diff_local_protos"`)
+
+	var callResp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(mcpLines[1], &callResp))
+	require.Len(t, callResp.Result.Content, 1)
+
+	var report LocalDriftDiffReport
+	require.NoError(t, json.Unmarshal([]byte(callResp.Result.Content[0].Text), &report))
+	assert.Equal(t, "acme/orders", report.ModuleName)
+	assert.Equal(t, "v1.0.0", report.BaseTag)
+	assert.True(t, report.HasBreakingChanges)
+	require.Len(t, report.Items, 1)
+	assert.Equal(t, "FIELD_REMOVED", report.Items[0].Change)
+
+	// Verify fallbackCfg does not bleed into a separate target directory lacking pbuf.yaml
+	emptyRepoDir := t.TempDir()
+	fallbackCfg := &model.Config{Name: "acme/cwd-module", Export: model.Export{Paths: []string{"proto"}}}
+	mcpIsolated := NewMCPCmd(mcpRegClient, &fakeMetadataClient{}, &fakeDriftClient{}, fallbackCfg)
+	isolatedReq, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "diff_local_protos",
+			"arguments": map[string]any{"directory": emptyRepoDir},
+		},
+	})
+	require.NoError(t, err)
+	var isolatedOut bytes.Buffer
+	mcpIsolated.SetIn(bytes.NewBufferString(string(isolatedReq) + "\n"))
+	mcpIsolated.SetOut(&isolatedOut)
+	require.NoError(t, mcpIsolated.Execute())
+	assert.Contains(t, isolatedOut.String(), `"isError":true`)
+	assert.Contains(t, isolatedOut.String(), "module name is required")
 }
 
 func TestModulesListAndGetOutputFormats(t *testing.T) {

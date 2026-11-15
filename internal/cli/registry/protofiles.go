@@ -1,9 +1,10 @@
 package registry
 
 import (
+	"fmt"
 	"io"
-	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-billy/v5/osfs"
@@ -12,34 +13,48 @@ import (
 )
 
 func CollectProtoFilesInDirs(dirs []string) ([]*v1.ProtoFile, error) {
+	return CollectProtoFilesInRoot(".", dirs)
+}
+
+func CollectProtoFilesInRoot(rootDir string, dirs []string) ([]*v1.ProtoFile, error) {
+	if rootDir == "" {
+		rootDir = "."
+	}
 	var protoFiles []*v1.ProtoFile
+	seen := make(map[string]struct{})
+	fs := osfs.New(rootDir)
 
 	for _, dir := range dirs {
-		fs := osfs.New(".")
-		err := util.Walk(fs, dir, func(path string, info os.FileInfo, walkErr error) error {
+		cleanDir := filepath.Clean(dir)
+		if filepath.IsAbs(dir) || cleanDir == ".." || strings.HasPrefix(cleanDir, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("invalid proto export path %q: must be relative to project root", dir)
+		}
+		err := util.Walk(fs, cleanDir, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if !info.IsDir() && strings.HasSuffix(path, ".proto") {
+			norm := filepath.ToSlash(path)
+			if info.Mode().IsRegular() && strings.HasSuffix(norm, ".proto") {
+				if _, dup := seen[norm]; dup {
+					return nil
+				}
+				seen[norm] = struct{}{}
+
 				file, err := fs.Open(path)
 				if err != nil {
-					log.Printf("failed to open file in repository: %s", path)
 					return err
 				}
 
 				fileContents, err := io.ReadAll(file)
 				_ = file.Close()
 				if err != nil {
-					log.Printf("failed to read file contents in repository: %s", path)
 					return err
 				}
 
-				protoFile := &v1.ProtoFile{
-					Filename: path,
+				protoFiles = append(protoFiles, &v1.ProtoFile{
+					Filename: norm,
 					Content:  string(fileContents),
-				}
-
-				protoFiles = append(protoFiles, protoFile)
+				})
 			}
 
 			return nil

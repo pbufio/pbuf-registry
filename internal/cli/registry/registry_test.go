@@ -108,11 +108,20 @@ func TestCollectProtoFilesInDirs(t *testing.T) {
 	require.NoError(t, os.MkdirAll("proto/v1", 0o755))
 	require.NoError(t, os.WriteFile("proto/v1/a.proto", []byte("syntax = \"proto3\";"), 0o644))
 	require.NoError(t, os.WriteFile("proto/v1/readme.txt", []byte("ignore"), 0o644))
+	secretPath := filepath.Join(t.TempDir(), "secret.proto")
+	require.NoError(t, os.WriteFile(secretPath, []byte("syntax = \"proto3\"; message Secret {}"), 0o644))
+	require.NoError(t, os.Symlink(secretPath, "proto/v1/symlink.proto"))
 
-	files, err := CollectProtoFilesInDirs([]string{"proto"})
+	files, err := CollectProtoFilesInDirs([]string{"./proto"})
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	assert.Equal(t, "proto/v1/a.proto", files[0].Filename)
+
+	// Reject escaping or absolute export paths
+	_, err = CollectProtoFilesInRoot(tmpDir, []string{"../outside"})
+	require.ErrorContains(t, err, "must be relative to project root")
+	_, err = CollectProtoFilesInRoot(tmpDir, []string{filepath.Join(tmpDir, "proto")})
+	require.ErrorContains(t, err, "must be relative to project root")
 
 	// Non-existent directory returns error without panicking
 	_, err = CollectProtoFilesInDirs([]string{"nonexistent-dir"})

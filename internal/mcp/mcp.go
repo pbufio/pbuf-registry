@@ -44,17 +44,37 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
+// InvalidArgumentError signals malformed tool arguments (mapped to JSON-RPC -32602).
+type InvalidArgumentError struct {
+	Message string
+}
+
+func (e *InvalidArgumentError) Error() string {
+	return e.Message
+}
+
 type toolSpec struct {
 	name        string
 	description string
 	schema      map[string]any
 	newReq      func() proto.Message
 	call        func(ctx context.Context, req proto.Message) (proto.Message, error)
+	callRaw     func(ctx context.Context, rawArgs json.RawMessage) (string, error)
 }
 
 // Server implements a Model Context Protocol (MCP) server for pbuf-registry.
 type Server struct {
 	tools []toolSpec
+}
+
+// RegisterTool adds a custom JSON-backed tool to the MCP server (for example, CLI-only stdio tools).
+func (s *Server) RegisterTool(name, description string, schema map[string]any, handler func(ctx context.Context, rawArgs json.RawMessage) (string, error)) {
+	s.tools = append(s.tools, toolSpec{
+		name:        name,
+		description: description,
+		schema:      schema,
+		callRaw:     handler,
+	})
 }
 
 // NewServer creates a new MCP server backed by the provided gRPC service clients.
@@ -310,17 +330,40 @@ func (s *Server) callTool(ctx context.Context, rawParams json.RawMessage) (any, 
 		if tool.name != call.Name {
 			continue
 		}
-		reqMsg := tool.newReq()
-		if len(call.Arguments) > 0 && string(call.Arguments) != "null" {
-			if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(call.Arguments, reqMsg); err != nil {
-				return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("invalid arguments for %s: %v", call.Name, err)}, nil
+
+		var (
+			text string
+			err  error
+		)
+		if tool.callRaw != nil {
+			text, err = tool.callRaw(ctx, call.Arguments)
+			var invErr *InvalidArgumentError
+			if errors.As(err, &invErr) {
+				return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("invalid arguments for %s: %s", call.Name, invErr.Message)}, nil
+			}
+		} else {
+			reqMsg := tool.newReq()
+			if len(call.Arguments) > 0 && string(call.Arguments) != "null" {
+				if unmarshalErr := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(call.Arguments, reqMsg); unmarshalErr != nil {
+					return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("invalid arguments for %s: %v", call.Name, unmarshalErr)}, nil
+				}
+			}
+			var respMsg proto.Message
+			respMsg, err = tool.call(ctx, reqMsg)
+			if err == nil {
+				marshalled, marshalErr := (protojson.MarshalOptions{Multiline: true, Indent: "  "}).Marshal(respMsg)
+				if marshalErr != nil {
+					return nil, &rpcError{Code: -32603, Message: marshalErr.Error()}, nil
+				}
+				text = string(marshalled)
 			}
 		}
 
-		respMsg, err := tool.call(ctx, reqMsg)
 		if err != nil {
-			if se := kerrors.FromError(err); se != nil && (se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden) {
-				return nil, nil, err
+			if _, isHTTP := ctx.Value(httpCtxKeyType{}).(kratosHttp.Context); isHTTP {
+				if se := kerrors.FromError(err); se != nil && (se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden) {
+					return nil, nil, err
+				}
 			}
 			return map[string]any{
 				"content": []map[string]any{
@@ -329,14 +372,9 @@ func (s *Server) callTool(ctx context.Context, rawParams json.RawMessage) (any, 
 				"isError": true,
 			}, nil, nil
 		}
-
-		marshalled, err := (protojson.MarshalOptions{Multiline: true, Indent: "  "}).Marshal(respMsg)
-		if err != nil {
-			return nil, &rpcError{Code: -32603, Message: err.Error()}, nil
-		}
 		return map[string]any{
 			"content": []map[string]any{
-				{"type": "text", "text": string(marshalled)},
+				{"type": "text", "text": text},
 			},
 		}, nil, nil
 	}

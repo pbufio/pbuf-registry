@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	kratosHttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/google/uuid"
@@ -201,6 +203,9 @@ func TestHTTPServerAuthAndACL(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &listResp))
 	assert.Len(t, listResp.Result.Tools, 8)
+	for _, tl := range listResp.Result.Tools {
+		assert.NotEqual(t, "diff_local_protos", tl.Name, "HTTP MCP endpoint must never expose local filesystem tools")
+	}
 
 	// 5. Reject oversized (>1MB) HTTP body -> 400 Bad Request
 	req = httptest.NewRequest(http.MethodPost, "/v1/mcp", strings.NewReader(strings.Repeat("x", maxHTTPBodyBytes+10)))
@@ -208,4 +213,57 @@ func TestHTTPServerAuthAndACL(t *testing.T) {
 	rec = httptest.NewRecorder()
 	httpSrv.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRegisterCustomTool(t *testing.T) {
+	stub := &stubServer{}
+	conn := &inProcessConn{registry: stub, metadata: stub, drift: stub}
+	srv := NewServer(
+		v1.NewRegistryClient(conn),
+		v1.NewMetadataServiceClient(conn),
+		v1.NewDriftServiceClient(conn),
+	)
+	srv.RegisterTool(
+		"custom_echo",
+		"Echo tool for stdio extensions.",
+		map[string]any{"type": "object"},
+		func(_ context.Context, rawArgs json.RawMessage) (string, error) {
+			var payload struct {
+				Msg       string `json:"msg"`
+				Fail      bool   `json:"fail"`
+				Forbidden bool   `json:"forbidden"`
+			}
+			if len(rawArgs) > 0 {
+				if err := json.Unmarshal(rawArgs, &payload); err != nil {
+					return "", &InvalidArgumentError{Message: err.Error()}
+				}
+			}
+			if payload.Forbidden {
+				return "", fmt.Errorf("wrapped: %w", kerrors.Forbidden("FORBIDDEN", "permission denied"))
+			}
+			if payload.Fail {
+				return "", errors.New("boom")
+			}
+			return "echo:" + payload.Msg, nil
+		},
+	)
+
+	in := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"custom_echo","arguments":{"msg":"ok"}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"custom_echo","arguments":{"msg":123}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"custom_echo","arguments":{"fail":true}}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"custom_echo","arguments":{"forbidden":true}}}`,
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	require.NoError(t, srv.ServeStdio(context.Background(), strings.NewReader(in), &out))
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	require.Len(t, lines, 5)
+	assert.Contains(t, lines[0], `"custom_echo"`)
+	assert.Contains(t, lines[1], `"echo:ok"`)
+	assert.Contains(t, lines[2], `"code":-32602`)
+	assert.Contains(t, lines[3], `"isError":true`)
+	assert.Contains(t, lines[4], `"id":5`)
+	assert.Contains(t, lines[4], `"isError":true`)
 }
