@@ -39,7 +39,11 @@ func NewGRPCServer(cfg *config.Server,
 		if aclRepo == nil {
 			logHelper.Fatalf("ACL repository is required when auth type is '%s'", cfg.GRPC.Auth.Type)
 		}
-		serverMiddlewares = append(serverMiddlewares, middleware.NewAuthorizationMiddleware(aclRepo, logger))
+		var driftRepo data.DriftRepository
+		if driftServer != nil {
+			driftRepo = driftServer.driftRepo
+		}
+		serverMiddlewares = append(serverMiddlewares, middleware.NewAuthorizationMiddleware(aclRepo, logger, driftRepo))
 	}
 
 	opts := []grpc.ServerOption{

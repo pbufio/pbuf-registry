@@ -286,23 +286,28 @@ func TestDriftServer_GetModuleDriftEvents_GRPC(t *testing.T) {
 
 func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 	ctx := context.Background()
+	const (
+		validEventID = "11111111-1111-1111-1111-111111111111"
+		userEventID  = "22222222-2222-2222-2222-222222222222"
+		adminEventID = "33333333-3333-3333-3333-333333333333"
+	)
 
 	t.Run("success", func(t *testing.T) {
 		driftRepo := mocks.NewDriftRepository(t)
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-1", "admin").Return(nil).Once()
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, validEventID, "admin").Return(nil).Once()
 
 		resp, err := client.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{
-			EventId:        "event-1",
+			EventId:        validEventID,
 			AcknowledgedBy: "admin",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if resp.GetEvent().GetId() != "event-1" {
-			t.Fatalf("expected event id event-1, got %s", resp.GetEvent().GetId())
+		if resp.GetEvent().GetId() != validEventID {
+			t.Fatalf("expected event id %s, got %s", validEventID, resp.GetEvent().GetId())
 		}
 		if !resp.GetEvent().GetAcknowledged() {
 			t.Fatalf("expected acknowledged to be true")
@@ -317,10 +322,10 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-1", "unknown").Return(nil).Once()
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, validEventID, "unknown").Return(nil).Once()
 
 		resp, err := client.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{
-			EventId:        "event-1",
+			EventId:        validEventID,
 			AcknowledgedBy: "",
 		})
 		if err != nil {
@@ -339,18 +344,24 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 		srv := NewDriftServer(driftRepo, log.NewStdLogger(io.Discard))
 
 		userCtx := middleware.ContextWithUser(ctx, &model.User{Name: "alice@example.com"})
-		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-user", "alice@example.com").Return(nil).Once()
-		userResp, err := srv.AcknowledgeDriftEvent(userCtx, &v1.AcknowledgeDriftEventRequest{EventId: "event-user"})
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, userEventID, "alice@example.com").Return(nil).Once()
+		userResp, err := srv.AcknowledgeDriftEvent(userCtx, &v1.AcknowledgeDriftEventRequest{
+			EventId:        "urn:uuid:" + userEventID,
+			AcknowledgedBy: "forged-admin",
+		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+		if userResp.GetEvent().GetId() != userEventID {
+			t.Fatalf("expected canonical event id %s, got %s", userEventID, userResp.GetEvent().GetId())
 		}
 		if userResp.GetEvent().GetAcknowledgedBy() != "alice@example.com" {
 			t.Fatalf("expected alice@example.com, got %s", userResp.GetEvent().GetAcknowledgedBy())
 		}
 
 		adminCtx := middleware.ContextWithAdmin(ctx, true)
-		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-admin", "admin").Return(nil).Once()
-		adminResp, err := srv.AcknowledgeDriftEvent(adminCtx, &v1.AcknowledgeDriftEventRequest{EventId: "event-admin"})
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, adminEventID, "admin").Return(nil).Once()
+		adminResp, err := srv.AcknowledgeDriftEvent(adminCtx, &v1.AcknowledgeDriftEventRequest{EventId: adminEventID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -359,7 +370,7 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 		}
 	})
 
-	t.Run("empty event_id", func(t *testing.T) {
+	t.Run("empty or malformed event_id", func(t *testing.T) {
 		driftRepo := mocks.NewDriftRepository(t)
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
@@ -368,6 +379,25 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 			EventId: "",
 		})
 		requireStatusCode(t, err, codes.InvalidArgument)
+
+		_, err = client.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{
+			EventId: "not-a-uuid",
+		})
+		requireStatusCode(t, err, codes.InvalidArgument)
+	})
+
+	t.Run("not found returns NotFound", func(t *testing.T) {
+		driftRepo := mocks.NewDriftRepository(t)
+		client, closer := setupDriftClient(t, driftRepo)
+		defer closer()
+
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, validEventID, "admin").Return(data.ErrDriftEventNotFound).Once()
+
+		_, err := client.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{
+			EventId:        validEventID,
+			AcknowledgedBy: "admin",
+		})
+		requireStatusCode(t, err, codes.NotFound)
 	})
 
 	t.Run("repo error", func(t *testing.T) {
@@ -375,10 +405,10 @@ func TestDriftServer_AcknowledgeDriftEvent_GRPC(t *testing.T) {
 		client, closer := setupDriftClient(t, driftRepo)
 		defer closer()
 
-		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, "event-1", "admin").Return(errors.New("db")).Once()
+		driftRepo.On("AcknowledgeDriftEvent", mock.Anything, validEventID, "admin").Return(errors.New("db")).Once()
 
 		_, err := client.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{
-			EventId:        "event-1",
+			EventId:        validEventID,
 			AcknowledgedBy: "admin",
 		})
 		requireStatusCode(t, err, codes.Internal)

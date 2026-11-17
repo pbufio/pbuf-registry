@@ -328,12 +328,12 @@ func Test_aclAuth_ContextHelpers(t *testing.T) {
 	})
 
 	t.Run("IsAdmin with false value", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), isAdminKey, false)
+		ctx := ContextWithAdmin(context.Background(), false)
 		assert.False(t, IsAdmin(ctx))
 	})
 
 	t.Run("IsAdmin with true value", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), isAdminKey, true)
+		ctx := ContextWithAdmin(context.Background(), true)
 		assert.True(t, IsAdmin(ctx))
 	})
 }

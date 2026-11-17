@@ -1,20 +1,28 @@
 package data
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/model"
 )
 
-var ErrTagNotFound = errors.New("tag not found")
+var (
+	ErrInvalidPageToken = errors.New("invalid page token")
+	ErrModuleNotFound   = errors.New("module not found")
+	ErrTagAlreadyExists = errors.New("tag already exists")
+	ErrTagNotFound      = errors.New("tag not found")
+)
 
 type RegistryRepository interface {
 	RegisterModule(ctx context.Context, moduleName string) error
@@ -138,23 +146,42 @@ func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token stri
 	}
 
 	var (
-		modules []*v1.Module
-		rows    pgx.Rows
-		err     error
+		modules      []*v1.Module
+		rows         pgx.Rows
+		err          error
+		scopedUserID *uuid.UUID
 	)
+	if !model.IsAdmin(ctx) {
+		if user, ok := model.GetUserFromContext(ctx); ok && user != nil {
+			scopedUserID = &user.ID
+		}
+	}
 
+	var startAfter string
 	if token != "" {
 		decoded, decErr := base64.StdEncoding.DecodeString(token)
-		if decErr != nil {
-			return nil, "", fmt.Errorf("could not decode token: %w", decErr)
+		if decErr != nil || !utf8.Valid(decoded) || bytes.IndexByte(decoded, 0) >= 0 {
+			return nil, "", ErrInvalidPageToken
 		}
-		rows, err = r.pool.Query(ctx,
-			"SELECT id, name FROM modules WHERE name >= $1 ORDER BY name ASC LIMIT $2",
-			string(decoded), pageSize+1)
+		startAfter = string(decoded)
+	}
+
+	if scopedUserID != nil {
+		rows, err = r.pool.Query(ctx, `
+			SELECT id, name FROM modules
+			WHERE name >= $1
+				AND EXISTS (
+					SELECT 1 FROM acl a
+					WHERE a.user_id = $2
+						AND a.permission IN ('read', 'write', 'admin')
+						AND (a.module_name = '*' OR a.module_name = modules.name)
+				)
+			ORDER BY name ASC LIMIT $3`,
+			startAfter, *scopedUserID, pageSize+1)
 	} else {
 		rows, err = r.pool.Query(ctx,
-			"SELECT id, name FROM modules ORDER BY name ASC LIMIT $1",
-			pageSize+1)
+			"SELECT id, name FROM modules WHERE name >= $1 ORDER BY name ASC LIMIT $2",
+			startAfter, pageSize+1)
 	}
 	if err != nil {
 		return nil, "", fmt.Errorf("could not select modules from database: %w", err)
@@ -318,6 +345,17 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 		r.logger.Infof("deleted %d dependencies for module %s", res.RowsAffected(), name)
 	}
 
+	if _, err = tx.Exec(ctx,
+		"DELETE FROM proto_parsed_data WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
+		name); err != nil {
+		return fmt.Errorf("could not delete parsed proto data from database: %w", err)
+	}
+	if _, err = tx.Exec(ctx,
+		"DELETE FROM tag_meta WHERE tag_id IN (SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1))",
+		name); err != nil {
+		return fmt.Errorf("could not delete tag metadata from database: %w", err)
+	}
+
 	// delete all module tags
 	res, err = tx.Exec(ctx,
 		"DELETE FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1)",
@@ -351,7 +389,11 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 	}
 
 	if res.RowsAffected() == 0 {
-		return errors.New("module not found")
+		return ErrModuleNotFound
+	}
+
+	if _, err = tx.Exec(ctx, "DELETE FROM acl WHERE module_name = $1", name); err != nil {
+		return fmt.Errorf("could not delete module acl entries from database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -370,7 +412,7 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 	}
 
 	if module == nil {
-		return nil, errors.New("module not found")
+		return nil, ErrModuleNotFound
 	}
 
 	// Check if tag exists directly in the tags table (GetModule caps module.Tags at LIMIT 10)
@@ -379,7 +421,7 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 		return nil, fmt.Errorf("could not check if tag exists: %w", err)
 	}
 	if existingTagId != "" {
-		return nil, errors.New("tag already exists")
+		return nil, ErrTagAlreadyExists
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -445,7 +487,7 @@ func (r *registryRepo) PullModule(ctx context.Context, name string, tag string) 
 	}
 
 	if module == nil {
-		return nil, nil, errors.New("module not found")
+		return nil, nil, ErrModuleNotFound
 	}
 
 	tagId, err := r.GetModuleTagId(ctx, name, tag)
@@ -492,7 +534,7 @@ func (r *registryRepo) PullDraftModule(ctx context.Context, name string, tag str
 	}
 
 	if module == nil {
-		return nil, nil, errors.New("module not found")
+		return nil, nil, ErrModuleNotFound
 	}
 
 	// get info from draft_tags table
@@ -503,7 +545,7 @@ func (r *registryRepo) PullDraftModule(ctx context.Context, name string, tag str
 	if err != nil {
 		// if not found raise specific error
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, errors.New("draft tag not found")
+			return nil, nil, ErrTagNotFound
 		}
 		return nil, nil, fmt.Errorf("could not select draft tag from database: %w", err)
 	}
@@ -525,7 +567,17 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	}
 
 	if tagId == "" {
-		return ErrTagNotFound
+		res, err := r.pool.Exec(ctx,
+			"DELETE FROM draft_tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
+			name, tag)
+		if err != nil {
+			return fmt.Errorf("could not delete draft tag from database: %w", err)
+		}
+		if res.RowsAffected() == 0 {
+			return ErrTagNotFound
+		}
+		r.logger.Infof("deleted draft tag %s", tag)
+		return nil
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -563,6 +615,13 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 		r.logger.Infof("deleted %d dependencies for tag %s", res.RowsAffected(), tag)
 	}
 
+	if _, err = tx.Exec(ctx, "DELETE FROM proto_parsed_data WHERE tag_id = $1", tagId); err != nil {
+		return fmt.Errorf("could not delete parsed proto data from database: %w", err)
+	}
+	if _, err = tx.Exec(ctx, "DELETE FROM tag_meta WHERE tag_id = $1", tagId); err != nil {
+		return fmt.Errorf("could not delete tag metadata from database: %w", err)
+	}
+
 	// delete tag
 	res, err = tx.Exec(ctx,
 		"DELETE FROM tags WHERE id = $1",
@@ -573,6 +632,12 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 
 	if res.RowsAffected() == 0 {
 		return ErrTagNotFound
+	}
+
+	if _, err = tx.Exec(ctx,
+		"DELETE FROM draft_tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
+		name, tag); err != nil {
+		return fmt.Errorf("could not delete draft tag from database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -706,7 +771,7 @@ func (r *registryRepo) PushDraftModule(ctx context.Context, name string, tag str
 	}
 
 	if module == nil {
-		return nil, errors.New("module not found")
+		return nil, ErrModuleNotFound
 	}
 
 	// serialize protofiles and dependencies in json

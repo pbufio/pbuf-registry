@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
@@ -62,7 +63,7 @@ func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleReq
 	}
 
 	if module == nil {
-		return nil, errors.New("module not found")
+		return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
 	}
 
 	if len(module.Tags) > 0 {
@@ -97,6 +98,9 @@ func (r *RegistryServer) ListModules(ctx context.Context, request *v1.ListModule
 
 	modules, nextPageToken, err := r.registryRepository.ListModules(ctx, pageSize, request.PageToken)
 	if err != nil {
+		if errors.Is(err, data.ErrInvalidPageToken) {
+			return nil, kerrors.BadRequest("INVALID_PAGE_TOKEN", "invalid page token")
+		}
 		r.logger.Infof("error listing modules: %v", err)
 		return nil, err
 	}
@@ -116,6 +120,9 @@ func (r *RegistryServer) DeleteModule(ctx context.Context, request *v1.DeleteMod
 
 	err := r.registryRepository.DeleteModule(ctx, name)
 	if err != nil {
+		if errors.Is(err, data.ErrModuleNotFound) {
+			return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
+		}
 		r.logger.Infof("error deleting module: %v", err)
 		return nil, err
 	}
@@ -136,14 +143,17 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		return nil, errors.New("tag cannot be empty")
 	}
 
-	err := utils.ValidateProtoFiles(request.Protofiles, r.logger)
+	err := utils.ValidateProtoFiles(request.Protofiles)
 	if err != nil {
-		return nil, err
+		return nil, kerrors.BadRequest("INVALID_PROTO_FILES", err.Error())
 	}
 
 	if request.IsDraft {
 		module, err := r.registryRepository.PushDraftModule(ctx, name, tag, request.Protofiles, request.Dependencies)
 		if err != nil {
+			if errors.Is(err, data.ErrModuleNotFound) {
+				return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
+			}
 			r.logger.Infof("error pushing draft module: %v", err)
 			return nil, err
 		}
@@ -153,6 +163,12 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 
 	module, err := r.registryRepository.PushModule(ctx, name, tag, request.Protofiles, request.Dependencies...)
 	if err != nil {
+		if errors.Is(err, data.ErrModuleNotFound) {
+			return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
+		}
+		if errors.Is(err, data.ErrTagAlreadyExists) {
+			return nil, kerrors.Conflict("TAG_ALREADY_EXISTS", fmt.Sprintf("tag %s already exists for module %s", tag, name))
+		}
 		r.logger.Infof("error pushing module: %v", err)
 		return nil, err
 	}
@@ -177,6 +193,8 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 	if err != nil {
 		if errors.Is(err, data.ErrTagNotFound) {
 			tagNotFound = true
+		} else if errors.Is(err, data.ErrModuleNotFound) {
+			return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
 		} else {
 			r.logger.Infof("error pulling module: %v", err)
 			return nil, err
@@ -187,7 +205,9 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 		module, protoFiles, err = r.registryRepository.PullDraftModule(ctx, name, tag)
 		if err != nil {
 			if errors.Is(err, data.ErrTagNotFound) {
-				return nil, fmt.Errorf("tag %s not found for module %s", tag, name)
+				return nil, kerrors.NotFound("TAG_NOT_FOUND", fmt.Sprintf("tag %s not found for module %s", tag, name))
+			} else if errors.Is(err, data.ErrModuleNotFound) {
+				return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
 			} else {
 				r.logger.Infof("error pulling draft module: %v", err)
 				return nil, err
@@ -214,6 +234,9 @@ func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.Delete
 
 	err := r.registryRepository.DeleteModuleTag(ctx, name, tag)
 	if err != nil {
+		if errors.Is(err, data.ErrTagNotFound) {
+			return nil, kerrors.NotFound("TAG_NOT_FOUND", fmt.Sprintf("tag %s not found for module %s", tag, name))
+		}
 		r.logger.Infof("error deleting module tag: %v", err)
 		return nil, err
 	}
@@ -240,6 +263,9 @@ func (r *RegistryServer) GetModuleDependencies(ctx context.Context, request *v1.
 	}
 
 	if err != nil {
+		if errors.Is(err, data.ErrTagNotFound) {
+			return nil, kerrors.NotFound("TAG_NOT_FOUND", fmt.Sprintf("tag %s not found for module %s", request.Tag, name))
+		}
 		r.logger.Infof("error getting module dependencies: %v", err)
 		return nil, err
 	}

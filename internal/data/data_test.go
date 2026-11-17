@@ -1317,3 +1317,97 @@ func Test_registryRepository_ListModules_PopulatesTagsDraftsAndPackages(t *testi
 	assert.Nil(t, modsCorrupt[0].Packages)
 }
 
+func Test_registryRepository_ScopedListAndDraftLifecycleAndACLCleanup(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
+	userRepo := NewUserRepository(suite.pool, nil)
+	aclRepo := NewACLRepository(suite.pool, nil)
+
+	prefix := "zz-rbac-scope-" + time.Now().Format("20060102150405")
+	modA := prefix + "-a"
+	modB := prefix + "-b"
+	modC := prefix + "-c"
+	for _, name := range []string{modA, modB, modC} {
+		require.NoError(t, r.RegisterModule(ctx, name))
+	}
+
+	user := &model.User{
+		Name:     "scoped-user-" + prefix,
+		Token:    "pbuf_user_scoped_" + prefix,
+		Type:     model.UserTypeUser,
+		IsActive: true,
+	}
+	require.NoError(t, userRepo.CreateUser(ctx, user))
+	require.NoError(t, aclRepo.GrantPermission(ctx, &model.ACLEntry{
+		UserID:     user.ID,
+		ModuleName: modA,
+		Permission: model.PermissionRead,
+	}))
+	require.NoError(t, aclRepo.GrantPermission(ctx, &model.ACLEntry{
+		UserID:     user.ID,
+		ModuleName: modC,
+		Permission: model.PermissionWrite,
+	}))
+
+	startToken := base64.StdEncoding.EncodeToString([]byte(prefix))
+	scopedCtx := model.ContextWithUser(ctx, user)
+	modsPage1, nextTok, err := r.ListModules(scopedCtx, 1, startToken)
+	require.NoError(t, err)
+	require.Len(t, modsPage1, 1)
+	assert.Equal(t, modA, modsPage1[0].Name)
+	require.NotEmpty(t, nextTok)
+
+	modsPage2, nextTok2, err := r.ListModules(scopedCtx, 5, nextTok)
+	require.NoError(t, err)
+	require.Len(t, modsPage2, 1)
+	assert.Equal(t, modC, modsPage2[0].Name)
+	assert.Empty(t, nextTok2)
+
+	noACLUser := &model.User{
+		Name:     "noacl-user-" + prefix,
+		Token:    "pbuf_user_noacl_" + prefix,
+		Type:     model.UserTypeUser,
+		IsActive: true,
+	}
+	require.NoError(t, userRepo.CreateUser(ctx, noACLUser))
+	zeroMods, zeroNext, err := r.ListModules(model.ContextWithUser(ctx, noACLUser), 50, startToken)
+	require.NoError(t, err)
+	assert.Empty(t, zeroMods)
+	assert.Empty(t, zeroNext)
+
+	// Draft tag pull + delete lifecycle
+	protos := []*v1.ProtoFile{{Filename: "a.proto", Content: `syntax = "proto3"; message A {}`}}
+	_, err = r.PushDraftModule(ctx, modA, "v0.1.0-draft", protos, nil)
+	require.NoError(t, err)
+	_, pulled, err := r.PullDraftModule(ctx, modA, "v0.1.0-draft")
+	require.NoError(t, err)
+	require.Len(t, pulled, 1)
+
+	require.NoError(t, r.DeleteModuleTag(ctx, modA, "v0.1.0-draft"))
+	_, _, err = r.PullDraftModule(ctx, modA, "v0.1.0-draft")
+	assert.ErrorIs(t, err, ErrTagNotFound)
+	assert.ErrorIs(t, r.DeleteModuleTag(ctx, modA, "v0.1.0-draft"), ErrTagNotFound)
+
+	// DeleteModule removes orphaned module ACL entries
+	require.NoError(t, r.DeleteModule(ctx, modA))
+	perms, err := aclRepo.ListUserPermissions(ctx, user.ID)
+	require.NoError(t, err)
+	for _, p := range perms {
+		assert.NotEqual(t, modA, p.ModuleName)
+	}
+}
+
+func Test_registryRepository_ListModules_InvalidPageToken(t *testing.T) {
+	repo := &registryRepo{}
+	_, _, err := repo.ListModules(context.Background(), 10, "%%%not-base64%%%")
+	assert.ErrorIs(t, err, ErrInvalidPageToken)
+
+	nulToken := base64.StdEncoding.EncodeToString([]byte("acme\x00orders"))
+	_, _, err = repo.ListModules(context.Background(), 10, nulToken)
+	assert.ErrorIs(t, err, ErrInvalidPageToken)
+
+	badUTF8Token := base64.StdEncoding.EncodeToString([]byte{0xff, 0xfe})
+	_, _, err = repo.ListModules(context.Background(), 10, badUTF8Token)
+	assert.ErrorIs(t, err, ErrInvalidPageToken)
+}
+

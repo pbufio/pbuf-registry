@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"context"
+	stderrors "errors"
 	"strings"
 
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
+	"github.com/google/uuid"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/model"
 )
@@ -17,15 +19,21 @@ var (
 )
 
 type authzMiddleware struct {
-	aclRepo data.ACLRepository
-	logger  *log.Helper
+	aclRepo   data.ACLRepository
+	driftRepo data.DriftRepository
+	logger    *log.Helper
 }
 
 // NewAuthorizationMiddleware creates an authorization middleware
-func NewAuthorizationMiddleware(aclRepo data.ACLRepository, logger log.Logger) middleware.Middleware {
+func NewAuthorizationMiddleware(aclRepo data.ACLRepository, logger log.Logger, driftRepos ...data.DriftRepository) middleware.Middleware {
+	var driftRepo data.DriftRepository
+	if len(driftRepos) > 0 {
+		driftRepo = driftRepos[0]
+	}
 	a := &authzMiddleware{
-		aclRepo: aclRepo,
-		logger:  log.NewHelper(log.With(logger, "module", "middleware/Authorization")),
+		aclRepo:   aclRepo,
+		driftRepo: driftRepo,
+		logger:    log.NewHelper(log.With(logger, "module", "middleware/Authorization")),
 	}
 	return a.handle
 }
@@ -52,6 +60,19 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 
 		operation := serverContext.Operation()
 
+		if strings.Contains(operation, "/AcknowledgeDriftEvent") && a.driftRepo != nil {
+			allowed, err := a.authorizeAcknowledgeDriftEvent(ctx, user, req)
+			if err != nil {
+				a.logger.Errorf("failed to authorize drift event acknowledgement for user %s: %v", user.ID, err)
+				return nil, ErrPermissionDenied
+			}
+			if !allowed {
+				a.logger.Warnf("user %s does not have write permission to acknowledge drift event", user.Name)
+				return nil, ErrPermissionDenied
+			}
+			return handler(ctx, req)
+		}
+
 		// Determine required permission based on method
 		requiredPermission, moduleName := getRequiredPermission(operation, req)
 		if requiredPermission == "" {
@@ -73,6 +94,30 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 
 		return handler(ctx, req)
 	}
+}
+
+func (a *authzMiddleware) authorizeAcknowledgeDriftEvent(ctx context.Context, user *model.User, req interface{}) (bool, error) {
+	eventID := extractEventID(req)
+	if parsedID, err := uuid.Parse(eventID); err == nil {
+		moduleName, err := a.driftRepo.GetDriftEventModuleName(ctx, parsedID.String())
+		if err == nil {
+			return a.aclRepo.CheckPermission(ctx, user.ID, moduleName, model.PermissionWrite)
+		}
+		if !stderrors.Is(err, data.ErrDriftEventNotFound) {
+			return false, err
+		}
+	}
+
+	entries, err := a.aclRepo.ListUserPermissions(ctx, user.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry != nil && (entry.Permission == model.PermissionWrite || entry.Permission == model.PermissionAdmin) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // getRequiredPermission determines the required permission level based on the gRPC method
@@ -110,8 +155,11 @@ func getRequiredPermission(operation string, req interface{}) (model.Permission,
 
 	// Registry service operations
 	switch {
-	case strings.Contains(operation, "/ListModules"),
-		strings.Contains(operation, "/GetModule"),
+	case strings.Contains(operation, "/ListModules"):
+		// ListModules filters results to permitted modules in the repository layer
+		return "", ""
+
+	case strings.Contains(operation, "/GetModule"),
 		strings.Contains(operation, "/PullModule"),
 		strings.Contains(operation, "/GetModuleDependencies"):
 		// Read operations
@@ -160,4 +208,14 @@ func extractModuleName(req interface{}) string {
 
 	// Default to wildcard - checks global permissions
 	return "*"
+}
+
+func extractEventID(req interface{}) string {
+	type eventIDGetter interface {
+		GetEventId() string
+	}
+	if r, ok := req.(eventIDGetter); ok {
+		return r.GetEventId()
+	}
+	return ""
 }

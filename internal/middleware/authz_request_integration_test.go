@@ -8,7 +8,10 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	kratosgrpc "github.com/go-kratos/kratos/v2/transport/grpc"
+	"github.com/google/uuid"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
+	"github.com/pbufio/pbuf-registry/internal/data"
+	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +57,10 @@ func (s *driftTestServer) AcknowledgeDriftEvent(_ context.Context, req *v1.Ackno
 	}, nil
 }
 
+func (s *registryTestServer) ListModules(_ context.Context, _ *v1.ListModulesRequest) (*v1.ListModulesResponse, error) {
+	return &v1.ListModulesResponse{}, nil
+}
+
 func (s *registryTestServer) RegisterModule(_ context.Context, request *v1.RegisterModuleRequest) (*v1.Module, error) {
 	return &v1.Module{Name: request.GetName()}, nil
 }
@@ -73,11 +80,15 @@ func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v
 	lis := bufconn.Listen(buffer)
 
 	auth := NewACLAuth(adminToken, integrationSuite.userRepository, log.DefaultLogger)
+	var driftRepo data.DriftRepository
+	if integrationSuite.pool != nil {
+		driftRepo = data.NewDriftRepository(integrationSuite.pool, log.DefaultLogger)
+	}
 	srv := kratosgrpc.NewServer(
 		kratosgrpc.Listener(lis),
 		kratosgrpc.Middleware(
 			auth.NewAuthMiddleware(),
-			NewAuthorizationMiddleware(integrationSuite.aclRepository, log.DefaultLogger),
+			NewAuthorizationMiddleware(integrationSuite.aclRepository, log.DefaultLogger, driftRepo),
 		),
 	)
 	v1.RegisterRegistryServer(srv, &registryTestServer{})
@@ -374,4 +385,105 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: "event-id"})
 		require.NoError(t, err)
 	})
+
+	t.Run("module-scoped ListModules allowed at authz layer and AcknowledgeDriftEvent checks event module", func(t *testing.T) {
+		plainToken := "pbuf_user_authz_mod_scoped_" + t.Name()
+		user := createTestUser(t, "authz-mod-scoped-"+t.Name(), plainToken)
+
+		bg := context.Background()
+		regRepo := data.NewRegistryRepository(integrationSuite.pool, log.DefaultLogger)
+		driftRepo := data.NewDriftRepository(integrationSuite.pool, log.DefaultLogger)
+
+		modA := "mod-ack-a-" + t.Name()
+		modB := "mod-ack-b-" + t.Name()
+		for _, m := range []string{modA, modB} {
+			require.NoError(t, regRepo.RegisterModule(bg, m))
+			_, err := regRepo.PushModule(bg, m, "v1.0.0", []*v1.ProtoFile{
+				{Filename: "svc.proto", Content: `syntax = "proto3"; message Svc {}`},
+			})
+			require.NoError(t, err)
+		}
+		tagIDA, err := regRepo.GetModuleTagId(bg, modA, "v1.0.0")
+		require.NoError(t, err)
+		modIDA, _, err := driftRepo.GetTagInfo(bg, tagIDA)
+		require.NoError(t, err)
+		savedA, err := driftRepo.SaveDriftEvents(bg, []model.DriftEvent{{
+			ModuleID: modIDA, TagID: tagIDA, Filename: "svc.proto",
+			EventType: model.DriftEventTypeAdded, CurrentHash: "h1", Severity: model.DriftSeverityInfo, DetectedAt: time.Now(),
+		}})
+		require.NoError(t, err)
+		require.Len(t, savedA, 1)
+
+		tagIDB, err := regRepo.GetModuleTagId(bg, modB, "v1.0.0")
+		require.NoError(t, err)
+		modIDB, _, err := driftRepo.GetTagInfo(bg, tagIDB)
+		require.NoError(t, err)
+		savedB, err := driftRepo.SaveDriftEvents(bg, []model.DriftEvent{{
+			ModuleID: modIDB, TagID: tagIDB, Filename: "svc.proto",
+			EventType: model.DriftEventTypeAdded, CurrentHash: "h2", Severity: model.DriftSeverityInfo, DetectedAt: time.Now(),
+		}})
+		require.NoError(t, err)
+		require.Len(t, savedB, 1)
+
+		require.NoError(t, integrationSuite.aclRepository.GrantPermission(bg, &model.ACLEntry{
+			UserID:     user.ID,
+			ModuleName: modA,
+			Permission: model.PermissionWrite,
+		}))
+
+		ctx := ctxWithAuthToken(bg, plainToken)
+		_, err = registryClient.ListModules(ctx, &v1.ListModulesRequest{PageSize: 10})
+		require.NoError(t, err)
+
+		ackResp, err := driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: savedA[0].ID})
+		require.NoError(t, err)
+		assert.Equal(t, savedA[0].ID, ackResp.GetEvent().GetId())
+
+		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: savedB[0].ID})
+		requirePermissionDenied(t, err)
+	})
+}
+
+func TestAuthorizationMiddleware_Unit_ListModulesAndAcknowledgeScope(t *testing.T) {
+	userID := uuid.New()
+	user := &model.User{ID: userID, Name: "alice", IsActive: true, Type: model.UserTypeUser}
+
+	aclRepo := &mocks.ACLRepository{}
+	driftRepo := &mocks.DriftRepository{}
+	a := &authzMiddleware{
+		aclRepo:   aclRepo,
+		driftRepo: driftRepo,
+		logger:    log.NewHelper(log.DefaultLogger),
+	}
+
+	perm, mod := getRequiredPermission("/pbufregistry.v1.Registry/ListModules", &v1.ListModulesRequest{})
+	assert.Empty(t, perm)
+	assert.Empty(t, mod)
+
+	eventAllowed := uuid.New().String()
+	eventDenied := uuid.New().String()
+	eventMissing := uuid.New().String()
+
+	driftRepo.On("GetDriftEventModuleName", context.Background(), eventAllowed).Return("acme/orders", nil).Once()
+	aclRepo.On("CheckPermission", context.Background(), userID, "acme/orders", model.PermissionWrite).Return(true, nil).Once()
+	allowed, err := a.authorizeAcknowledgeDriftEvent(context.Background(), user, &v1.AcknowledgeDriftEventRequest{EventId: eventAllowed})
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	driftRepo.On("GetDriftEventModuleName", context.Background(), eventDenied).Return("acme/payments", nil).Once()
+	aclRepo.On("CheckPermission", context.Background(), userID, "acme/payments", model.PermissionWrite).Return(false, nil).Once()
+	allowed, err = a.authorizeAcknowledgeDriftEvent(context.Background(), user, &v1.AcknowledgeDriftEventRequest{EventId: eventDenied})
+	require.NoError(t, err)
+	assert.False(t, allowed)
+
+	driftRepo.On("GetDriftEventModuleName", context.Background(), eventMissing).Return("", data.ErrDriftEventNotFound).Once()
+	aclRepo.On("ListUserPermissions", context.Background(), userID).Return([]*model.ACLEntry{
+		{UserID: userID, ModuleName: "acme/orders", Permission: model.PermissionRead},
+	}, nil).Once()
+	allowed, err = a.authorizeAcknowledgeDriftEvent(context.Background(), user, &v1.AcknowledgeDriftEventRequest{EventId: eventMissing})
+	require.NoError(t, err)
+	assert.False(t, allowed)
+
+	aclRepo.AssertExpectations(t)
+	driftRepo.AssertExpectations(t)
 }

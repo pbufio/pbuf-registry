@@ -7,6 +7,7 @@ import (
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/google/uuid"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/middleware"
@@ -127,30 +128,45 @@ func (s *DriftServer) AcknowledgeDriftEvent(ctx context.Context, request *v1.Ack
 	if request == nil || request.EventId == "" {
 		return nil, ErrInvalidRequest
 	}
+	parsedID, err := uuid.Parse(request.EventId)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
+	canonicalEventID := parsedID.String()
 
-	acknowledgedBy := strings.TrimSpace(request.AcknowledgedBy)
-	if acknowledgedBy == "" {
-		if user, ok := middleware.GetUserFromContext(ctx); ok && user != nil && user.Name != "" {
-			acknowledgedBy = user.Name
-		} else if middleware.IsAdmin(ctx) {
-			acknowledgedBy = "admin"
-		} else {
-			acknowledgedBy = "unknown"
+	var acknowledgedBy string
+	if user, ok := middleware.GetUserFromContext(ctx); ok && user != nil && user.Name != "" && !middleware.IsAdmin(ctx) {
+		acknowledgedBy = user.Name
+	} else {
+		acknowledgedBy = strings.TrimSpace(request.AcknowledgedBy)
+		if acknowledgedBy == "" {
+			if middleware.IsAdmin(ctx) {
+				acknowledgedBy = "admin"
+			} else {
+				acknowledgedBy = "unknown"
+			}
 		}
 	}
 
-	err := s.driftRepo.AcknowledgeDriftEvent(ctx, request.EventId, acknowledgedBy)
+	if len(acknowledgedBy) > 255 {
+		return nil, ErrInvalidRequest
+	}
+
+	err = s.driftRepo.AcknowledgeDriftEvent(ctx, canonicalEventID, acknowledgedBy)
 	if err != nil {
-		s.logger.Errorf("failed to acknowledge drift event %s: %v", request.EventId, err)
+		if errors.Is(err, data.ErrDriftEventNotFound) {
+			return nil, ErrDriftEventNotFound
+		}
+		s.logger.Errorf("failed to acknowledge drift event %s: %v", canonicalEventID, err)
 		return nil, kerrors.InternalServer("DRIFT_EVENT_ACKNOWLEDGE_FAILED", "failed to acknowledge drift event")
 	}
 
-	s.logger.Infof("drift event %s acknowledged by %s", request.EventId, acknowledgedBy)
+	s.logger.Infof("drift event %s acknowledged by %s", canonicalEventID, acknowledgedBy)
 
 	// Return a response with the event ID (we don't refetch the event for simplicity)
 	return &v1.AcknowledgeDriftEventResponse{
 		Event: &v1.DriftEvent{
-			Id:             request.EventId,
+			Id:             canonicalEventID,
 			Acknowledged:   true,
 			AcknowledgedAt: timestamppb.Now(),
 			AcknowledgedBy: acknowledgedBy,
