@@ -189,4 +189,47 @@ func TestWebhookDriftNotifier_FormatsAndSeverityFilter(t *testing.T) {
 		err = notifier.NotifyDriftEvents(context.Background(), sampleEvents)
 		require.ErrorContains(t, err, "webhook returned status 502")
 	})
+
+	t.Run("rejects cross-host redirects while allowing same-host path redirects", func(t *testing.T) {
+		var targetHits atomic.Int32
+		evilTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			targetHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer evilTarget.Close()
+
+		crossHostRedirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, evilTarget.URL+"/steal", http.StatusTemporaryRedirect)
+		}))
+		defer crossHostRedirector.Close()
+
+		notifier, err := NewWebhookDriftNotifier(config.DriftWebhookConfig{
+			URL:         crossHostRedirector.URL,
+			MinSeverity: "INFO",
+		}, log.NewStdLogger(io.Discard))
+		require.NoError(t, err)
+
+		err = notifier.NotifyDriftEvents(context.Background(), sampleEvents)
+		require.ErrorContains(t, err, "refusing cross-host webhook redirect")
+		assert.Equal(t, int32(0), targetHits.Load())
+
+		var sameHostHits atomic.Int32
+		sameHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/old" {
+				http.Redirect(w, r, "/new", http.StatusTemporaryRedirect)
+				return
+			}
+			sameHostHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer sameHost.Close()
+
+		sameHostNotifier, err := NewWebhookDriftNotifier(config.DriftWebhookConfig{
+			URL:         sameHost.URL + "/old",
+			MinSeverity: "INFO",
+		}, log.NewStdLogger(io.Discard))
+		require.NoError(t, err)
+		require.NoError(t, sameHostNotifier.NotifyDriftEvents(context.Background(), sampleEvents))
+		assert.Equal(t, int32(1), sameHostHits.Load())
+	})
 }

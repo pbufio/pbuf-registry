@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"sync"
 
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
@@ -23,84 +24,142 @@ var (
 	id, _ = os.Hostname()
 )
 
+type appRunner interface {
+	Run() error
+}
+
 type Launcher struct {
-	config *config.Config
+	config                  *config.Config
+	loadConfig              func() *config.Config
+	buildMainApp            func() (appRunner, error)
+	buildDebugApp           func() (appRunner, error)
+	buildCompactionDaemon   func() (background.Daemon, error)
+	buildProtoParsingDaemon func() (background.Daemon, error)
+}
 
-	mainApp  *kratos.App
-	debugApp *kratos.App
-
-	compactionDaemon   background.Daemon
-	protoParsingDaemon background.Daemon
+func (l *Launcher) getConfig() *config.Config {
+	if l.config != nil {
+		return l.config
+	}
+	if l.loadConfig != nil {
+		l.config = l.loadConfig()
+	}
+	return l.config
 }
 
 func main() {
-	config.NewLoader().MustLoad()
+	os.Exit(run())
+}
 
+func run() int {
 	logger := log.DefaultLogger
 	logHelper := log.NewHelper(logger)
 
-	pool, err := pgxpool.New(context.Background(), config.Cfg.Data.Database.DSN)
-	if err != nil {
-		logHelper.Errorf("failed to connect to database: %v", err)
-		return
-	}
-	defer pool.Close()
-
-	registryRepository := data.NewRegistryRepository(pool, logger)
-	metadataRepository := data.NewMetadataRepository(pool, logger)
-	userRepository := data.NewUserRepository(pool, logger)
-	aclRepository := data.NewACLRepository(pool, logger)
-	driftRepository := data.NewDriftRepository(pool, logger)
-	registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
-	metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
-	usersServer := server.NewUsersServer(userRepository, aclRepository, logger)
-	driftServer := server.NewDriftServer(driftRepository, logger)
-
-	app := kratos.New(
-		kratos.ID(id),
-		kratos.Name(Name),
-		kratos.Version(Version),
-		kratos.Metadata(map[string]string{}),
-		kratos.Logger(logger),
-		kratos.Server(
-			server.NewGRPCServer(&config.Cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
-			server.NewHTTPServer(&config.Cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
-			server.NewDebugServer(&config.Cfg.Server, logger),
-		),
+	var (
+		cfgOnce sync.Once
+		poolMu  sync.Mutex
+		pool    *pgxpool.Pool
 	)
-
-	debugApp := kratos.New(
-		kratos.ID(id),
-		kratos.Name(Name),
-		kratos.Version(Version),
-		kratos.Metadata(map[string]string{}),
-		kratos.Logger(logger),
-		kratos.Server(
-			server.NewDebugServer(&config.Cfg.Server, logger),
-		),
-	)
-
-	driftNotifier, err := background.NewWebhookDriftNotifier(config.Cfg.Daemons.ProtoParsing.Webhook, logger)
-	if err != nil {
-		logHelper.Errorf("invalid drift webhook configuration: %v", err)
-		pool.Close()
-		os.Exit(1)
+	loadCfg := func() *config.Config {
+		cfgOnce.Do(func() {
+			config.NewLoader().MustLoad()
+		})
+		return config.Cfg
 	}
+	getPool := func() (*pgxpool.Pool, error) {
+		poolMu.Lock()
+		defer poolMu.Unlock()
+		if pool != nil {
+			return pool, nil
+		}
+		cfg := loadCfg()
+		p, err := pgxpool.New(context.Background(), cfg.Data.Database.DSN)
+		if err != nil {
+			return nil, err
+		}
+		pool = p
+		return pool, nil
+	}
+	defer func() {
+		poolMu.Lock()
+		p := pool
+		poolMu.Unlock()
+		if p != nil {
+			p.Close()
+		}
+	}()
 
 	launcher := &Launcher{
-		config: config.Cfg,
+		loadConfig: loadCfg,
+		buildMainApp: func() (appRunner, error) {
+			cfg := loadCfg()
+			p, err := getPool()
+			if err != nil {
+				return nil, err
+			}
+			registryRepository := data.NewRegistryRepository(p, logger)
+			metadataRepository := data.NewMetadataRepository(p, logger)
+			userRepository := data.NewUserRepository(p, logger)
+			aclRepository := data.NewACLRepository(p, logger)
+			driftRepository := data.NewDriftRepository(p, logger)
+			registryServer := server.NewRegistryServer(registryRepository, metadataRepository, logger)
+			metadataServer := server.NewMetadataServer(registryRepository, metadataRepository, logger)
+			usersServer := server.NewUsersServer(userRepository, aclRepository, logger)
+			driftServer := server.NewDriftServer(driftRepository, logger)
 
-		mainApp:  app,
-		debugApp: debugApp,
-
-		compactionDaemon:   background.NewCompactionDaemon(registryRepository, logger),
-		protoParsingDaemon: background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger, driftNotifier),
+			return kratos.New(
+				kratos.ID(id),
+				kratos.Name(Name),
+				kratos.Version(Version),
+				kratos.Metadata(map[string]string{}),
+				kratos.Logger(logger),
+				kratos.Server(
+					server.NewGRPCServer(&cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
+					server.NewHTTPServer(&cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
+					server.NewDebugServer(&cfg.Server, logger),
+				),
+			), nil
+		},
+		buildDebugApp: func() (appRunner, error) {
+			cfg := loadCfg()
+			return kratos.New(
+				kratos.ID(id),
+				kratos.Name(Name),
+				kratos.Version(Version),
+				kratos.Metadata(map[string]string{}),
+				kratos.Logger(logger),
+				kratos.Server(
+					server.NewDebugServer(&cfg.Server, logger),
+				),
+			), nil
+		},
+		buildCompactionDaemon: func() (background.Daemon, error) {
+			p, err := getPool()
+			if err != nil {
+				return nil, err
+			}
+			registryRepository := data.NewRegistryRepository(p, logger)
+			return background.NewCompactionDaemon(registryRepository, logger), nil
+		},
+		buildProtoParsingDaemon: func() (background.Daemon, error) {
+			cfg := loadCfg()
+			p, err := getPool()
+			if err != nil {
+				return nil, err
+			}
+			driftNotifier, err := background.NewWebhookDriftNotifier(cfg.Daemons.ProtoParsing.Webhook, logger)
+			if err != nil {
+				return nil, err
+			}
+			metadataRepository := data.NewMetadataRepository(p, logger)
+			driftRepository := data.NewDriftRepository(p, logger)
+			return background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger, driftNotifier), nil
+		},
 	}
 
-	err = CreateRootCommand(launcher).Execute()
-	if err != nil {
+	if err := CreateRootCommand(launcher).Execute(); err != nil {
 		logHelper.Errorf("failed to run application: %v", err)
-		pool.Close()
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

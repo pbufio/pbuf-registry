@@ -14,6 +14,18 @@ services:
       timeout: 10s
       retries: 5
 
+  pbuf-migrations:
+    image: pbuf-registry-dev:local
+    build:
+      context: .
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
+    command: ["/app/pbuf-migrations"]
+
   pbuf-registry:
     image: pbuf-registry-dev:local
     build:
@@ -22,6 +34,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      pbuf-migrations:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
       - "6777:6777"
@@ -45,8 +59,7 @@ services:
 
       # Admin bypass token (also used by the UI and for user/bot management)
       SERVER_STATIC_TOKEN: ${SERVER_STATIC_TOKEN:-dev-admin-token}
-    command: >
-      sh -c "/app/pbuf-migrations && /app/pbuf-registry"
+    command: ["/app/pbuf-registry"]
 
   pbuf-registry-compaction:
     image: pbuf-registry-dev:local
@@ -61,8 +74,7 @@ services:
       retries: 5
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
-    command: >
-      sh -c "/app/pbuf-registry compaction"
+    command: ["/app/pbuf-registry", "compaction"]
 
   pbuf-registry-protoparser:
     image: pbuf-registry-dev:local
@@ -77,8 +89,7 @@ services:
       retries: 5
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:pbuf@db:5432/pbuf_registry?sslmode=disable"
-    command: >
-      sh -c "/app/pbuf-registry proto-parsing"
+    command: ["/app/pbuf-registry", "proto-parsing"]
 
   pbuf-registry-seed:
     image: python:3.12-slim

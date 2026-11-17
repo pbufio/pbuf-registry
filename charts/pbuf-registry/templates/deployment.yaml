@@ -29,6 +29,18 @@ spec:
       serviceAccountName: {{ include "pbuf-registry.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: migrations
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /app/pbuf-migrations
+          env:
+            {{- include "pbuf-registry.env" . | nindent 12 }}
+          volumeMounts:
+            {{- include "pbuf-registry.volumeMounts" . | nindent 12 }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -36,10 +48,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /bin/sh
-          args:
-            - -c
-            - /app/pbuf-migrations && /app/pbuf-registry
+            - /app/pbuf-registry
           env:
             {{- include "pbuf-registry.env" . | nindent 12 }}
           ports:
