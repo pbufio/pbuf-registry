@@ -125,9 +125,6 @@ Permissions are per-module or global (using `*` as module name).
 
 ## Background Jobs
 
-The registry runs background workers as separate services:
-- **Compaction**: Cleans up old data
-- **Proto Parsing**: Indexes proto file contents
-- **Drift Detection**: Monitors for breaking changes
-
-Each runs via CLI subcommands (e.g., `pbuf-registry compaction`).
+The registry runs background workers via CLI subcommands:
+- **Compaction** (`pbuf-registry compaction`): Cleans up expired draft tags
+- **Proto Parsing** (`pbuf-registry proto-parsing`): Indexes `.proto` file contents, computes hashes, and runs breaking-change drift detection

@@ -318,53 +318,67 @@ func NewRegisterModuleCmd(config *model.Config, client v1.RegistryClient) *cobra
 func NewPushModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Command {
 	// create push module command
 	pushModuleCmd := &cobra.Command{
-		Use:   "push [tag] [flags]",
-		Short: "Push",
-		Long:  "Push is a command to push modules",
-		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			if config.Name == "" {
-				log.Fatalf("module name is required. see pbuf.yaml reference")
+		Use:           "push [tag] [flags]",
+		Short:         "Push",
+		Long:          "Push is a command to push modules",
+		Args:          cobra.ExactArgs(1),
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			moduleName := strings.TrimSpace(config.Name)
+			if moduleName == "" {
+				return fmt.Errorf("module name is required. see pbuf.yaml reference")
 			}
 
-			tag := args[0]
+			tag := strings.TrimSpace(args[0])
+			if tag == "" {
+				return fmt.Errorf("tag is required")
+			}
 
 			isDraft, err := cmd.Flags().GetBool("draft")
 			if err != nil {
-				log.Fatalf("failed to get draft flag: %v", err)
-				return
+				return fmt.Errorf("failed to get draft flag: %w", err)
 			}
 
 			protoFiles, err := registry.CollectProtoFilesInDirs(config.Export.Paths)
 			if err != nil {
-				log.Fatalf("failed to collect proto files: %v", err)
+				return fmt.Errorf("failed to collect proto files: %w", err)
 			}
 
 			var dependencies []*v1.Dependency
 			for _, dependency := range config.Modules {
-				if dependency.Name != "" && dependency.Repository == "" && !bsr.IsBSRModule(dependency) {
+				if dependency == nil {
+					continue
+				}
+				depName := strings.TrimSpace(dependency.Name)
+				depRepo := strings.TrimSpace(dependency.Repository)
+				if depName != "" && depRepo == "" && !bsr.IsBSRModule(&model.Module{Name: depName, Repository: depRepo}) {
+					depTag := strings.TrimSpace(dependency.Tag)
+					if depTag == "" {
+						return fmt.Errorf("dependency %q in pbuf.yaml is missing a tag", depName)
+					}
 					dependencies = append(dependencies, &v1.Dependency{
-						Name: dependency.Name,
-						Tag:  dependency.Tag,
+						Name: depName,
+						Tag:  depTag,
 					})
 				}
 			}
 
-			log.Printf("pushing module %s with tag %s", config.Name, tag)
+			log.Printf("pushing module %s with tag %s", moduleName, tag)
 
 			module, err := client.PushModule(cmd.Context(), &v1.PushModuleRequest{
-				ModuleName:   config.Name,
+				ModuleName:   moduleName,
 				Tag:          tag,
 				Protofiles:   protoFiles,
 				Dependencies: dependencies,
 				IsDraft:      isDraft,
 			})
-
 			if err != nil {
-				log.Fatalf("failed to push: %v", err)
+				return fmt.Errorf("failed to push: %w", err)
 			}
 
 			log.Printf("module %s successfully pushed", module.Name)
+			return nil
 		},
 	}
 

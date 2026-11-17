@@ -129,6 +129,14 @@ message ValidateRules {
 	// Non-proto file should not be written
 	_, err = os.Stat(filepath.Join(outDir, "README.md"))
 	assert.True(t, os.IsNotExist(err))
+
+	// Oversized BSR response is rejected via LimitReader
+	origMax := maxBSRResponseBytes
+	maxBSRResponseBytes = 64
+	defer func() { maxBSRResponseBytes = origMax }()
+
+	err = VendorBSRModule(mod, nil, nil)
+	require.ErrorContains(t, err, "exceeds 64 bytes limit")
 }
 
 func TestFilterAndMapPath(t *testing.T) {

@@ -229,6 +229,8 @@ func saveTokenToNetrc(config *model.Config, usr *user.User, auth *netrc.Netrc, t
 	if m == nil {
 		auth.AddMachine(machine, "unused", token)
 		m = auth.Machine(machine)
+	} else {
+		m.Set("password", token)
 	}
 	m.Set("token", token)
 

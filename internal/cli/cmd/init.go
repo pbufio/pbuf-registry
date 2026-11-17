@@ -66,18 +66,11 @@ func CreateInitCmd() *cobra.Command {
 
 			var pbufModules []*model.Module
 			for _, module := range modules {
-				if module != "" {
+				if trimmed := strings.TrimSpace(module); trimmed != "" {
 					pbufModules = append(pbufModules, &model.Module{
-						Name: module,
+						Name: trimmed,
 					})
 				}
-			}
-
-			// backward compatibility
-			if len(pbufModules) == 0 {
-				pbufModules = append(pbufModules, &model.Module{
-					Name: "pbufio/pbuf-registry",
-				})
 			}
 
 			var pbufPaths []string

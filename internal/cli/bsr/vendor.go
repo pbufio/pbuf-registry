@@ -26,6 +26,8 @@ const (
 	bsrTimeout        = 60 * time.Second
 )
 
+var maxBSRResponseBytes int64 = 64 << 20 // 64 MiB
+
 type bsrDownloadRequest struct {
 	Values []bsrDownloadRequestValue `json:"values"`
 }
@@ -238,11 +240,14 @@ func downloadBSRFiles(ctx context.Context, baseURL, owner, repo, ref, token stri
 			continue
 		}
 
-		respBody, readErr := io.ReadAll(resp.Body)
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBSRResponseBytes+1))
 		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = readErr
 			continue
+		}
+		if int64(len(respBody)) > maxBSRResponseBytes {
+			return nil, fmt.Errorf("BSR response from %s exceeds %d bytes limit", endpoint, maxBSRResponseBytes)
 		}
 
 		if resp.StatusCode == http.StatusNotFound {

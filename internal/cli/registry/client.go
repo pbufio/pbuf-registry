@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/jdx/go-netrc"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
@@ -86,7 +87,17 @@ func credentialsFromNetrc(host string, netrcAuth *netrc.Netrc) credentials.PerRP
 		return nil
 	}
 
+	token := strings.TrimSpace(machine.Get("token"))
+	if token == "" {
+		if pw := strings.TrimSpace(machine.Get("password")); pw != "" && pw != "unused" {
+			token = pw
+		}
+	}
+	if token == "" {
+		return nil
+	}
+
 	return &netrcCredential{
-		token: machine.Get("token"),
+		token: token,
 	}
 }

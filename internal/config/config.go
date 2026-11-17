@@ -74,9 +74,6 @@ type Config struct {
 			CronSchedule string             `mapstructure:"cron"`
 			Webhook      DriftWebhookConfig `mapstructure:"webhook"`
 		} `mapstructure:"protoparsing"`
-		DriftDetection struct {
-			CronSchedule string `mapstructure:"cron"`
-		} `mapstructure:"driftdetection"`
 	} `mapstructure:"daemons"`
 }
 

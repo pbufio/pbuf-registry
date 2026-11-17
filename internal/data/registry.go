@@ -36,7 +36,6 @@ type RegistryRepository interface {
 	PullDraftModule(ctx context.Context, name string, tag string) (*v1.Module, []*v1.ProtoFile, error)
 	GetModuleTagId(ctx context.Context, moduleName string, tag string) (string, error)
 	DeleteModuleTag(ctx context.Context, name string, tag string) error
-	AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error
 	GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
 	GetTransitiveDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error)
 	DeleteObsoleteDraftTags(ctx context.Context) error
@@ -643,39 +642,6 @@ func (r *registryRepo) DeleteModuleTag(ctx context.Context, name string, tag str
 	}
 
 	r.logger.Infof("deleted tag %s", tag)
-	return nil
-}
-
-func (r *registryRepo) AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error {
-	// find the tag id by name and tag
-	tagId, err := r.GetModuleTagId(ctx, name, tag)
-	if err != nil {
-		return fmt.Errorf("could not get tag id: %w", err)
-	}
-
-	if tagId == "" {
-		return ErrTagNotFound
-	}
-
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("could not begin transaction: %w", err)
-	}
-	defer func(tx pgx.Tx, ctx context.Context) {
-		err := tx.Rollback(ctx)
-		if err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.logger.Errorf("could not rollback transaction: %w", err)
-		}
-	}(tx, context.Background())
-
-	if err := r.insertDependenciesTx(ctx, tx, tagId, dependencies); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("could not commit dependencies: %w", err)
-	}
-
 	return nil
 }
 

@@ -76,8 +76,3 @@ type DependencyDriftStatus struct {
 func (r *DriftDetectionResult) HasDrift() bool {
 	return len(r.Added) > 0 || len(r.Modified) > 0 || len(r.Deleted) > 0
 }
-
-// TotalChanges returns the total number of changes detected
-func (r *DriftDetectionResult) TotalChanges() int {
-	return len(r.Added) + len(r.Modified) + len(r.Deleted)
-}

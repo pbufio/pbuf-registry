@@ -49,5 +49,3 @@ daemons:
       min_severity: "WARNING"
       format: ""
       timeout: 10s
-  driftdetection:
-    cron: "*/5 * * * *"

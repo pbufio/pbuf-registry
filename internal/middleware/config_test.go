@@ -30,9 +30,6 @@ func (n *noopUserRepo) ListUsers(ctx context.Context, limit int, offset int) ([]
 }
 func (n *noopUserRepo) UpdateUser(ctx context.Context, user *model.User) error { panic("not used") }
 func (n *noopUserRepo) DeleteUser(ctx context.Context, id uuid.UUID) error     { panic("not used") }
-func (n *noopUserRepo) SetUserActive(ctx context.Context, id uuid.UUID, isActive bool) error {
-	panic("not used")
-}
 
 var _ data.UserRepository = (*noopUserRepo)(nil)
 

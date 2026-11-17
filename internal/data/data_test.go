@@ -556,64 +556,20 @@ func Test_registryRepository_PullDraftModule(t *testing.T) {
 	}
 }
 
-func Test_registryRepository_AddModuleDependencies(t *testing.T) {
-	type args struct {
-		ctx          context.Context
-		name         string
-		tag          string
-		dependencies []*v1.Dependency
-	}
-	type want struct {
-		dependencies []*v1.Dependency
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    want
-		wantErr bool
-	}{
-		{
-			name: "Add module dependencies",
-			args: args{
-				ctx:  context.Background(),
-				name: "pbuf.io/pbuf-registry",
-				tag:  "v0.0.0",
-				dependencies: []*v1.Dependency{
-					{
-						Name: "pbuf.io/pbuf-registry-2",
-						Tag:  "v0.0.0",
-					},
-				},
-			},
-			want: want{
-				dependencies: []*v1.Dependency{
-					{
-						Name: "pbuf.io/pbuf-registry-2",
-						Tag:  "v0.0.0",
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := suite.registryRepository
+func Test_registryRepository_PushModuleWithDependencies(t *testing.T) {
+	ctx := context.Background()
+	r := suite.registryRepository
 
-			if err := r.AddModuleDependencies(tt.args.ctx, tt.args.name, tt.args.tag, tt.args.dependencies); (err != nil) != tt.wantErr {
-				t.Errorf("AddModuleDependencies() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			dependencies, err := r.GetModuleDependencies(tt.args.ctx, tt.args.name, tt.args.tag)
-			if err != nil {
-				t.Errorf("GetModuleDependencies() error = %v", err)
-			}
-
-			if !reflect.DeepEqual(dependencies, tt.want.dependencies) {
-				t.Errorf("GetModuleDependencies() got = %v, want %v", dependencies, tt.args.dependencies)
-			}
-		})
+	dep := &v1.Dependency{
+		Name: "pbuf.io/pbuf-registry-2",
+		Tag:  "v0.0.0",
 	}
+	_, err := r.PushModule(ctx, "pbuf.io/pbuf-registry", "v0.0.1", protofiles, dep)
+	require.NoError(t, err)
+
+	dependencies, err := r.GetModuleDependencies(ctx, "pbuf.io/pbuf-registry", "v0.0.1")
+	require.NoError(t, err)
+	assert.Equal(t, []*v1.Dependency{dep}, dependencies)
 }
 
 func Test_registryRepository_GetModuleDependencies(t *testing.T) {
@@ -1063,21 +1019,13 @@ func Test_registryRepository_GetTransitiveDependencies(t *testing.T) {
 	// Create module B (depends on C)
 	_, err = r.PushModule(ctx, moduleB, "v1.0.0", []*v1.ProtoFile{
 		{Filename: "b.proto", Content: `syntax = "proto3"; message B {}`},
-	})
-	require.NoError(t, err)
-	err = r.AddModuleDependencies(ctx, moduleB, "v1.0.0", []*v1.Dependency{
-		{Name: moduleC, Tag: "v1.0.0"},
-	})
+	}, &v1.Dependency{Name: moduleC, Tag: "v1.0.0"})
 	require.NoError(t, err)
 
 	// Create module A (depends on B)
 	_, err = r.PushModule(ctx, moduleA, "v1.0.0", []*v1.ProtoFile{
 		{Filename: "a.proto", Content: `syntax = "proto3"; message A {}`},
-	})
-	require.NoError(t, err)
-	err = r.AddModuleDependencies(ctx, moduleA, "v1.0.0", []*v1.Dependency{
-		{Name: moduleB, Tag: "v1.0.0"},
-	})
+	}, &v1.Dependency{Name: moduleB, Tag: "v1.0.0"})
 	require.NoError(t, err)
 
 	// Test: get transitive dependencies for A should return B (direct) and C (transitive)
