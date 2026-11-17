@@ -21,6 +21,9 @@ import {
   diffProtoFileSets,
   pickDefaultBaseTag
 } from '@/utils/protoDiff'
+import {
+  flattenMetadataMessages
+} from '@/utils/metadataUtils'
 
 const MAX_GRAPH_EDGE_PARENTS = 20
 
@@ -30,6 +33,7 @@ const protoFiles = ref([])
 const dependencies = ref([])
 const metadata = ref(null)
 const metadataPending = ref(false)
+const isDraftTag = ref(false)
 const loading = ref(true)
 const loadingProtoFiles = ref(false)
 const protoFilesLoaded = ref(false)
@@ -79,6 +83,7 @@ watch([moduleName, tag], (newVals, oldVals) => {
   dependencies.value = []
   metadata.value = null
   metadataPending.value = false
+  isDraftTag.value = false
   error.value = null
   protoFilesError.value = null
   loadingProtoFiles.value = false
@@ -365,9 +370,14 @@ const onSelectGraphNode = (node) => {
 }
 
 const loadVersionDetails = async () => {
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  const isSameTag = () => moduleName.value === currentModule && tag.value === currentTag
+
   loading.value = true
   error.value = null
   metadataPending.value = false
+  isDraftTag.value = false
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
   graphEdgesByParent.value = {}
@@ -377,36 +387,59 @@ const loadVersionDetails = async () => {
   resolvingGraphEdges.value = false
   try {
     // Get metadata (parsed proto structure) - Level 3. Newly pushed tags return 404 (TAG_META_NOT_FOUND)
-    // until background proto-parsing runs; degrade gracefully so files/deps/compare still render.
+    // until background proto-parsing runs; draft tags return 404 (MODULE_TAG_NOT_FOUND) while pullModule succeeds.
     try {
-      const metadataResponse = await metadataApi.getMetadata(moduleName.value, tag.value)
+      const metadataResponse = await metadataApi.getMetadata(currentModule, currentTag)
+      if (!isSameTag()) return
       metadata.value = metadataResponse
     } catch (metaErr) {
-      if (metaErr?.response?.status === 404 && metaErr?.response?.data?.reason === 'TAG_META_NOT_FOUND') {
+      if (!isSameTag()) return
+      const status = metaErr?.response?.status
+      const reason = metaErr?.response?.data?.reason
+      if (status === 404 && reason === 'TAG_META_NOT_FOUND') {
         metadata.value = null
         metadataPending.value = true
+      } else if (status === 404 && reason === 'MODULE_TAG_NOT_FOUND') {
+        await loadProtoFiles()
+        if (!isSameTag()) return
+        if (protoFilesLoaded.value) {
+          isDraftTag.value = true
+          metadata.value = null
+          dependencies.value = []
+          return
+        }
+        if (protoFilesError.value) {
+          throw new Error(protoFilesError.value)
+        }
+        throw metaErr
       } else {
         throw metaErr
       }
     }
 
     // Get direct + transitive dependencies
-    const depsResponse = await registryApi.getModuleDependencies(moduleName.value, tag.value, true)
+    const depsResponse = await registryApi.getModuleDependencies(currentModule, currentTag, true)
+    if (!isSameTag()) return
     dependencies.value = depsResponse.dependencies || []
 
     try {
-      const driftStatusResponse = await driftApi.getModuleDependencyDriftStatus(moduleName.value, tag.value)
+      const driftStatusResponse = await driftApi.getModuleDependencyDriftStatus(currentModule, currentTag)
+      if (!isSameTag()) return
       dependencyDriftStatuses.value = driftStatusResponse.statuses || []
     } catch (err) {
+      if (!isSameTag()) return
       console.error('Failed to load dependency drift status:', err)
       dependencyDriftStatuses.value = []
       dependencyDriftError.value = err.response?.data?.message || err.message || 'Failed to load dependency drift status'
     }
   } catch (err) {
+    if (!isSameTag()) return
     console.error('Failed to load version details:', err)
     error.value = err.response?.data?.message || err.message || 'Failed to load version details'
   } finally {
-    loading.value = false
+    if (isSameTag()) {
+      loading.value = false
+    }
   }
 }
 
@@ -451,18 +484,32 @@ const loadProtoFiles = () => {
 const loadDriftEvents = async () => {
   if (driftLoaded.value) return
 
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  const isSameTag = () => moduleName.value === currentModule && tag.value === currentTag
+
   driftLoading.value = true
   driftError.value = null
   try {
-    const response = await driftApi.getModuleDriftEvents(moduleName.value, tag.value)
+    const response = await driftApi.getModuleDriftEvents(currentModule, currentTag)
+    if (!isSameTag()) return
     driftEvents.value = response.events || []
     driftLoaded.value = true
   } catch (err) {
+    if (!isSameTag()) return
     console.error('Failed to load drift events:', err)
     driftError.value = err.response?.data?.message || err.message || 'Failed to load drift events'
   } finally {
-    driftLoading.value = false
+    if (isSameTag()) {
+      driftLoading.value = false
+    }
   }
+}
+
+const retryVersionView = () => {
+  loadVersionDetails()
+  loadProtoFiles()
+  retryLoadDriftEvents()
 }
 
 const acknowledgeDriftEvent = async (event) => {
@@ -620,7 +667,7 @@ onMounted(() => {
           <p class="text-zinc-400">{{ error }}</p>
         </div>
         <div class="flex gap-4 justify-center">
-          <PButton variant="primary" @click="loadVersionDetails">
+          <PButton variant="primary" @click="retryVersionView">
             Retry
           </PButton>
           <PButton variant="secondary" @click="$router.push(`/modules/${moduleName}`)">
@@ -638,7 +685,8 @@ onMounted(() => {
           </PButton>
           <div class="flex items-center gap-3 mb-2">
             <h1 class="text-4xl font-bold tracking-tight font-mono">{{ moduleName }}</h1>
-            <PBadge variant="brand">{{ tag }}</PBadge>
+            <PBadge :variant="isDraftTag ? 'draft' : 'brand'">{{ tag }}</PBadge>
+            <PBadge v-if="isDraftTag" variant="draft">DRAFT</PBadge>
           </div>
         </div>
 
@@ -931,19 +979,54 @@ onMounted(() => {
               <div v-for="protoFile in pkg.protoFiles" :key="protoFile.filename" class="mb-6">
                 <h4 class="text-lg font-semibold mb-3 font-mono text-zinc-200">{{ protoFile.filename }}</h4>
 
-                <!-- Messages -->
+                <!-- Messages (including nested messages, enums, maps, and oneofs) -->
                 <div v-if="protoFile.messages && protoFile.messages.length > 0" class="mb-4">
                   <h5 class="text-md font-medium mb-2 text-zinc-300">Messages</h5>
                   <div class="space-y-3">
-                    <div v-for="message in protoFile.messages" :key="message.name" class="bg-surface-base rounded-lg p-4">
-                      <p class="font-mono text-brand mb-3">{{ message.name }}</p>
-                      <div v-if="message.fields && message.fields.length > 0" class="pl-6 space-y-1.5">
-                        <div v-for="field in message.fields" :key="field.name" class="text-sm font-mono">
-                          <span class="text-zinc-500">{{ field.tag }}:</span>
-                          <span class="text-zinc-300 ml-1">{{ field.messageType }}</span>
-                          <span class="text-brand ml-1">{{ field.name }}</span>
-                          <span v-if="field.repeated" class="text-zinc-500 ml-1">(repeated)</span>
-                          <span v-if="field.optional" class="text-zinc-500 ml-1">(optional)</span>
+                    <div
+                      v-for="message in flattenMetadataMessages(protoFile.messages)"
+                      :key="message.key"
+                      class="bg-surface-base rounded-lg p-4"
+                      :style="message.depth > 0 ? { marginLeft: `${Math.min(message.depth, 4) * 1.25}rem` } : undefined"
+                    >
+                      <p class="font-mono text-brand mb-3">{{ message.fullName }}</p>
+                      <div v-if="message.fields.length > 0" class="pl-6 space-y-1.5">
+                        <template v-for="(field, fieldIdx) in message.fields" :key="`${field.name}-${fieldIdx}`">
+                          <div v-if="field.kind === 'oneof'" class="text-sm font-mono space-y-1">
+                            <div>
+                              <span class="text-zinc-500">oneof</span>
+                              <span class="text-brand ml-1">{{ field.name }}</span>
+                            </div>
+                            <div
+                              v-for="branch in field.branches"
+                              :key="branch.name"
+                              class="pl-4 text-zinc-400"
+                            >
+                              <span class="text-zinc-300">{{ branch.type }}</span>
+                              <span class="text-brand ml-1">{{ branch.name }}</span>
+                            </div>
+                          </div>
+                          <div v-else class="text-sm font-mono">
+                            <span class="text-zinc-500">{{ field.tag }}:</span>
+                            <span class="text-zinc-300 ml-1">{{ field.typeLabel }}</span>
+                            <span class="text-brand ml-1">{{ field.name }}</span>
+                            <span
+                              v-for="mod in field.modifiers"
+                              :key="mod"
+                              class="text-zinc-500 ml-1"
+                            >({{ mod }})</span>
+                          </div>
+                        </template>
+                      </div>
+                      <div v-if="message.nestedEnums.length > 0" class="pl-6 mt-3 space-y-2">
+                        <div v-for="enumDef in message.nestedEnums" :key="enumDef.name" class="text-sm font-mono">
+                          <p class="text-zinc-400">enum <span class="text-brand">{{ enumDef.name }}</span></p>
+                          <div class="pl-4 space-y-0.5 text-zinc-400">
+                            <div v-for="val in (enumDef.values || [])" :key="val.name">
+                              <span class="text-zinc-300">{{ val.name }}</span>
+                              <span class="text-zinc-500"> = {{ val.tag }}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -968,6 +1051,9 @@ onMounted(() => {
               </div>
             </PCard>
           </div>
+          <p v-else-if="isDraftTag" class="text-zinc-400 text-center py-8">
+            Metadata indexing is only available for published tags.
+          </p>
           <p v-else-if="metadataPending" class="text-zinc-400 text-center py-8">
             Metadata is pending background indexing — refresh shortly.
           </p>

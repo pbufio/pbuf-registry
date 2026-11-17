@@ -108,17 +108,18 @@ test.describe('pbuf-registry Web UI', () => {
       })
     })
 
-    await page.goto('/login')
+    await page.goto('/login?next=//evil.example.com/phish')
 
     // OIDC SSO button is visible from runtime /config.js
     await expect(page.getByRole('button', { name: /Sign in with SSO \(OIDC\)/i })).toBeVisible()
 
     const tokenInput = page.getByPlaceholder(/pbuf_user_/i)
-    await tokenInput.fill('bad-token')
+    await tokenInput.fill('bad token with spaces')
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     await expect(page.getByText(/Invalid token format/i)).toBeVisible()
 
-    await tokenInput.fill('pbuf_user_validToken123456')
+    // Static admin token (SERVER_STATIC_TOKEN) logs in and sanitizes unsafe ?next=//evil.example.com to /modules
+    await tokenInput.fill('my-static-admin-token-123')
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     await expect(page).toHaveURL(/\/modules$/)
   })
@@ -447,6 +448,98 @@ test.describe('pbuf-registry Web UI', () => {
     // Switching baseline tag updates diff cleanly
     await select.selectOption('v1.0.0')
     await expect(panel).toContainText('Comparing v1.0.0 → v2.0.0: 1 added, 1 modified, 0 deleted')
+  })
+
+  test('navigates from draft tag row on ModuleDetailView and renders map, oneof, and nested metadata', async ({ page }) => {
+    await page.route('**/api/v1/modules/get', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'mod-draft',
+          name: 'acme/checkout',
+          tags: ['v1.0.0'],
+          draftTags: ['v1.1.0-rc+1']
+        })
+      })
+    })
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ statuses: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
+    await page.route('**/api/v1/modules/dependencies', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ dependencies: [] }) })
+    })
+    await page.route('**/api/v1/metadata', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.tag === 'v1.1.0-rc+1') {
+        await route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 404, reason: 'MODULE_TAG_NOT_FOUND', message: 'module tag not found' })
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          packages: [
+            {
+              name: 'acme.checkout.v1',
+              protoFiles: [
+                {
+                  filename: 'checkout.proto',
+                  messages: [
+                    {
+                      name: 'CheckoutRequest',
+                      fields: [
+                        { name: 'labels', tag: 1, map: true, mapKeyType: 'string', mapValueType: 'string' },
+                        { name: 'payment', oneof: true, oneofNames: ['card_token', 'invoice_id'], oneofTypes: ['string', 'string'] }
+                      ],
+                      nestedEnums: [
+                        { name: 'Currency', values: [{ name: 'CURRENCY_UNSPECIFIED', tag: 0 }, { name: 'CURRENCY_USD', tag: 1 }] }
+                      ],
+                      nestedMessages: [
+                        { name: 'Address', fields: [{ name: 'postal_code', messageType: 'string', tag: 1 }] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        })
+      })
+    })
+    await page.route('**/api/v1/modules/pull', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          protofiles: [{ filename: 'checkout.proto', content: 'syntax = "proto3";\npackage acme.checkout.v1;\n' }]
+        })
+      })
+    })
+
+    await page.goto('/modules/acme/checkout')
+    await page.getByRole('button', { name: 'View Draft →' }).click()
+    await expect(page).toHaveURL(/\/modules\/acme\/checkout\/tags\/v1\.1\.0-rc%2B1$/)
+    await expect(page.getByText('DRAFT', { exact: true })).toBeVisible()
+    await expect(page.getByText('checkout.proto')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Metadata', exact: true }).click()
+    await expect(page.getByText(/Metadata indexing is only available for published tags/i)).toBeVisible()
+
+    // Navigate to published tag v1.0.0 and verify map, oneof, nested message, and nested enum rendering
+    await page.goto('/modules/acme/checkout/tags/v1.0.0')
+    await page.getByRole('button', { name: 'Metadata', exact: true }).click()
+    await expect(page.getByText('map<string, string>')).toBeVisible()
+    await expect(page.getByText('card_token')).toBeVisible()
+    await expect(page.getByText('CheckoutRequest.Address')).toBeVisible()
+    await expect(page.getByText('CURRENCY_USD')).toBeVisible()
   })
 
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {

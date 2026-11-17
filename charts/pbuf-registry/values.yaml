@@ -72,6 +72,7 @@ secrets:
   create: true
   databaseDSN: ""
   staticToken: ""
+  uiApiToken: ""
   driftWebhookUrl: ""
   grpcTlsCert: ""
   grpcTlsKey: ""
@@ -83,6 +84,7 @@ secrets:
     remoteRefKey: ""
     databaseDSNProperty: ""
     serverStaticTokenProperty: ""
+    uiApiTokenProperty: ""
     driftWebhookUrlProperty: ""
     serverGrpcTlsCertFileProperty: ""
     serverGrpcTlsKeyFileProperty: ""

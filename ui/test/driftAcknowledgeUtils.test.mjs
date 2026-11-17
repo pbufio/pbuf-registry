@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -122,5 +123,22 @@ const publicUri = '/api/v1/drift/modules/events'
 assert.equal(lookup(mapBody('allow_post'), ackUri), '1', 'acknowledge must be an allowed POST endpoint')
 assert.equal(lookup(mapBody('allow_public_token'), ackUri), '0', 'acknowledge must not receive the public fallback token')
 assert.equal(lookup(mapBody('allow_public_token'), publicUri), '1', 'public read endpoints keep the public fallback token')
+assert.match(nginx, /geo \$dollar \{\s*default "\$";\s*\}/, 'nginx.conf must define geo $dollar for safe API_TOKEN escaping')
+
+// docker-entrypoint.sh: verify Bearer stripping and nginx_escape handle \, ", $, ;, -n, and CRLF safely
+const entrypoint = readUi('docker-entrypoint.sh')
+assert.ok(!entrypoint.includes('echo "$API_TOKEN"'), 'docker-entrypoint.sh must use printf instead of echo on API_TOKEN')
+const escapedToken = execFileSync(
+  '/bin/sh',
+  [
+    '-c',
+    'API_TOKEN="$(printf \'%s\\n\' "$1" | sed -E \'s/^[Bb]earer[[:space:]]+//\')"; ' +
+      'printf \'%s\' "$API_TOKEN" | tr -d \'\\r\\n\' | sed -e \'s/\\\\/\\\\\\\\/g\' -e \'s/"/\\\\"/g\' -e \'s/\\$/${dollar}/g\'',
+    'sh',
+    'Bearer sec"ret\\tok;$host\r\n'
+  ],
+  { encoding: 'utf8' }
+)
+assert.equal(escapedToken, 'sec\\"ret\\\\tok;${dollar}host')
 
 console.log('driftAcknowledgeUtils: OK')

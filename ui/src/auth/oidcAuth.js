@@ -1,3 +1,5 @@
+import { sanitizeNextUrl } from '../utils/authUtils.js'
+
 const OIDC_STATE_KEY = 'pbuf_oidc_state'
 const OIDC_VERIFIER_KEY = 'pbuf_oidc_code_verifier'
 const OIDC_NEXT_URL_KEY = 'pbuf_oidc_next_url'
@@ -121,7 +123,7 @@ export const startOidcLogin = async (config, nextUrl = '/modules', fetchImpl = g
   if (typeof window !== 'undefined' && window.sessionStorage) {
     window.sessionStorage.setItem(OIDC_STATE_KEY, state)
     window.sessionStorage.setItem(OIDC_VERIFIER_KEY, codeVerifier)
-    window.sessionStorage.setItem(OIDC_NEXT_URL_KEY, nextUrl || '/modules')
+    window.sessionStorage.setItem(OIDC_NEXT_URL_KEY, sanitizeNextUrl(nextUrl, '/modules'))
   }
 
   const authUrl = buildAuthorizationUrl({
@@ -158,7 +160,7 @@ export const handleOidcCallback = async (
 
   const expectedState = storage?.getItem(OIDC_STATE_KEY) || ''
   const codeVerifier = storage?.getItem(OIDC_VERIFIER_KEY) || ''
-  const nextUrl = storage?.getItem(OIDC_NEXT_URL_KEY) || '/modules'
+  const nextUrl = sanitizeNextUrl(storage?.getItem(OIDC_NEXT_URL_KEY), '/modules')
 
   storage?.removeItem(OIDC_STATE_KEY)
   storage?.removeItem(OIDC_VERIFIER_KEY)

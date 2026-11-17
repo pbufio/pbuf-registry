@@ -13,7 +13,7 @@ OIDC_SCOPES="${OIDC_SCOPES:-openid profile email}"
 
 # Normalize API_TOKEN: we always build the header as `Bearer ${API_TOKEN}` in nginx.
 if [ -n "$API_TOKEN" ]; then
-    API_TOKEN="$(echo "$API_TOKEN" | sed -E 's/^[Bb]earer[[:space:]]+//')"
+    API_TOKEN="$(printf '%s\n' "$API_TOKEN" | sed -E 's/^[Bb]earer[[:space:]]+//')"
 fi
 
 # Export variables so envsubst can access them
@@ -52,7 +52,14 @@ case "$API_BASE_URL" in
         ;;
 esac
 
+# Escape a string for safe interpolation inside a double-quoted nginx directive value
+nginx_escape() {
+    printf '%s' "$1" | tr -d '\r\n' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/${dollar}/g'
+}
+
 # Create a temporary nginx config with environment variables substituted
+API_TOKEN="$(nginx_escape "$API_TOKEN")" \
+PUBLIC_ENABLED="$(nginx_escape "$PUBLIC_ENABLED")" \
 envsubst '$API_BASE_URL $API_TOKEN $PUBLIC_ENABLED' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # Generate runtime app config for the browser with escaped JS string values

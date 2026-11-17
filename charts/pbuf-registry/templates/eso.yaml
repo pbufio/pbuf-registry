@@ -15,16 +15,25 @@ spec:
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
         property: {{ .Values.secrets.eso.databaseDSNProperty }}
+{{- if .Values.secrets.eso.serverStaticTokenProperty }}
     - secretKey: SERVER_STATIC_TOKEN
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
         property: {{ .Values.secrets.eso.serverStaticTokenProperty }}
+{{- end }}
+{{- if .Values.secrets.eso.uiApiTokenProperty }}
+    - secretKey: UI_API_TOKEN
+      remoteRef:
+        key: {{ .Values.secrets.eso.remoteRefKey }}
+        property: {{ .Values.secrets.eso.uiApiTokenProperty }}
+{{- end }}
 {{- if .Values.secrets.eso.driftWebhookUrlProperty }}
     - secretKey: DAEMONS_PROTOPARSING_WEBHOOK_URL
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
         property: {{ .Values.secrets.eso.driftWebhookUrlProperty }}
 {{- end }}
+{{- if and .Values.service.grpc.tls.enabled .Values.secrets.eso.serverGrpcTlsCertFileProperty .Values.secrets.eso.serverGrpcTlsKeyFileProperty }}
     - secretKey: server-cert.pem
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
@@ -33,4 +42,5 @@ spec:
       remoteRef:
         key: {{ .Values.secrets.eso.remoteRefKey }}
         property: {{ .Values.secrets.eso.serverGrpcTlsKeyFileProperty }}
+{{- end }}
 {{- end }}

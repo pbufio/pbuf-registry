@@ -4,8 +4,8 @@ export const normalizeToken = (raw) => {
 }
 
 /**
- * Validates that a token has the expected pbuf format.
- * Valid tokens: pbuf_user_... or pbuf_bot_...
+ * Validates that a token is a non-empty single-token credential without whitespace or control characters.
+ * Supports pbuf_user_..., pbuf_bot_..., OIDC JWTs, and SERVER_STATIC_TOKEN secrets.
  * @param {string} token - The normalized token (without "Bearer " prefix)
  * @returns {{ valid: boolean, error?: string }}
  */
@@ -14,22 +14,33 @@ export const validateTokenFormat = (token) => {
     return { valid: false, error: 'Token is required' }
   }
 
-  const trimmed = token.trim()
+  const trimmed = String(token).trim()
   if (!trimmed) {
     return { valid: false, error: 'Token is required' }
   }
 
-  // Check for valid pbuf token format (pbuf_<type>_<base64url>) or OIDC JWT (<header>.<payload>.<signature>)
-  const pbufPattern = /^pbuf_(user|bot)_[A-Za-z0-9_-]+$/
-  const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
-  if (!pbufPattern.test(trimmed) && !jwtPattern.test(trimmed)) {
+  if (!/^[\x21-\x7e]+$/.test(trimmed)) {
     return {
       valid: false,
-      error: 'Invalid token format. Expected: pbuf_user_..., pbuf_bot_..., or a valid JWT'
+      error: 'Invalid token format: token must contain only printable non-space ASCII characters'
     }
   }
 
   return { valid: true }
+}
+
+/**
+ * Sanitizes a post-login redirect target so only safe in-app relative paths are allowed.
+ * Rejects protocol-relative URLs (//host), backslash prefixes (/\host), external URLs, and control chars.
+ */
+export const sanitizeNextUrl = (raw, fallback = '/modules') => {
+  const candidate = Array.isArray(raw) ? raw[0] : raw
+  if (!candidate) return fallback
+  const str = String(candidate).trim()
+  if (!str.startsWith('/') || str.startsWith('//') || str.startsWith('/\\') || /[\x00-\x1f\x7f]/.test(str)) {
+    return fallback
+  }
+  return str
 }
 
 export const parseBool = (value) => {
