@@ -15,6 +15,8 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/model"
 )
 
+var ErrDriftEventNotFound = errors.New("drift event not found")
+
 // DriftRepository handles drift detection data operations
 type DriftRepository interface {
 	// GetTagsWithoutHashes returns tag IDs that have protofiles without content hashes
@@ -36,6 +38,8 @@ type DriftRepository interface {
 	GetUnacknowledgedDriftEvents(ctx context.Context) ([]model.DriftEvent, error)
 	// GetDriftEvents returns drift events, optionally filtered to only unacknowledged events
 	GetDriftEvents(ctx context.Context, unacknowledgedOnly bool) ([]model.DriftEvent, error)
+	// GetDriftEventModuleName returns the module name for a drift event ID
+	GetDriftEventModuleName(ctx context.Context, eventID string) (string, error)
 	// AcknowledgeDriftEvent marks a drift event as acknowledged
 	AcknowledgeDriftEvent(ctx context.Context, eventID string, acknowledgedBy string) error
 	// GetDriftEventsForModule returns drift events for a specific module by name
@@ -425,8 +429,26 @@ func (d *driftRepo) GetDriftEvents(ctx context.Context, unacknowledgedOnly bool)
 	return events, nil
 }
 
+func (d *driftRepo) GetDriftEventModuleName(ctx context.Context, eventID string) (string, error) {
+	var moduleName string
+	err := d.pool.QueryRow(ctx, `
+		SELECT m.name
+		FROM drift_events de
+		JOIN modules m ON de.module_id = m.id
+		WHERE de.id = $1
+	`, eventID).Scan(&moduleName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrDriftEventNotFound
+		}
+		d.logger.Errorf("error getting module name for drift event %s: %v", eventID, err)
+		return "", err
+	}
+	return moduleName, nil
+}
+
 func (d *driftRepo) AcknowledgeDriftEvent(ctx context.Context, eventID string, acknowledgedBy string) error {
-	_, err := d.pool.Exec(ctx, `
+	cmdTag, err := d.pool.Exec(ctx, `
 		UPDATE drift_events
 		SET acknowledged = true, acknowledged_at = NOW(), acknowledged_by = $1
 		WHERE id = $2
@@ -434,6 +456,9 @@ func (d *driftRepo) AcknowledgeDriftEvent(ctx context.Context, eventID string, a
 	if err != nil {
 		d.logger.Errorf("error acknowledging drift event: %v", err)
 		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrDriftEventNotFound
 	}
 
 	return nil
@@ -509,7 +534,7 @@ func (d *driftRepo) GetModuleDependencyDriftStatuses(ctx context.Context, module
 			FROM tags t
 			JOIN modules m ON t.module_id = m.id
 			WHERE m.name = $1
-			ORDER BY t.updated_at DESC
+			ORDER BY t.updated_at DESC, t.tag DESC
 			LIMIT 1
 		`, moduleName).Scan(&moduleTagID, &resolvedTagName)
 		if err != nil {
@@ -535,103 +560,66 @@ func (d *driftRepo) GetModuleDependencyDriftStatuses(ctx context.Context, module
 		}
 	}
 
-	type dependencyRef struct {
-		moduleID string
-		name     string
-		tagID    string
-		tagName  string
-	}
-
-	dependencies := make([]dependencyRef, 0)
-	depRows, err := d.pool.Query(ctx, `
-		SELECT dm.id, dm.name, dt.id, dt.tag
+	rows, err := d.pool.Query(ctx, `
+		SELECT
+			dm.name,
+			dt.tag,
+			nt.tag,
+			MAX(
+				CASE de.severity
+					WHEN 'critical' THEN 3
+					WHEN 'warning' THEN 2
+					WHEN 'info' THEN 1
+					ELSE 0
+				END
+			) AS max_severity_rank
 		FROM dependencies dep
 		JOIN tags dt ON dep.dependency_tag_id = dt.id
 		JOIN modules dm ON dt.module_id = dm.id
+		JOIN tags nt ON nt.module_id = dm.id AND nt.updated_at > dt.updated_at
+		JOIN drift_events de ON de.module_id = dm.id AND de.tag_id = nt.id
 		WHERE dep.tag_id = $1
+		GROUP BY dm.id, dm.name, dt.id, dt.tag, nt.id, nt.tag, nt.updated_at
+		HAVING MAX(
+			CASE de.severity
+				WHEN 'critical' THEN 3
+				WHEN 'warning' THEN 2
+				WHEN 'info' THEN 1
+				ELSE 0
+			END
+		) > 0
+		ORDER BY dm.name ASC, nt.updated_at ASC, nt.tag ASC
 	`, moduleTagID)
 	if err != nil {
-		d.logger.Errorf("error getting dependencies for module %s tag %s: %v", moduleName, resolvedTagName, err)
+		d.logger.Errorf("error getting dependency drift statuses for module %s tag %s: %v", moduleName, resolvedTagName, err)
 		return nil, err
 	}
-	defer depRows.Close()
-
-	for depRows.Next() {
-		var dep dependencyRef
-		if err := depRows.Scan(&dep.moduleID, &dep.name, &dep.tagID, &dep.tagName); err != nil {
-			d.logger.Errorf("error scanning dependency for module %s tag %s: %v", moduleName, resolvedTagName, err)
-			return nil, err
-		}
-		dependencies = append(dependencies, dep)
-	}
-	if err := depRows.Err(); err != nil {
-		d.logger.Errorf("error iterating dependencies for module %s tag %s: %v", moduleName, resolvedTagName, err)
-		return nil, err
-	}
+	defer rows.Close()
 
 	statuses := make([]model.DependencyDriftStatus, 0)
-
-	for _, dep := range dependencies {
-		newerTagRows, err := d.pool.Query(ctx, `
-			SELECT t.id, t.tag
-			FROM tags t
-			WHERE t.module_id = $1
-				AND t.updated_at > (SELECT updated_at FROM tags WHERE id = $2)
-			ORDER BY t.updated_at ASC
-		`, dep.moduleID, dep.tagID)
-		if err != nil {
-			d.logger.Errorf("error getting newer tags for dependency %s@%s: %v", dep.name, dep.tagName, err)
+	for rows.Next() {
+		var (
+			depName         string
+			currentTag      string
+			targetTag       string
+			maxSeverityRank int
+		)
+		if err := rows.Scan(&depName, &currentTag, &targetTag, &maxSeverityRank); err != nil {
+			d.logger.Errorf("error scanning dependency drift status for module %s: %v", moduleName, err)
 			return nil, err
 		}
-
-		for newerTagRows.Next() {
-			var newerTagID string
-			var newerTagName string
-			if err := newerTagRows.Scan(&newerTagID, &newerTagName); err != nil {
-				newerTagRows.Close()
-				d.logger.Errorf("error scanning newer dependency tag for %s: %v", dep.name, err)
-				return nil, err
-			}
-
-			var maxSeverityRank int
-			err = d.pool.QueryRow(ctx, `
-				SELECT COALESCE(MAX(
-					CASE severity
-						WHEN 'critical' THEN 3
-						WHEN 'warning' THEN 2
-						WHEN 'info' THEN 1
-						ELSE 0
-					END
-				), 0)
-				FROM drift_events
-				WHERE module_id = $1 AND tag_id = $2
-			`, dep.moduleID, newerTagID).Scan(&maxSeverityRank)
-			if err != nil {
-				newerTagRows.Close()
-				d.logger.Errorf("error getting drift severity for dependency %s target tag %s: %v", dep.name, newerTagName, err)
-				return nil, err
-			}
-
-			if maxSeverityRank == 0 {
-				continue
-			}
-
-			severity := severityRankToDriftSeverity(maxSeverityRank)
-			statuses = append(statuses, model.DependencyDriftStatus{
-				DependencyName: dep.name,
-				CurrentTag:     dep.tagName,
-				TargetTag:      newerTagName,
-				Severity:       severity,
-				Recommendation: recommendationFromSeverity(severity),
-			})
-		}
-
-		if err := newerTagRows.Err(); err != nil {
-			newerTagRows.Close()
-			d.logger.Errorf("error iterating newer tags for dependency %s@%s: %v", dep.name, dep.tagName, err)
-			return nil, err
-		}
-		newerTagRows.Close()
+		severity := severityRankToDriftSeverity(maxSeverityRank)
+		statuses = append(statuses, model.DependencyDriftStatus{
+			DependencyName: depName,
+			CurrentTag:     currentTag,
+			TargetTag:      targetTag,
+			Severity:       severity,
+			Recommendation: recommendationFromSeverity(severity),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		d.logger.Errorf("error iterating dependency drift statuses for module %s tag %s: %v", moduleName, resolvedTagName, err)
+		return nil, err
 	}
 
 	return statuses, nil

@@ -51,6 +51,34 @@ func (_m *DriftRepository) ComputeAndStoreHashes(ctx context.Context, tagID stri
 	return r0
 }
 
+// GetDriftEventModuleName provides a mock function with given fields: ctx, eventID
+func (_m *DriftRepository) GetDriftEventModuleName(ctx context.Context, eventID string) (string, error) {
+	ret := _m.Called(ctx, eventID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDriftEventModuleName")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (string, error)); ok {
+		return rf(ctx, eventID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = rf(ctx, eventID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, eventID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetDriftEventsForModule provides a mock function with given fields: ctx, moduleName, tagName
 func (_m *DriftRepository) GetDriftEventsForModule(ctx context.Context, moduleName string, tagName string) ([]model.DriftEvent, error) {
 	ret := _m.Called(ctx, moduleName, tagName)

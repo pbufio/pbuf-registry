@@ -19,15 +19,6 @@ const (
 	authorizationKey = "Authorization"
 )
 
-type userContextKeyType struct{}
-
-type isAdminKeyType struct{}
-
-var (
-	userContextKey = userContextKeyType{}
-	isAdminKey     = isAdminKeyType{}
-)
-
 type AuthMiddleware interface {
 	NewAuthMiddleware() middleware.Middleware
 }
@@ -137,7 +128,7 @@ func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
 			// Check if it's the admin token
 			if a.adminToken != "" && token == a.adminToken {
 				// Admin has full access
-				ctx = context.WithValue(ctx, isAdminKey, true)
+				ctx = model.ContextWithAdmin(ctx, true)
 				return handler(ctx, req)
 			}
 
@@ -161,8 +152,8 @@ func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
 			}
 
 			// User found and active, add to context
-			ctx = context.WithValue(ctx, userContextKey, user)
-			ctx = context.WithValue(ctx, isAdminKey, false)
+			ctx = model.ContextWithUser(ctx, user)
+			ctx = model.ContextWithAdmin(ctx, false)
 			return handler(ctx, req)
 		}
 	}
@@ -176,7 +167,7 @@ func (a *aclAuth) authenticateOIDC(ctx context.Context, req interface{}, handler
 	}
 
 	if claims.IsAdmin {
-		ctx = context.WithValue(ctx, isAdminKey, true)
+		ctx = model.ContextWithAdmin(ctx, true)
 		return handler(ctx, req)
 	}
 
@@ -220,29 +211,27 @@ func (a *aclAuth) authenticateOIDC(ctx context.Context, req interface{}, handler
 		return nil, jwt.ErrTokenInvalid
 	}
 
-	ctx = context.WithValue(ctx, userContextKey, user)
-	ctx = context.WithValue(ctx, isAdminKey, false)
+	ctx = model.ContextWithUser(ctx, user)
+	ctx = model.ContextWithAdmin(ctx, false)
 	return handler(ctx, req)
 }
 
 // ContextWithUser stores an authenticated user in context.
 func ContextWithUser(ctx context.Context, user *model.User) context.Context {
-	return context.WithValue(ctx, userContextKey, user)
+	return model.ContextWithUser(ctx, user)
 }
 
 // ContextWithAdmin marks whether the request in context has global admin privileges.
 func ContextWithAdmin(ctx context.Context, isAdmin bool) context.Context {
-	return context.WithValue(ctx, isAdminKey, isAdmin)
+	return model.ContextWithAdmin(ctx, isAdmin)
 }
 
 // GetUserFromContext extracts the user from context
 func GetUserFromContext(ctx context.Context) (*model.User, bool) {
-	user, ok := ctx.Value(userContextKey).(*model.User)
-	return user, ok
+	return model.GetUserFromContext(ctx)
 }
 
 // IsAdmin checks if the current request is from admin
 func IsAdmin(ctx context.Context) bool {
-	isAdmin, ok := ctx.Value(isAdminKey).(bool)
-	return ok && isAdmin
+	return model.IsAdmin(ctx)
 }

@@ -307,6 +307,14 @@ func TestDriftRepository_AcknowledgeDriftEvent(t *testing.T) {
 	require.NotEmpty(t, eventID, "should find unacknowledged event")
 
 	// Acknowledge the event
+	resolvedModule, err := suite.driftRepository.GetDriftEventModuleName(ctx, eventID)
+	require.NoError(t, err)
+	assert.Equal(t, moduleName, resolvedModule)
+
+	_, err = suite.driftRepository.GetDriftEventModuleName(ctx, "00000000-0000-0000-0000-000000000000")
+	assert.ErrorIs(t, err, ErrDriftEventNotFound)
+	assert.ErrorIs(t, suite.driftRepository.AcknowledgeDriftEvent(ctx, "00000000-0000-0000-0000-000000000000", "test-user"), ErrDriftEventNotFound)
+
 	err = suite.driftRepository.AcknowledgeDriftEvent(ctx, eventID, "test-user")
 	require.NoError(t, err)
 
@@ -443,6 +451,13 @@ func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {
 	assert.Equal(t, "v2.0.0", statuses[1].TargetTag)
 	assert.Equal(t, model.DriftSeverityCritical, statuses[1].Severity)
 	assert.Equal(t, model.DependencyDriftRecommendationAlertReview, statuses[1].Recommendation)
+
+	latestStatuses, err := suite.driftRepository.GetModuleDependencyDriftStatuses(ctx, moduleA, "")
+	require.NoError(t, err)
+	require.Len(t, latestStatuses, 2)
+
+	_, err = suite.driftRepository.GetModuleDependencyDriftStatuses(ctx, moduleA, "v9.9.9")
+	assert.ErrorIs(t, err, ErrTagNotFound)
 }
 
 func TestDriftRepository_GetTagsWithoutHashes(t *testing.T) {

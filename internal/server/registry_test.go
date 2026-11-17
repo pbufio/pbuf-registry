@@ -6,9 +6,13 @@ import (
 	"net"
 	"testing"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
+	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -149,6 +153,54 @@ func TestPushModule_AtomicWithDependencies(t *testing.T) {
 	if mod.Name != "org/svc" {
 		t.Fatalf("expected module name org/svc, got %s", mod.Name)
 	}
+
+	registryRepository.AssertExpectations(t)
+}
+
+func TestRegistryServer_ErrorCodesAndDraftFallback(t *testing.T) {
+	ctx := context.Background()
+	registryRepository := &mocks.RegistryRepository{}
+	metadataRepository := &mocks.MetadataRepository{}
+	srv := NewRegistryServer(registryRepository, metadataRepository, nil)
+
+	registryRepository.On("GetModule", mock.Anything, "missing/mod").Return(nil, nil).Once()
+	_, err := srv.GetModule(ctx, &v1.GetModuleRequest{Name: "missing/mod"})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsNotFound(err))
+
+	registryRepository.On("ListModules", mock.Anything, 50, "!!!bad").
+		Return(nil, "", data.ErrInvalidPageToken).Once()
+	_, err = srv.ListModules(ctx, &v1.ListModulesRequest{PageToken: "!!!bad"})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsBadRequest(err))
+
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{
+		ModuleName: "org/svc",
+		Tag:        "v1.0.0",
+		Protofiles: []*v1.ProtoFile{{Filename: "../escape.proto", Content: `syntax = "proto3";`}},
+	})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsBadRequest(err))
+
+	registryRepository.On("PullModule", mock.Anything, "org/svc", "v1.0.0-rc1").
+		Return(nil, nil, data.ErrTagNotFound).Once()
+	registryRepository.On("PullDraftModule", mock.Anything, "org/svc", "v1.0.0-rc1").
+		Return(nil, nil, data.ErrTagNotFound).Once()
+	_, err = srv.PullModule(ctx, &v1.PullModuleRequest{Name: "org/svc", Tag: "v1.0.0-rc1"})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsNotFound(err))
+
+	registryRepository.On("DeleteModule", mock.Anything, "missing/mod").
+		Return(data.ErrModuleNotFound).Once()
+	_, err = srv.DeleteModule(ctx, &v1.DeleteModuleRequest{Name: "missing/mod"})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsNotFound(err))
+
+	registryRepository.On("DeleteModuleTag", mock.Anything, "org/svc", "v9.9.9").
+		Return(data.ErrTagNotFound).Once()
+	_, err = srv.DeleteModuleTag(ctx, &v1.DeleteModuleTagRequest{Name: "org/svc", Tag: "v9.9.9"})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsNotFound(err))
 
 	registryRepository.AssertExpectations(t)
 }
