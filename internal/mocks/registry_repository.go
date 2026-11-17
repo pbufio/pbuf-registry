@@ -117,6 +117,36 @@ func (_m *RegistryRepository) GetModule(ctx context.Context, name string) (*v1.M
 	return r0, r1
 }
 
+// GetModuleWithDrafts provides a mock function with given fields: ctx, name, includeDraftTags
+func (_m *RegistryRepository) GetModuleWithDrafts(ctx context.Context, name string, includeDraftTags bool) (*v1.Module, error) {
+	ret := _m.Called(ctx, name, includeDraftTags)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetModuleWithDrafts")
+	}
+
+	var r0 *v1.Module
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) (*v1.Module, error)); ok {
+		return rf(ctx, name, includeDraftTags)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) *v1.Module); ok {
+		r0 = rf(ctx, name, includeDraftTags)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v1.Module)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = rf(ctx, name, includeDraftTags)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetModuleDependencies provides a mock function with given fields: ctx, name, tag
 func (_m *RegistryRepository) GetModuleDependencies(ctx context.Context, name string, tag string) ([]*v1.Dependency, error) {
 	ret := _m.Called(ctx, name, tag)

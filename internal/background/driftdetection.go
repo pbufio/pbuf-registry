@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -15,6 +16,7 @@ import (
 type driftDetection struct {
 	driftRepository    data.DriftRepository
 	metadataRepository data.MetadataRepository
+	failedParseTags    map[string]bool
 	log                *log.Helper
 }
 
@@ -43,6 +45,9 @@ func (d *driftDetection) detectDrift(ctx context.Context, tagID string) (*model.
 		// No previous tag, this is the first version - no drift to detect
 		d.log.Infof("no previous tag found for module %s, skipping drift detection", moduleID)
 		return result, nil
+	}
+	if d.failedParseTags[previousTagID] {
+		return nil, fmt.Errorf("previous tag %s parsed proto files are not available yet", previousTagID)
 	}
 
 	// Get current and previous file hashes
@@ -81,15 +86,13 @@ func (d *driftDetection) detectDrift(ctx context.Context, tagID string) (*model.
 			if currentParsed == nil {
 				currentParsed, err = d.getParsedProtoMap(ctx, tagID)
 				if err != nil {
-					d.log.Errorf("error getting current parsed files: %v", err)
-					currentParsed = make(map[string]*unordered.Proto)
+					return nil, fmt.Errorf("getting current parsed files for tag %s: %w", tagID, err)
 				}
 			}
 			if previousParsed == nil {
 				previousParsed, err = d.getParsedProtoMap(ctx, previousTagID)
 				if err != nil {
-					d.log.Errorf("error getting previous parsed files: %v", err)
-					previousParsed = make(map[string]*unordered.Proto)
+					return nil, fmt.Errorf("getting previous parsed files for tag %s: %w", previousTagID, err)
 				}
 			}
 

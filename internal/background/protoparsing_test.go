@@ -144,10 +144,91 @@ func TestProtoParsingDaemon_Run_PoisonPillDoesNotBlockValidTagsOrDriftDetection(
 		}, nil).
 		Once()
 
+	metaRepo.On("MarkTagProcessed", mock.Anything, "tag-1").
+		Return(nil).
+		Once()
+	metaRepo.On("MarkTagProcessed", mock.Anything, "tag-2").
+		Return(nil).
+		Once()
+
 	err := daemon.Run()
 	require.NoError(t, err)
 	require.Len(t, notifiedEvents, 1)
 	assert.Equal(t, "acme/users", notifiedEvents[0].ModuleName)
+}
+
+func TestProtoParsingDaemon_Run_DoesNotMarkTagProcessedWhenSaveDriftEventsFails(t *testing.T) {
+	metaRepo := mocks.NewMetadataRepository(t)
+	driftRepo := mocks.NewDriftRepository(t)
+	daemon := NewProtoParsingDaemon(metaRepo, driftRepo, log.DefaultLogger)
+
+	protoV1 := `syntax = "proto3"; package test.v1; message User { string id = 1; string email = 2; }`
+	protoV2 := `syntax = "proto3"; package test.v1; message User { string id = 1; }`
+
+	metaRepo.On("GetUnprocessedTagIds", mock.Anything).Return([]string{"tag-2"}, nil).Once()
+	metaRepo.On("GetProtoFilesForTagId", mock.Anything, "tag-2").
+		Return([]*v1.ProtoFile{{Filename: "user.proto", Content: protoV2}}, nil).Once()
+	metaRepo.On("SaveParsedProtoFiles", mock.Anything, "tag-2", mock.Anything).Return(nil).Once()
+
+	driftRepo.On("GetTagsWithoutHashes", mock.Anything).Return([]string{"tag-2"}, nil).Once()
+	driftRepo.On("ComputeAndStoreHashes", mock.Anything, "tag-2").Return(nil).Once()
+	driftRepo.On("GetTagInfo", mock.Anything, "tag-2").Return("mod-1", "v2.0.0", nil).Once()
+	driftRepo.On("GetPreviousTagID", mock.Anything, "mod-1", "tag-2").Return("tag-1", nil).Once()
+	driftRepo.On("GetFileHashesForTag", mock.Anything, "tag-2").Return(map[string]string{"user.proto": "h2"}, nil).Once()
+	driftRepo.On("GetFileHashesForTag", mock.Anything, "tag-1").Return(map[string]string{"user.proto": "h1"}, nil).Once()
+	metaRepo.On("GetParsedProtoFiles", mock.Anything, "tag-2").
+		Return([]*model.ParsedProtoFile{{Filename: "user.proto", Proto: parseProtoString(t, protoV2)}}, nil).Once()
+	metaRepo.On("GetParsedProtoFiles", mock.Anything, "tag-1").
+		Return([]*model.ParsedProtoFile{{Filename: "user.proto", Proto: parseProtoString(t, protoV1)}}, nil).Once()
+	driftRepo.On("SaveDriftEvents", mock.Anything, mock.Anything).
+		Return(nil, errors.New("transient db blip")).Once()
+
+	require.NoError(t, daemon.Run())
+}
+
+func TestProtoParsingDaemon_Run_RetriesWhenHashesOrPreviousTagParseFail(t *testing.T) {
+	t.Run("ComputeAndStoreHashes failure skips MarkTagProcessed", func(t *testing.T) {
+		metaRepo := mocks.NewMetadataRepository(t)
+		driftRepo := mocks.NewDriftRepository(t)
+		daemon := NewProtoParsingDaemon(metaRepo, driftRepo, log.DefaultLogger)
+
+		protoV1 := `syntax = "proto3"; package test.v1; message User { string id = 1; }`
+		metaRepo.On("GetUnprocessedTagIds", mock.Anything).Return([]string{"tag-1"}, nil).Once()
+		metaRepo.On("GetProtoFilesForTagId", mock.Anything, "tag-1").
+			Return([]*v1.ProtoFile{{Filename: "user.proto", Content: protoV1}}, nil).Once()
+		metaRepo.On("SaveParsedProtoFiles", mock.Anything, "tag-1", mock.Anything).Return(nil).Once()
+
+		driftRepo.On("GetTagsWithoutHashes", mock.Anything).Return([]string{"tag-1"}, nil).Once()
+		driftRepo.On("ComputeAndStoreHashes", mock.Anything, "tag-1").Return(errors.New("db hash error")).Once()
+
+		require.NoError(t, daemon.Run())
+	})
+
+	t.Run("previous tag SaveParsedProtoFiles failure skips MarkTagProcessed on newer tag", func(t *testing.T) {
+		metaRepo := mocks.NewMetadataRepository(t)
+		driftRepo := mocks.NewDriftRepository(t)
+		daemon := NewProtoParsingDaemon(metaRepo, driftRepo, log.DefaultLogger)
+
+		protoV1 := `syntax = "proto3"; package test.v1; message User { string id = 1; string email = 2; }`
+		protoV2 := `syntax = "proto3"; package test.v1; message User { string id = 1; }`
+
+		metaRepo.On("GetUnprocessedTagIds", mock.Anything).Return([]string{"tag-1", "tag-2"}, nil).Once()
+		metaRepo.On("GetProtoFilesForTagId", mock.Anything, "tag-1").
+			Return([]*v1.ProtoFile{{Filename: "user.proto", Content: protoV1}}, nil).Once()
+		metaRepo.On("SaveParsedProtoFiles", mock.Anything, "tag-1", mock.Anything).
+			Return(errors.New("transient save failure")).Once()
+		metaRepo.On("GetProtoFilesForTagId", mock.Anything, "tag-2").
+			Return([]*v1.ProtoFile{{Filename: "user.proto", Content: protoV2}}, nil).Once()
+		metaRepo.On("SaveParsedProtoFiles", mock.Anything, "tag-2", mock.Anything).Return(nil).Once()
+
+		driftRepo.On("GetTagsWithoutHashes", mock.Anything).Return([]string{"tag-1", "tag-2"}, nil).Once()
+		driftRepo.On("ComputeAndStoreHashes", mock.Anything, "tag-1").Return(nil).Once()
+		driftRepo.On("ComputeAndStoreHashes", mock.Anything, "tag-2").Return(nil).Once()
+		driftRepo.On("GetTagInfo", mock.Anything, "tag-2").Return("mod-1", "v2.0.0", nil).Once()
+		driftRepo.On("GetPreviousTagID", mock.Anything, "mod-1", "tag-2").Return("tag-1", nil).Once()
+
+		require.NoError(t, daemon.Run())
+	})
 }
 
 type driftNotifierFunc func(ctx context.Context, events []model.DriftEvent) error

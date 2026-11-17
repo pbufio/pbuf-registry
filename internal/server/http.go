@@ -13,6 +13,19 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/middleware"
 )
 
+const maxHTTPRequestBytes int64 = 16 << 20
+
+func maxRequestBodyFilter(maxBytes int64) kratosHttp.FilterFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // NewHTTPServer new a HTTP server.
 func NewHTTPServer(cfg *config.Server,
 	registryServer *RegistryServer,
@@ -45,6 +58,7 @@ func NewHTTPServer(cfg *config.Server,
 	opts := []kratosHttp.ServerOption{
 		kratosHttp.Address(cfg.HTTP.Addr),
 		kratosHttp.Timeout(cfg.HTTP.Timeout),
+		kratosHttp.Filter(maxRequestBodyFilter(maxHTTPRequestBytes)),
 		kratosHttp.Middleware(serverMiddlewares...),
 		kratosHttp.NotFoundHandler(http.NotFoundHandler()),
 		kratosHttp.MethodNotAllowedHandler(methodNotAllowedHandler()),

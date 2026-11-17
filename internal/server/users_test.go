@@ -223,14 +223,14 @@ func TestUsersServer_ListUsers_GRPC(t *testing.T) {
 			{ID: uuid.New(), Name: "u1", Type: model.UserTypeUser, IsActive: true},
 			{ID: uuid.New(), Name: "u2", Type: model.UserTypeBot, IsActive: false},
 		}
-		userRepo.On("ListUsers", mock.Anything, 50, 0).Return(users, nil).Once()
+		userRepo.On("ListUsers", mock.Anything, 50, 0).Return(users, 12, nil).Once()
 
 		resp, err := client.ListUsers(ctx, &v1.ListUsersRequest{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if resp.GetTotal() != int32(len(users)) {
-			t.Fatalf("expected total %d, got %d", len(users), resp.GetTotal())
+		if resp.GetTotal() != 12 {
+			t.Fatalf("expected total 12, got %d", resp.GetTotal())
 		}
 		if len(resp.GetUsers()) != len(users) {
 			t.Fatalf("expected %d users, got %d", len(users), len(resp.GetUsers()))
@@ -246,7 +246,7 @@ func TestUsersServer_ListUsers_GRPC(t *testing.T) {
 		client, closer := setupUsersClient(t, userRepo, aclRepo)
 		defer closer()
 
-		userRepo.On("ListUsers", mock.Anything, 1000, 2000).Return([]*model.User{}, nil).Once()
+		userRepo.On("ListUsers", mock.Anything, 1000, 2000).Return([]*model.User{}, 5, nil).Once()
 
 		_, err := client.ListUsers(ctx, &v1.ListUsersRequest{PageSize: 50000, Page: 2})
 		if err != nil {
@@ -260,7 +260,7 @@ func TestUsersServer_ListUsers_GRPC(t *testing.T) {
 		client, closer := setupUsersClient(t, userRepo, aclRepo)
 		defer closer()
 
-		userRepo.On("ListUsers", mock.Anything, 50, 0).Return(nil, errors.New("db")).Once()
+		userRepo.On("ListUsers", mock.Anything, 50, 0).Return(nil, 0, errors.New("db")).Once()
 
 		_, err := client.ListUsers(ctx, &v1.ListUsersRequest{})
 		requireStatusCode(t, err, codes.Internal)
@@ -272,7 +272,7 @@ func TestUsersServer_ListUsers_GRPC(t *testing.T) {
 		client, closer := setupUsersClient(t, userRepo, aclRepo)
 		defer closer()
 
-		userRepo.On("ListUsers", mock.Anything, 50, 0).Return([]*model.User{}, nil).Once()
+		userRepo.On("ListUsers", mock.Anything, 50, 0).Return([]*model.User{}, 0, nil).Once()
 
 		_, err := client.ListUsers(ctx, &v1.ListUsersRequest{PageSize: 0, Page: -10})
 		if err != nil {
@@ -629,7 +629,7 @@ func TestUsersServer_GrantPermission_GRPC(t *testing.T) {
 			e.CreatedAt = createdAt
 		}).Return(nil).Once()
 
-		resp, err := client.GrantPermission(ctx, &v1.GrantPermissionRequest{UserId: id.String(), ModuleName: "mod", Permission: v1.Permission_PERMISSION_READ})
+		resp, err := client.GrantPermission(ctx, &v1.GrantPermissionRequest{UserId: id.String(), ModuleName: "  mod  ", Permission: v1.Permission_PERMISSION_READ})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -726,7 +726,7 @@ func TestUsersServer_RevokePermission_GRPC(t *testing.T) {
 		id := uuid.New()
 		aclRepo.On("RevokePermission", mock.Anything, id, "mod").Return(nil).Once()
 
-		resp, err := client.RevokePermission(ctx, &v1.RevokePermissionRequest{UserId: id.String(), ModuleName: "mod"})
+		resp, err := client.RevokePermission(ctx, &v1.RevokePermissionRequest{UserId: id.String(), ModuleName: "  mod  "})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -30,12 +30,45 @@ func TestMetadataServer_GetMetadata_Validation(t *testing.T) {
 		assert.Equal(t, "module name is required", kerrors.FromError(err).Message)
 	})
 
-	t.Run("missing tag", func(t *testing.T) {
-		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/orders", Tag: ""})
+	t.Run("missing tag returns MODULE_NOT_FOUND when module does not exist", func(t *testing.T) {
+		regRepo.On("GetModuleWithDrafts", mock.Anything, "acme/missing", false).
+			Return((*v1.Module)(nil), nil).Once()
+		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/missing", Tag: ""})
 		assert.Nil(t, resp)
 		require.Error(t, err)
-		assert.True(t, kerrors.IsBadRequest(err))
-		assert.Equal(t, "tag is required", kerrors.FromError(err).Message)
+		assert.True(t, kerrors.IsNotFound(err))
+		assert.Equal(t, "MODULE_NOT_FOUND", kerrors.FromError(err).Reason)
+	})
+
+	t.Run("missing tag returns MODULE_TAG_NOT_FOUND when module has no published tags", func(t *testing.T) {
+		regRepo.On("GetModuleWithDrafts", mock.Anything, "acme/empty", false).
+			Return(&v1.Module{Name: "acme/empty"}, nil).Once()
+		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/empty", Tag: ""})
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.True(t, kerrors.IsNotFound(err))
+		assert.Equal(t, "MODULE_TAG_NOT_FOUND", kerrors.FromError(err).Reason)
+	})
+
+	t.Run("missing tag defaults to latest published tag", func(t *testing.T) {
+		parsedFiles, err := utils.ParseProtoFilesContents([]*v1.ProtoFile{
+			{Filename: "orders.proto", Content: `syntax = "proto3"; package acme.orders.v1; message Order {}`},
+		})
+		require.NoError(t, err)
+
+		regRepo.On("GetModuleWithDrafts", mock.Anything, "acme/orders", false).
+			Return(&v1.Module{Name: "acme/orders", Tags: []string{"v1.2.0", "v1.1.0"}}, nil).Once()
+		regRepo.On("GetModuleTagId", mock.Anything, "acme/orders", "v1.2.0").
+			Return("tag-latest", nil).Once()
+		metaRepo.On("GetTagMetaByTagId", mock.Anything, "tag-latest").
+			Return(&model.TagMeta{Packages: []string{"acme.orders.v1"}}, nil).Once()
+		metaRepo.On("GetParsedProtoFiles", mock.Anything, "tag-latest").
+			Return(parsedFiles, nil).Once()
+
+		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/orders", Tag: ""})
+		require.NoError(t, err)
+		require.Len(t, resp.Packages, 1)
+		assert.Equal(t, "acme.orders.v1", resp.Packages[0].Name)
 	})
 }
 

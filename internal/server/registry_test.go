@@ -163,10 +163,22 @@ func TestRegistryServer_ErrorCodesAndDraftFallback(t *testing.T) {
 	metadataRepository := &mocks.MetadataRepository{}
 	srv := NewRegistryServer(registryRepository, metadataRepository, nil)
 
-	registryRepository.On("GetModule", mock.Anything, "missing/mod").Return(nil, nil).Once()
+	registryRepository.On("GetModuleWithDrafts", mock.Anything, "missing/mod", false).Return(nil, nil).Once()
 	_, err := srv.GetModule(ctx, &v1.GetModuleRequest{Name: "missing/mod"})
 	require.Error(t, err)
 	assert.True(t, kerrors.IsNotFound(err))
+
+	registryRepository.On("GetModuleWithDrafts", mock.Anything, "org/with-drafts", false).
+		Return(&v1.Module{Name: "org/with-drafts"}, nil).Once()
+	noDraftsMod, err := srv.GetModule(ctx, &v1.GetModuleRequest{Name: "org/with-drafts", IncludeDraftTags: false})
+	require.NoError(t, err)
+	assert.Empty(t, noDraftsMod.DraftTags)
+
+	registryRepository.On("GetModuleWithDrafts", mock.Anything, "org/with-drafts", true).
+		Return(&v1.Module{Name: "org/with-drafts", DraftTags: []string{"v2.0.0-rc1"}}, nil).Once()
+	withDraftsMod, err := srv.GetModule(ctx, &v1.GetModuleRequest{Name: "org/with-drafts", IncludeDraftTags: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"v2.0.0-rc1"}, withDraftsMod.DraftTags)
 
 	registryRepository.On("ListModules", mock.Anything, 50, "!!!bad").
 		Return(nil, "", data.ErrInvalidPageToken).Once()

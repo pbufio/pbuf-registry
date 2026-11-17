@@ -25,7 +25,7 @@ func (n *noopUserRepo) GetUserByName(ctx context.Context, name string) (*model.U
 func (n *noopUserRepo) GetUserByToken(ctx context.Context, token string) (*model.User, error) {
 	panic("not used")
 }
-func (n *noopUserRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, error) {
+func (n *noopUserRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, int, error) {
 	panic("not used")
 }
 func (n *noopUserRepo) UpdateUser(ctx context.Context, user *model.User) error { panic("not used") }

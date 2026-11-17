@@ -50,13 +50,12 @@ func (r *RegistryServer) RegisterModule(ctx context.Context, request *v1.Registe
 }
 
 func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleRequest) (*v1.Module, error) {
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
+	}
 	name := request.Name
 
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
-	}
-
-	module, err := r.registryRepository.GetModule(ctx, name)
+	module, err := r.registryRepository.GetModuleWithDrafts(ctx, name, request.IncludeDraftTags)
 	if err != nil {
 		r.logger.Infof("error getting module: %v", err)
 		return nil, err

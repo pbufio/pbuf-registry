@@ -65,7 +65,7 @@ service UserService {
   // Revoke permission from a user or bot
   rpc RevokePermission(RevokePermissionRequest) returns (RevokePermissionResponse) {
     option (google.api.http) = {
-      delete: "/v1/users/{user_id}/permissions/{module_name}"
+      delete: "/v1/users/{user_id}/permissions/{module_name=**}"
     };
   }
 

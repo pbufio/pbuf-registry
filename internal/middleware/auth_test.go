@@ -120,6 +120,13 @@ func Test_staticTokenAuth_NewAuthMiddleware(t *testing.T) {
 			want: "hello",
 		},
 		{
+			name: "staticTokenAuthWithLowercaseBearerPrefix",
+			fields: fields{
+				token: "bearer simple-token",
+			},
+			want: "hello",
+		},
+		{
 			name: "wrongToken",
 			fields: fields{
 				"wrong-token",

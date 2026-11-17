@@ -247,9 +247,10 @@ func Test_userRepository_ListUsers(t *testing.T) {
 	r := suite.userRepository
 
 	// Get initial count
-	users, err := r.ListUsers(context.Background(), 100, 0)
+	users, initialTotal, err := r.ListUsers(context.Background(), 100, 0)
 	require.NoError(t, err)
 	initialCount := len(users)
+	assert.Equal(t, initialCount, initialTotal)
 
 	// Create some users for listing
 	for i := 0; i < 3; i++ {
@@ -287,13 +288,20 @@ func Test_userRepository_ListUsers(t *testing.T) {
 			offset:    initialCount + 2,
 			wantCount: 1,
 		},
+		{
+			name:      "List users with out-of-range offset still returns total",
+			limit:     100,
+			offset:    initialCount + 10,
+			wantCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			users, err := r.ListUsers(context.Background(), tt.limit, tt.offset)
+			users, total, err := r.ListUsers(context.Background(), tt.limit, tt.offset)
 			require.NoError(t, err)
 			assert.Len(t, users, tt.wantCount)
+			assert.Equal(t, initialCount+3, total)
 		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	stdErrors "errors"
 	"fmt"
+	"strings"
 	"time"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
@@ -113,7 +114,7 @@ func (s *UsersServer) ListUsers(ctx context.Context, request *v1.ListUsersReques
 	}
 	offset := page * pageSize
 
-	users, err := s.userRepo.ListUsers(ctx, pageSize, offset)
+	users, total, err := s.userRepo.ListUsers(ctx, pageSize, offset)
 	if err != nil {
 		s.logger.Errorf("failed to list users: %v", err)
 		return nil, kerrors.InternalServer("USER_LIST_FAILED", "failed to list users")
@@ -121,7 +122,7 @@ func (s *UsersServer) ListUsers(ctx context.Context, request *v1.ListUsersReques
 
 	resp := &v1.ListUsersResponse{
 		Users: make([]*v1.User, 0, len(users)),
-		Total: int32(len(users)),
+		Total: int32(total),
 	}
 	for _, u := range users {
 		resp.Users = append(resp.Users, toV1User(u))
@@ -257,6 +258,10 @@ func (s *UsersServer) GrantPermission(ctx context.Context, request *v1.GrantPerm
 	if request == nil {
 		return nil, ErrInvalidRequest
 	}
+	moduleName := strings.TrimSpace(request.ModuleName)
+	if moduleName == "" {
+		return nil, ErrInvalidRequest
+	}
 
 	userID, err := parseUUID(request.UserId)
 	if err != nil {
@@ -279,7 +284,7 @@ func (s *UsersServer) GrantPermission(ctx context.Context, request *v1.GrantPerm
 
 	entry := &model.ACLEntry{
 		UserID:     userID,
-		ModuleName: request.ModuleName,
+		ModuleName: moduleName,
 		Permission: permission,
 	}
 
@@ -289,7 +294,7 @@ func (s *UsersServer) GrantPermission(ctx context.Context, request *v1.GrantPerm
 		return nil, kerrors.InternalServer("PERMISSION_GRANT_FAILED", "failed to grant permission")
 	}
 
-	s.logger.Infof("granted %s permission on module %s to user %s", permission, request.ModuleName, userID)
+	s.logger.Infof("granted %s permission on module %s to user %s", permission, moduleName, userID)
 
 	return &v1.GrantPermissionResponse{Entry: toV1ACLEntry(entry)}, nil
 }
@@ -298,13 +303,17 @@ func (s *UsersServer) RevokePermission(ctx context.Context, request *v1.RevokePe
 	if request == nil {
 		return nil, ErrInvalidRequest
 	}
+	moduleName := strings.TrimSpace(request.ModuleName)
+	if moduleName == "" {
+		return nil, ErrInvalidRequest
+	}
 
 	userID, err := parseUUID(request.UserId)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.aclRepo.RevokePermission(ctx, userID, request.ModuleName)
+	err = s.aclRepo.RevokePermission(ctx, userID, moduleName)
 	if err != nil {
 		if stdErrors.Is(err, data.ErrPermissionNotFound) {
 			return nil, kerrors.NotFound("PERMISSION_NOT_FOUND", "permission not found")
@@ -313,7 +322,7 @@ func (s *UsersServer) RevokePermission(ctx context.Context, request *v1.RevokePe
 		return nil, kerrors.InternalServer("PERMISSION_REVOKE_FAILED", "failed to revoke permission")
 	}
 
-	s.logger.Infof("revoked permission on module %s from user %s", request.ModuleName, userID)
+	s.logger.Infof("revoked permission on module %s from user %s", moduleName, userID)
 
 	return &v1.RevokePermissionResponse{Success: true}, nil
 }

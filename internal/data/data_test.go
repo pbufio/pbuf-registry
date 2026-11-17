@@ -404,10 +404,9 @@ func Test_registryRepository_PullModule(t *testing.T) {
 				tag:  "v0.0.0",
 			},
 			wantModule: &v1.Module{
-				Id:        fakeUUID,
-				Name:      "pbuf.io/pbuf-registry",
-				Tags:      []string{"v0.0.0"},
-				DraftTags: []string{"v0.0.0-rc.1"},
+				Id:   fakeUUID,
+				Name: "pbuf.io/pbuf-registry",
+				Tags: []string{"v0.0.0"},
 			},
 			want:    protofiles,
 			wantErr: false,
@@ -979,6 +978,35 @@ func Test_metadataRepo_GetTagMeta(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_metadataRepo_MarkTagProcessed(t *testing.T) {
+	ctx := context.Background()
+	regRepo := suite.registryRepository
+	metaRepo := suite.metadataRepository
+
+	moduleName := "test-mark-processed-" + time.Now().Format("20060102150405.000000000")
+	require.NoError(t, regRepo.RegisterModule(ctx, moduleName))
+	_, err := regRepo.PushModule(ctx, moduleName, "v1.0.0", protofiles)
+	require.NoError(t, err)
+
+	tagID, err := regRepo.GetModuleTagId(ctx, moduleName, "v1.0.0")
+	require.NoError(t, err)
+	require.NotEmpty(t, tagID)
+
+	parsed, err := utils.ParseProtoFilesContents(protofiles)
+	require.NoError(t, err)
+	require.NoError(t, metaRepo.SaveParsedProtoFiles(ctx, tagID, parsed))
+
+	unprocessed, err := metaRepo.GetUnprocessedTagIds(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, unprocessed, tagID)
+
+	require.NoError(t, metaRepo.MarkTagProcessed(ctx, tagID))
+
+	unprocessedAfter, err := metaRepo.GetUnprocessedTagIds(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, unprocessedAfter, tagID)
 }
 
 func Test_registryRepository_GetModuleTagId(t *testing.T) {
