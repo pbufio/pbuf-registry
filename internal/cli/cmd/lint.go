@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -13,7 +13,6 @@ import (
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
-	"github.com/pbufio/pbuf-registry/internal/cli/registry"
 	"github.com/spf13/cobra"
 	protoparser "github.com/yoheimuta/go-protoparser/v4"
 	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
@@ -45,24 +44,29 @@ type LintReport struct {
 // offline and never contacts a registry.
 func NewLintCmd(config *model.Config) *cobra.Command {
 	lintCmd := &cobra.Command{
-		Use:   "lint [paths...]",
-		Short: "Lint local .proto files offline",
-		Long:  "Lint validates .proto syntax and common style rules in export.paths (or the given paths) without contacting a registry",
-		Args:  cobra.ArbitraryArgs,
+		Use:           "lint [paths...]",
+		Short:         "Lint local .proto files offline",
+		Long:          "Lint validates .proto syntax and common style rules in export.paths (or the given paths) without contacting a registry",
+		Args:          cobra.ArbitraryArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			format, err := parseLintFormat(cmd)
+			format, err := parseLintOutputFormat(cmd)
 			if err != nil {
 				return err
 			}
 
 			paths := args
 			if len(paths) == 0 {
-				paths = resolveLintPaths(config)
+				paths = resolveLocalProtoPaths(".", config)
 			}
 
-			files, err := registry.CollectProtoFilesInDirs(paths)
+			files, err := collectLintProtoFiles(paths)
 			if err != nil {
 				return fmt.Errorf("failed to collect proto files: %w", err)
+			}
+			if len(files) == 0 {
+				return fmt.Errorf("no .proto files found in %s", strings.Join(paths, ", "))
 			}
 
 			report := lintProtoFiles(files)
@@ -78,42 +82,137 @@ func NewLintCmd(config *model.Config) *cobra.Command {
 		},
 	}
 
+	lintCmd.Flags().StringP("output", "o", "table", "output format: table|json")
 	lintCmd.Flags().String("format", "table", "output format: table|json")
 	return lintCmd
 }
 
-func parseLintFormat(cmd *cobra.Command) (string, error) {
-	raw, err := cmd.Flags().GetString("format")
+func parseLintOutputFormat(cmd *cobra.Command) (string, error) {
+	outChanged := cmd.Flags().Changed("output")
+	fmtChanged := cmd.Flags().Changed("format")
+	if outChanged && fmtChanged {
+		outFmt, err := parseFlagFormat(cmd, "output")
+		if err != nil {
+			return "", err
+		}
+		altFmt, err := parseFlagFormat(cmd, "format")
+		if err != nil {
+			return "", err
+		}
+		if outFmt != altFmt {
+			return "", fmt.Errorf("conflicting --output (%s) and --format (%s) values", outFmt, altFmt)
+		}
+		return outFmt, nil
+	}
+	if fmtChanged {
+		return parseFlagFormat(cmd, "format")
+	}
+	return parseFlagFormat(cmd, "output")
+}
+
+func canonicalFileKey(path string) (string, error) {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		if abs, absErr := filepath.Abs(resolved); absErr == nil {
+			return filepath.Clean(abs), nil
+		}
+		return filepath.Clean(resolved), nil
+	}
+	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "table", "":
-		return "table", nil
-	case "json":
-		return "json", nil
-	default:
-		return "", fmt.Errorf("invalid --format value %q (must be table or json)", raw)
-	}
+	return filepath.Clean(abs), nil
 }
 
-// resolveLintPaths mirrors the default path resolution used by `pbuf drift diff`:
-// prefer export.paths from pbuf.yaml, then fall back to api/ and proto/.
-func resolveLintPaths(config *model.Config) []string {
-	if config != nil && len(config.Export.Paths) > 0 {
-		return config.Export.Paths
+func collectLintProtoFiles(paths []string) ([]*v1.ProtoFile, error) {
+	var files []*v1.ProtoFile
+	seenFiles := make(map[string]struct{})
+	activeDirs := make(map[string]struct{})
+
+	addFile := func(path string) error {
+		key, err := canonicalFileKey(path)
+		if err != nil {
+			return err
+		}
+		if _, dup := seenFiles[key]; dup {
+			return nil
+		}
+		seenFiles[key] = struct{}{}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files = append(files, &v1.ProtoFile{
+			Filename: filepath.ToSlash(filepath.Clean(path)),
+			Content:  string(content),
+		})
+		return nil
 	}
 
-	var paths []string
-	for _, dir := range []string{"api", "proto"} {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			paths = append(paths, dir)
+	var walkDir func(dir string) error
+	walkDir = func(dir string) error {
+		dirKey, err := canonicalFileKey(dir)
+		if err != nil {
+			return err
+		}
+		if _, cycle := activeDirs[dirKey]; cycle {
+			return nil
+		}
+		activeDirs[dirKey] = struct{}{}
+		defer delete(activeDirs, dirKey)
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			child := filepath.Join(dir, entry.Name())
+			info, statErr := os.Stat(child)
+			if statErr != nil {
+				if strings.HasSuffix(entry.Name(), ".proto") {
+					return statErr
+				}
+				continue
+			}
+			if info.IsDir() {
+				if err := walkDir(child); err != nil {
+					return err
+				}
+				continue
+			}
+			if info.Mode().IsRegular() && strings.HasSuffix(entry.Name(), ".proto") {
+				if err := addFile(child); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, target := range paths {
+		info, err := os.Stat(target)
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			if err := walkDir(target); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() || !strings.HasSuffix(target, ".proto") {
+			return nil, fmt.Errorf("%s is not a regular .proto file", target)
+		}
+		if err := addFile(target); err != nil {
+			return nil, err
 		}
 	}
-	if len(paths) == 0 {
-		paths = []string{"api"}
-	}
-	return paths
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].GetFilename() < files[j].GetFilename()
+	})
+	return files, nil
 }
 
 func lintProtoFiles(files []*v1.ProtoFile) LintReport {
@@ -130,7 +229,13 @@ func lintProtoFiles(files []*v1.ProtoFile) LintReport {
 		if a.Line != b.Line {
 			return a.Line < b.Line
 		}
-		return a.Rule < b.Rule
+		if a.Column != b.Column {
+			return a.Column < b.Column
+		}
+		if a.Rule != b.Rule {
+			return a.Rule < b.Rule
+		}
+		return a.Message < b.Message
 	})
 
 	return report
@@ -138,6 +243,7 @@ func lintProtoFiles(files []*v1.ProtoFile) LintReport {
 
 type protoLinter struct {
 	filename string
+	syntax   string
 	findings []LintFinding
 }
 
@@ -171,13 +277,15 @@ func lintProtoFile(filename, content string) []LintFinding {
 		return l.findings
 	}
 
-	if proto.Syntax == nil ||
-		(proto.Syntax.ProtobufVersion != "proto3" && proto.Syntax.ProtobufVersion != "proto2") {
-		var pos meta.Position
-		if proto.Syntax != nil {
-			pos = proto.Syntax.Meta.Pos
-		}
-		l.add("SYNTAX", "missing explicit syntax (expected proto3 or proto2)", pos)
+	switch {
+	case parsed.Edition != nil:
+		l.add("SYNTAX", "editions are not supported (expected syntax proto3 or proto2)", parsed.Edition.Meta.Pos)
+	case proto.Syntax == nil:
+		l.add("SYNTAX", "missing explicit syntax (expected proto3 or proto2)", meta.Position{})
+	case proto.Syntax.ProtobufVersion != "proto3" && proto.Syntax.ProtobufVersion != "proto2":
+		l.add("SYNTAX", fmt.Sprintf("unsupported syntax %q (expected proto3 or proto2)", proto.Syntax.ProtobufVersion), proto.Syntax.Meta.Pos)
+	default:
+		l.syntax = proto.Syntax.ProtobufVersion
 	}
 
 	body := proto.ProtoBody
@@ -191,6 +299,9 @@ func lintProtoFile(filename, content string) []LintFinding {
 			pos = body.Packages[0].Meta.Pos
 		}
 		l.add("PACKAGE", "missing non-empty package declaration", pos)
+	}
+	for _, pkg := range body.Packages[1:] {
+		l.add("PACKAGE", "multiple package declarations are not allowed", pkg.Meta.Pos)
 	}
 
 	l.lintMessages(body.Messages)
@@ -219,6 +330,9 @@ func (l *protoLinter) lintMessages(messages []*unordered.Message) {
 			}
 		}
 		for _, oo := range m.MessageBody.Oneofs {
+			if !snakeCaseRe.MatchString(oo.OneofName) {
+				l.add("FIELD_NAME", fmt.Sprintf("oneof %q should be snake_case", oo.OneofName), oo.Meta.Pos)
+			}
 			for _, oof := range oo.OneofFields {
 				if !snakeCaseRe.MatchString(oof.FieldName) {
 					l.add("FIELD_NAME", fmt.Sprintf("field %q should be snake_case", oof.FieldName), oof.Meta.Pos)
@@ -238,17 +352,20 @@ func (l *protoLinter) lintEnums(enums []*unordered.Enum) {
 		if e.EnumBody == nil {
 			continue
 		}
-		hasZero := false
 		for _, ev := range e.EnumBody.EnumFields {
 			if !upperSnakeCaseRe.MatchString(ev.Ident) {
 				l.add("ENUM_VALUE_NAME", fmt.Sprintf("enum value %q should be UPPER_SNAKE_CASE", ev.Ident), ev.Meta.Pos)
 			}
-			if n, err := strconv.ParseInt(ev.Number, 10, 32); err == nil && n == 0 {
-				hasZero = true
-			}
 		}
-		if !hasZero {
-			l.add("ENUM_ZERO_VALUE", fmt.Sprintf("enum %q must define a value with number 0", e.EnumName), e.Meta.Pos)
+		if l.syntax == "proto3" {
+			if len(e.EnumBody.EnumFields) == 0 {
+				l.add("ENUM_ZERO_VALUE", fmt.Sprintf("enum %q first value must have number 0 in proto3", e.EnumName), e.Meta.Pos)
+				continue
+			}
+			first := e.EnumBody.EnumFields[0]
+			if n, err := strconv.ParseInt(first.Number, 0, 32); err != nil || n != 0 {
+				l.add("ENUM_ZERO_VALUE", fmt.Sprintf("enum %q first value must have number 0 in proto3", e.EnumName), first.Meta.Pos)
+			}
 		}
 	}
 }
@@ -274,12 +391,7 @@ func renderLintReport(w io.Writer, report LintReport, format string) error {
 		if report.Findings == nil {
 			report.Findings = []LintFinding{}
 		}
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal lint report: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(data))
-		return err
+		return printJSON(w, report)
 	}
 
 	if len(report.Findings) == 0 {

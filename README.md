@@ -476,7 +476,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
 | `pbuf metadata get [module_name] [tag]` | Retrieve parsed AST metadata (packages, messages, services, enums) for a module tag |
-| `pbuf lint [paths...] [--format table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
+| `pbuf lint [paths...] [-o table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
 | `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
 | `pbuf drift module <module_name> [--tag <tag>]` | List schema drift events for a specific module |
@@ -618,18 +618,18 @@ It checks `.proto` syntax plus the following style rules and exits non-zero when
 - explicit `syntax` set to `proto3` or `proto2`
 - a non-empty `package` declaration
 - `PascalCase` message, enum, service, and RPC names
-- `snake_case` field names (including map and oneof fields)
-- `UPPER_SNAKE_CASE` enum value names, with a `0` value present in every enum
+- `snake_case` field, map, and oneof names
+- `UPPER_SNAKE_CASE` enum value names, with the first enum value set to `0` in `proto3`
 
 ```shell
 # Lint the directories in export.paths (table output)
 pbuf lint
 
-# Lint explicit paths
-pbuf lint api proto/payment
+# Lint explicit directories or .proto files
+pbuf lint api ../shared/proto/payment.proto
 
-# Machine-readable output for CI
-pbuf lint --format json
+# Machine-readable output for CI (-o / --output or --format)
+pbuf lint -o json
 ```
 
 ---
