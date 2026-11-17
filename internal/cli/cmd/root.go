@@ -50,6 +50,7 @@ func NewRootCmd() *cobra.Command {
 	var (
 		configOnce     sync.Once
 		configNotFound bool
+		fileConfigErr  error
 		configErr      error
 	)
 	loadConfig := func() {
@@ -57,11 +58,13 @@ func NewRootCmd() *cobra.Command {
 			file, readErr := os.ReadFile(model.PbufConfigFilename)
 			configNotFound = os.IsNotExist(readErr)
 			if readErr != nil && !configNotFound {
-				configErr = fmt.Errorf("failed to read %s file: %w", model.PbufConfigFilename, readErr)
+				fileConfigErr = fmt.Errorf("failed to read %s file: %w", model.PbufConfigFilename, readErr)
+				configErr = fileConfigErr
 			} else if !configNotFound {
 				parsed, err := modules.NewConfig(file)
 				if err != nil {
-					configErr = fmt.Errorf("failed to parse %s: %w", model.PbufConfigFilename, err)
+					fileConfigErr = fmt.Errorf("failed to parse %s: %w", model.PbufConfigFilename, err)
+					configErr = fileConfigErr
 				} else {
 					*modulesConfig = *parsed
 				}
@@ -186,6 +189,17 @@ func NewRootCmd() *cobra.Command {
 	loginCmd := NewLoginCmd(modulesConfig, nil, nil)
 	loginCmd.PreRun = func(_ *cobra.Command, _ []string) { loadConfig() }
 
+	// lint runs fully offline: it only needs export.paths from pbuf.yaml when no
+	// explicit paths are passed and never requires a configured registry.
+	lintCmd := NewLintCmd(modulesConfig)
+	lintCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if help, _ := cmd.Flags().GetBool("help"); help || len(args) > 0 {
+			return nil
+		}
+		loadConfig()
+		return fileConfigErr
+	}
+
 	registryCmds := []*cobra.Command{
 		NewModuleCmd(modulesConfig, registryClient),
 		NewUsersCmd(modulesConfig, usersClient),
@@ -202,6 +216,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(vendorCmd)
+	rootCmd.AddCommand(lintCmd)
 	rootCmd.AddCommand(registryCmds...)
 
 	return rootCmd
@@ -425,7 +440,11 @@ type moduleDetailsOutput struct {
 }
 
 func parseOutputFormat(cmd *cobra.Command) (string, error) {
-	raw, err := cmd.Flags().GetString("output")
+	return parseFlagFormat(cmd, "output")
+}
+
+func parseFlagFormat(cmd *cobra.Command, flagName string) (string, error) {
+	raw, err := cmd.Flags().GetString(flagName)
 	if err != nil {
 		return "", err
 	}
@@ -435,7 +454,7 @@ func parseOutputFormat(cmd *cobra.Command) (string, error) {
 	case "json":
 		return "json", nil
 	default:
-		return "", fmt.Errorf("invalid --output value %q (must be table or json)", raw)
+		return "", fmt.Errorf("invalid --%s value %q (must be table or json)", flagName, raw)
 	}
 }
 

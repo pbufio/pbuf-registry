@@ -690,6 +690,306 @@ func TestVersionCommand(t *testing.T) {
 	})
 }
 
+func TestLintCommand(t *testing.T) {
+	const validProto = `syntax = "proto3";
+package acme.pay.v1;
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+}
+message Money {
+  Currency currency = 1;
+  int64 units = 2;
+}
+service PayService {
+  rpc GetBalance(Money) returns (Money);
+}
+`
+
+	const missingSyntaxProto = `package acme.pay.v1;
+message Money {
+  int64 units = 1;
+}
+`
+
+	const brokenProto = `syntax = "proto3"
+message Money {
+`
+
+	const styleViolationsProto = `syntax = "proto3";
+package acme.pay.v1;
+enum currency {
+  CURRENCY_USD = 1;
+  CURRENCY_UNSPECIFIED = 0;
+  eur = 2;
+}
+message money {
+  int64 TotalUnits = 1;
+  oneof PaymentChoice {
+    string CardId = 2;
+  }
+}
+service payService {
+  rpc get_balance(money) returns (money);
+}
+`
+
+	const validProto2 = `syntax = "proto2";
+package acme.legacy.v1;
+enum Status {
+  STATUS_ACTIVE = 1;
+}
+message LegacyOrder {
+  optional Status status = 1;
+}
+`
+
+	const hexZeroProto3 = `syntax = "proto3";
+package acme.hex.v1;
+enum Mode {
+  MODE_UNSPECIFIED = 0x0;
+  MODE_FAST = 1;
+}
+`
+
+	tests := []struct {
+		name        string
+		files       map[string]string
+		args        []string
+		wantErr     string
+		wantSubstrs []string
+		wantRules   []string
+		wantClean   bool
+		wantJSON    bool
+	}{
+		{
+			name:      "valid schema passes",
+			files:     map[string]string{"api/pay.proto": validProto},
+			args:      []string{"lint"},
+			wantClean: true,
+		},
+		{
+			name:      "valid proto2 enum without zero value passes",
+			files:     map[string]string{"api/legacy.proto": validProto2},
+			args:      []string{"lint"},
+			wantClean: true,
+		},
+		{
+			name:      "valid proto3 enum with hex 0x0 first value passes",
+			files:     map[string]string{"api/hex.proto": hexZeroProto3},
+			args:      []string{"lint"},
+			wantClean: true,
+		},
+		{
+			name:    "syntax error reported",
+			files:   map[string]string{"api/broken.proto": brokenProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantSubstrs: []string{
+				"SYNTAX",
+			},
+			wantRules: []string{"SYNTAX"},
+		},
+		{
+			name:    "missing syntax and no zero enum value",
+			files:   map[string]string{"api/nosyntax.proto": missingSyntaxProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantSubstrs: []string{
+				"missing explicit syntax",
+			},
+			wantRules: []string{"SYNTAX"},
+		},
+		{
+			name:    "naming violations and non-first proto3 zero enum reported",
+			files:   map[string]string{"api/style.proto": styleViolationsProto},
+			args:    []string{"lint"},
+			wantErr: "lint failed",
+			wantSubstrs: []string{
+				`oneof "PaymentChoice" should be snake_case`,
+			},
+			wantRules: []string{
+				"ENUM_NAME",
+				"ENUM_VALUE_NAME",
+				"ENUM_ZERO_VALUE",
+				"MESSAGE_NAME",
+				"FIELD_NAME",
+				"SERVICE_NAME",
+				"RPC_NAME",
+			},
+		},
+		{
+			name:     "json output via --format for valid schema",
+			files:    map[string]string{"api/pay.proto": validProto},
+			args:     []string{"lint", "--format", "json"},
+			wantJSON: true,
+		},
+		{
+			name:     "json output via -o shorthand and deduplicated overlapping paths",
+			files:    map[string]string{"api/v1/pay.proto": validProto},
+			args:     []string{"lint", "-o", "json", "api", "api/v1"},
+			wantJSON: true,
+		},
+		{
+			name:    "invalid format rejected",
+			files:   map[string]string{"api/pay.proto": validProto},
+			args:    []string{"lint", "--format", "xml"},
+			wantErr: "invalid --format",
+		},
+		{
+			name:    "invalid output flag rejected",
+			files:   map[string]string{"api/pay.proto": validProto},
+			args:    []string{"lint", "-o", "yaml"},
+			wantErr: "invalid --output",
+		},
+		{
+			name:    "explicit path argument",
+			files:   map[string]string{"schemas/style.proto": styleViolationsProto},
+			args:    []string{"lint", "schemas"},
+			wantErr: "lint failed",
+			wantRules: []string{
+				"MESSAGE_NAME",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			origDir, err := os.Getwd()
+			require.NoError(t, err)
+			require.NoError(t, os.Chdir(tmpDir))
+			defer func() { _ = os.Chdir(origDir) }()
+
+			for name, content := range tc.files {
+				require.NoError(t, os.MkdirAll(filepath.Dir(name), 0o755))
+				require.NoError(t, os.WriteFile(name, []byte(content), 0o644))
+			}
+
+			lintCmd := NewLintCmd(&model.Config{Export: model.Export{Paths: []string{"api"}}})
+			var out bytes.Buffer
+			lintCmd.SetOut(&out)
+			lintCmd.SetErr(&out)
+			// drop the leading "lint" token since the command is executed directly
+			lintCmd.SetArgs(tc.args[1:])
+
+			err = lintCmd.Execute()
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			got := out.String()
+			if tc.wantClean {
+				assert.Contains(t, got, "No issues found.")
+			}
+			for _, sub := range tc.wantSubstrs {
+				assert.Contains(t, got, sub)
+			}
+			for _, rule := range tc.wantRules {
+				assert.Contains(t, got, rule)
+			}
+			if tc.wantJSON {
+				var parsed LintReport
+				require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+				assert.Equal(t, 1, parsed.Files)
+				assert.Empty(t, parsed.Findings)
+			}
+		})
+	}
+
+	t.Run("runs offline via NewRootCmd with symlinked dirs, proto fallback, and invalid env vars", func(t *testing.T) {
+		parentDir := t.TempDir()
+		workDir := filepath.Join(parentDir, "service")
+		sharedDir := filepath.Join(parentDir, "shared")
+		absFile := filepath.Join(parentDir, "abs", "extra.proto")
+		symlinkDir := filepath.Join(workDir, "linked-api")
+		emptyDir := filepath.Join(workDir, "empty")
+		require.NoError(t, os.MkdirAll(workDir, 0o755))
+		require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+		require.NoError(t, os.MkdirAll(emptyDir, 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Dir(absFile), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(sharedDir, "pay.proto"), []byte(validProto), 0o644))
+		require.NoError(t, os.WriteFile(absFile, []byte(validProto), 0o644))
+		require.NoError(t, os.Symlink(sharedDir, symlinkDir))
+
+		// Write invalid pbuf.yaml in CWD to verify explicit path args bypass CWD config loading
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, model.PbufConfigFilename), []byte("invalid: [yaml"), 0o644))
+
+		origDir, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(workDir))
+		defer func() { _ = os.Chdir(origDir) }()
+		t.Setenv("PBUF_REGISTRY_ADDR", "localhost:6777")
+		t.Setenv("PBUF_REGISTRY_INSECURE", "not-a-bool")
+
+		rootCmd := NewRootCmd()
+		var out bytes.Buffer
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		rootCmd.SetArgs([]string{"lint", "-o", "json", "linked-api", "../shared", absFile})
+		require.NoError(t, rootCmd.Execute())
+
+		var parsed LintReport
+		require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
+		assert.Equal(t, 2, parsed.Files)
+		assert.Empty(t, parsed.Findings)
+
+		// Empty directory must fail instead of passing silently
+		emptyCmd := NewRootCmd()
+		emptyCmd.SetOut(&bytes.Buffer{})
+		emptyCmd.SetErr(&bytes.Buffer{})
+		emptyCmd.SetArgs([]string{"lint", "empty"})
+		require.ErrorContains(t, emptyCmd.Execute(), "no .proto files found")
+
+		// Conflicting -o and --format flags must fail
+		conflictCmd := NewRootCmd()
+		conflictCmd.SetOut(&bytes.Buffer{})
+		conflictCmd.SetErr(&bytes.Buffer{})
+		conflictCmd.SetArgs([]string{"lint", "-o", "json", "--format", "table", absFile})
+		require.ErrorContains(t, conflictCmd.Execute(), "conflicting --output")
+
+		// Without pbuf.yaml, default resolution falls back to proto/ and ignores PBUF_REGISTRY_INSECURE
+		require.NoError(t, os.Remove(filepath.Join(workDir, model.PbufConfigFilename)))
+		require.NoError(t, os.MkdirAll(filepath.Join(workDir, "proto"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "proto", "bad.proto"), []byte(`syntax = "proto3";
+package acme.v1;
+package acme.v2;
+message Outer {
+  map<string, string> BadMap = 1;
+  message nestedMsg {
+    enum nestedEnum {
+      VAL_ONE = 1;
+    }
+  }
+}
+`), 0o644))
+
+		fallbackCmd := NewRootCmd()
+		var failOut bytes.Buffer
+		fallbackCmd.SetOut(&failOut)
+		fallbackCmd.SetErr(&bytes.Buffer{})
+		fallbackCmd.SetArgs([]string{"lint", "-o", "json"})
+		require.ErrorContains(t, fallbackCmd.Execute(), "lint failed")
+
+		var failReport LintReport
+		require.NoError(t, json.Unmarshal(failOut.Bytes(), &failReport))
+		assert.Equal(t, 1, failReport.Files)
+		require.NotEmpty(t, failReport.Findings)
+		var gotRules []string
+		for _, f := range failReport.Findings {
+			assert.Greater(t, f.Line, 0)
+			gotRules = append(gotRules, f.Rule)
+		}
+		assert.Contains(t, gotRules, "PACKAGE")
+		assert.Contains(t, gotRules, "FIELD_NAME")
+		assert.Contains(t, gotRules, "MESSAGE_NAME")
+		assert.Contains(t, gotRules, "ENUM_NAME")
+		assert.Contains(t, gotRules, "ENUM_ZERO_VALUE")
+	})
+}
+
 func TestShellCompletionCommand(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)

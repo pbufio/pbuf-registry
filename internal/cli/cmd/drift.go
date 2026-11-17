@@ -260,19 +260,7 @@ func runLocalDriftDiff(
 		return LocalDriftDiffReport{}, 0, false, fmt.Errorf("module name is required (set 'name' in pbuf.yaml or pass as argument)")
 	}
 
-	var exportPaths []string
-	if cfg != nil && len(cfg.Export.Paths) > 0 {
-		exportPaths = cfg.Export.Paths
-	} else {
-		for _, dir := range []string{"api", "proto"} {
-			if info, err := os.Stat(filepath.Join(rootDir, dir)); err == nil && info.IsDir() {
-				exportPaths = append(exportPaths, dir)
-			}
-		}
-		if len(exportPaths) == 0 {
-			exportPaths = []string{"api"}
-		}
-	}
+	exportPaths := resolveLocalProtoPaths(rootDir, cfg)
 
 	localFiles, err := registry.CollectProtoFilesInRoot(rootDir, exportPaths)
 	if err != nil {
@@ -316,6 +304,25 @@ func runLocalDriftDiff(
 		HasBreakingChanges: shouldFailDriftDiff(items, 3),
 		Items:              items,
 	}, len(localFiles), false, nil
+}
+
+func resolveLocalProtoPaths(rootDir string, cfg *model.Config) []string {
+	if cfg != nil && len(cfg.Export.Paths) > 0 {
+		return cfg.Export.Paths
+	}
+	if rootDir == "" {
+		rootDir = "."
+	}
+	var paths []string
+	for _, dir := range []string{"api", "proto"} {
+		if info, err := os.Stat(filepath.Join(rootDir, dir)); err == nil && info.IsDir() {
+			paths = append(paths, dir)
+		}
+	}
+	if len(paths) == 0 {
+		return []string{"api"}
+	}
+	return paths
 }
 
 func registerLocalMCPTools(srv *mcp.Server, fallbackCfg *model.Config, regClient v1.RegistryClient) {
