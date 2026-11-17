@@ -2,7 +2,7 @@ apiVersion: v2
 name: pbuf-registry
 description: Self-hosted Protocol Buffers schema registry with OIDC SSO, RBAC, drift detection, and Web UI
 type: application
-version: 0.17.1
+version: 0.18.0
 appVersion: "v0.17.1"
 home: https://pbuf.io
 sources:

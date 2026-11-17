@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"flag"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,11 +50,31 @@ func (s *TestSuite) SetupSuite() {
 		panic(err)
 	}
 
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		panic(err)
+	// Exercise concurrent multi-replica startup migrations serialized by PostgreSQL session advisory lock.
+	var wg sync.WaitGroup
+	migErrs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			db, openErr := sql.Open("pgx", dsn)
+			if openErr != nil {
+				migErrs <- openErr
+				return
+			}
+			defer func() { _ = db.Close() }()
+			if migErr := migrations.MigrateWithError(ctx, db); migErr != nil {
+				migErrs <- migErr
+			}
+		}()
 	}
-	migrations.Migrate(db)
+	wg.Wait()
+	close(migErrs)
+	for migErr := range migErrs {
+		if migErr != nil {
+			panic(migErr)
+		}
+	}
 
 	s.pool = pool
 	s.registryRepository = NewRegistryRepository(pool, log.DefaultLogger)

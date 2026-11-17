@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +26,7 @@ const (
 	defaultJWKSCacheTTL    = 15 * time.Minute
 	minJWKSRefreshInterval = 5 * time.Second
 	oidcHTTPTimeout        = 10 * time.Second
+	maxOIDCResponseBytes   = 1 << 20 // 1 MiB
 )
 
 // OIDCClaims holds the verified identity extracted from an OIDC JWT.
@@ -70,10 +73,13 @@ type OIDCVerifier struct {
 
 // NewOIDCVerifier creates a new OIDCVerifier for the given OIDC configuration.
 func NewOIDCVerifier(cfg config.OIDCConfig) (*OIDCVerifier, error) {
-	if strings.TrimSpace(cfg.IssuerURL) == "" {
+	cfg.IssuerURL = strings.TrimSpace(cfg.IssuerURL)
+	cfg.ClientID = strings.TrimSpace(cfg.ClientID)
+	cfg.JWKSURL = strings.TrimSpace(cfg.JWKSURL)
+	if cfg.IssuerURL == "" {
 		return nil, errors.New("oidc issuerUrl is required")
 	}
-	if strings.TrimSpace(cfg.ClientID) == "" {
+	if cfg.ClientID == "" {
 		return nil, errors.New("oidc clientId is required")
 	}
 	if cfg.UsernameClaim == "" {
@@ -83,13 +89,32 @@ func NewOIDCVerifier(cfg config.OIDCConfig) (*OIDCVerifier, error) {
 		cfg.GroupsClaim = "groups"
 	}
 
+	parsedIssuer, err := url.Parse(cfg.IssuerURL)
+	if err != nil || (parsedIssuer.Scheme != "http" && parsedIssuer.Scheme != "https") || parsedIssuer.Host == "" {
+		return nil, errors.New("oidc issuerUrl must be a valid http or https URL")
+	}
+	if cfg.JWKSURL != "" {
+		if err := validateOIDCEndpointURL(cfg.JWKSURL, parsedIssuer.Scheme == "https"); err != nil {
+			return nil, fmt.Errorf("invalid oidc jwksUrl: %w", err)
+		}
+	}
+
 	return &OIDCVerifier{
 		cfg: cfg,
 		httpClient: &http.Client{
 			Timeout: oidcHTTPTimeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 5 {
+					return errors.New("stopped after 5 redirects")
+				}
+				if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+					return errors.New("refusing OIDC redirect from https to non-https")
+				}
+				return nil
+			},
 		},
 		keys:    make(map[string]crypto.PublicKey),
-		jwksURL: strings.TrimSpace(cfg.JWKSURL),
+		jwksURL: cfg.JWKSURL,
 	}, nil
 }
 
@@ -216,7 +241,7 @@ func (v *OIDCVerifier) refreshKeys(ctx context.Context, kid string) error {
 	}
 
 	var doc jwksDocument
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxOIDCResponseBytes)).Decode(&doc); err != nil {
 		return fmt.Errorf("failed to decode JWKS: %w", err)
 	}
 
@@ -271,13 +296,31 @@ func (v *OIDCVerifier) discoverJWKSURL(ctx context.Context) (string, error) {
 	}
 
 	var doc oidcDiscoveryDoc
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxOIDCResponseBytes)).Decode(&doc); err != nil {
 		return "", fmt.Errorf("failed to decode OIDC discovery document: %w", err)
 	}
 	if doc.JWKSURI == "" {
 		return "", errors.New("oidc discovery document missing jwks_uri")
 	}
+	requireHTTPS := strings.HasPrefix(strings.ToLower(strings.TrimSpace(v.cfg.IssuerURL)), "https://")
+	if err := validateOIDCEndpointURL(doc.JWKSURI, requireHTTPS); err != nil {
+		return "", fmt.Errorf("invalid oidc discovery jwks_uri: %w", err)
+	}
 	return doc.JWKSURI, nil
+}
+
+func validateOIDCEndpointURL(raw string, requireHTTPS bool) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" {
+		return errors.New("must be a valid URL with host")
+	}
+	if requireHTTPS && parsed.Scheme != "https" {
+		return errors.New("must use https scheme when issuer uses https")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("must use http or https scheme")
+	}
+	return nil
 }
 
 func parseJWK(k jwkKey) (crypto.PublicKey, error) {

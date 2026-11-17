@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   db:
     image: postgres:18.1-alpine3.23
@@ -18,11 +17,25 @@ services:
       interval: 5s
       timeout: 10s
       retries: 5
+  pbuf-migrations:
+    image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    environment:
+      DATA_DATABASE_DSN: "postgres://pbuf:${PBUF_POSTGRES_PASSWORD:-pbuf}@db:5432/pbuf_registry?sslmode=disable"
+    command: ["/app/pbuf-migrations"]
   pbuf-registry:
     image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      pbuf-migrations:
+        condition: service_completed_successfully
     networks:
       - internal
     expose:
@@ -47,14 +60,13 @@ services:
       SERVER_HTTP_AUTH_ENABLED: "true"
       SERVER_HTTP_AUTH_TYPE: acl
       SERVER_STATIC_TOKEN: ${SERVER_STATIC_TOKEN}
-    command: >
-      sh -c "/app/pbuf-migrations && /app/pbuf-registry"
+    command: ["/app/pbuf-registry"]
   pbuf-registry-compaction:
     image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
-      - db
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     networks:
       - internal
     ports:
@@ -66,14 +78,13 @@ services:
       retries: 5
     environment:
       DATA_DATABASE_DSN: "postgres://pbuf:${PBUF_POSTGRES_PASSWORD:-pbuf}@db:5432/pbuf_registry?sslmode=disable"
-    command: >
-      sh -c "/app/pbuf-registry compaction"
+    command: ["/app/pbuf-registry", "compaction"]
   pbuf-registry-protoparser:
     image: ghcr.io/pbufio/registry:${REGISTRY_VERSION:-latest}
     restart: always
     depends_on:
-      - db
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     networks:
       - internal
     ports:
@@ -88,13 +99,13 @@ services:
       DAEMONS_PROTOPARSING_WEBHOOK_URL: "${DAEMONS_PROTOPARSING_WEBHOOK_URL:-}"
       DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY: "${DAEMONS_PROTOPARSING_WEBHOOK_MIN_SEVERITY:-WARNING}"
       DAEMONS_PROTOPARSING_WEBHOOK_FORMAT: "${DAEMONS_PROTOPARSING_WEBHOOK_FORMAT:-}"
-    command: >
-      sh -c "/app/pbuf-registry proto-parsing"
+    command: ["/app/pbuf-registry", "proto-parsing"]
   pbuf-registry-ui:
     image: ghcr.io/pbufio/pbuf-registry-ui:${REGISTRY_UI_VERSION:-latest}
     restart: always
     depends_on:
-      - pbuf-registry
+      pbuf-registry:
+        condition: service_healthy
     networks:
       - internal
     ports:

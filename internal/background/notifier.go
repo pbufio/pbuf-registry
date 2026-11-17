@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -97,8 +98,24 @@ func NewWebhookDriftNotifier(cfg config.DriftWebhookConfig, logger log.Logger) (
 		url:     rawURL,
 		format:  format,
 		minRank: minRank,
-		client:  &http.Client{Timeout: timeout},
-		log:     log.NewHelper(log.With(logger, "module", "background/WebhookDriftNotifier")),
+		client: &http.Client{
+			Timeout: timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 5 {
+					return errors.New("stopped after 5 redirects")
+				}
+				if len(via) > 0 {
+					if via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+						return errors.New("refusing webhook redirect from https to non-https")
+					}
+					if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+						return errors.New("refusing cross-host webhook redirect")
+					}
+				}
+				return nil
+			},
+		},
+		log: log.NewHelper(log.With(logger, "module", "background/WebhookDriftNotifier")),
 	}, nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,7 +143,7 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 
 	verifier, err := NewOIDCVerifier(oidcCfg)
 	require.NoError(t, err)
-	verifier.httpClient = httpClient
+	verifier.httpClient.Transport = httpClient.Transport
 
 	repo := newMemoryUserRepo()
 	authMW := NewOIDCAuth("static-admin-secret", repo, verifier, true, log.DefaultLogger).NewAuthMiddleware()
@@ -325,4 +326,53 @@ func TestParseJWKECDSAValidation(t *testing.T) {
 	}
 	_, err = parseJWK(offCurve)
 	require.Error(t, err)
+}
+
+func TestOIDCVerifier_BoundsAndSchemeDowngradeProtection(t *testing.T) {
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	_, err = NewOIDCVerifier(config.OIDCConfig{
+		IssuerURL: "https://idp.example.com",
+		ClientID:  "pbuf",
+		JWKSURL:   "http://insecure.example.com/jwks.json",
+	})
+	require.ErrorContains(t, err, "must use https scheme")
+
+	// Oversized discovery document (> 1 MiB) is truncated by LimitReader and rejected cleanly
+	oversizedMux := http.NewServeMux()
+	oversizedMux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"issuer":"https://idp.example.com","pad":"` + strings.Repeat("a", maxOIDCResponseBytes+1024) + `","jwks_uri":"https://idp.example.com/jwks.json"}`))
+	})
+	verifier, err := NewOIDCVerifier(config.OIDCConfig{
+		IssuerURL: "  https://idp.example.com\n",
+		ClientID:  "  pbuf\n",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://idp.example.com", verifier.cfg.IssuerURL)
+	assert.Equal(t, "pbuf", verifier.cfg.ClientID)
+	verifier.httpClient.Transport = handlerRoundTripper{handler: oversizedMux}
+
+	rawJWT := signTestJWT(t, privKey, "k1", jwtv5.MapClaims{
+		"iss": "https://idp.example.com",
+		"sub": "u1",
+		"aud": "pbuf",
+		"exp": time.Now().Add(5 * time.Minute).Unix(),
+	})
+	_, err = verifier.VerifyToken(context.Background(), rawJWT)
+	require.ErrorContains(t, err, "failed to decode OIDC discovery document")
+
+	// Redirect from https:// issuer to http:// endpoint must be rejected by CheckRedirect
+	downgradeMux := http.NewServeMux()
+	downgradeMux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://insecure.example.com/openid", http.StatusFound)
+	})
+	downgradeVerifier, err := NewOIDCVerifier(config.OIDCConfig{
+		IssuerURL: "https://idp.example.com",
+		ClientID:  "pbuf",
+	})
+	require.NoError(t, err)
+	downgradeVerifier.httpClient.Transport = handlerRoundTripper{handler: downgradeMux}
+	_, err = downgradeVerifier.VerifyToken(context.Background(), rawJWT)
+	require.ErrorContains(t, err, "refusing OIDC redirect from https to non-https")
 }
