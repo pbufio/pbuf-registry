@@ -399,53 +399,6 @@ func Test_userRepository_UpdateUser(t *testing.T) {
 	})
 }
 
-func Test_userRepository_SetUserActive(t *testing.T) {
-	// Create a user
-	testUser := &model.User{
-		Name:     "test-set-active-user",
-		Token:    "pbuf_user_set-active-token",
-		Type:     model.UserTypeUser,
-		IsActive: true,
-	}
-	err := suite.userRepository.CreateUser(context.Background(), testUser)
-	require.NoError(t, err)
-
-	tests := []struct {
-		name     string
-		isActive bool
-	}{
-		{
-			name:     "Deactivate user",
-			isActive: false,
-		},
-		{
-			name:     "Activate user",
-			isActive: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := suite.userRepository
-
-			err := r.SetUserActive(context.Background(), testUser.ID, tt.isActive)
-			require.NoError(t, err)
-
-			// Verify
-			user, err := r.GetUser(context.Background(), testUser.ID)
-			require.NoError(t, err)
-			assert.Equal(t, tt.isActive, user.IsActive)
-		})
-	}
-
-	t.Run("Set active for non-existing user", func(t *testing.T) {
-		r := suite.userRepository
-
-		err := r.SetUserActive(context.Background(), uuid.New(), true)
-		assert.ErrorIs(t, err, ErrUserNotFound)
-	})
-}
-
 func Test_userRepository_DeleteUser(t *testing.T) {
 	// Create a user to delete
 	testUser := &model.User{

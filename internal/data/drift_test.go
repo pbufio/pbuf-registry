@@ -406,11 +406,7 @@ func TestDriftRepository_GetModuleDependencyDriftStatuses(t *testing.T) {
 	// Dependent module pinned to B@v1.0.0.
 	_, err = suite.registryRepository.PushModule(ctx, moduleA, "v1.0.0", []*v1.ProtoFile{
 		{Filename: "main.proto", Content: `syntax = "proto3"; message Main { string id = 1; }`},
-	})
-	require.NoError(t, err)
-	err = suite.registryRepository.AddModuleDependencies(ctx, moduleA, "v1.0.0", []*v1.Dependency{
-		{Name: moduleB, Tag: "v1.0.0"},
-	})
+	}, &v1.Dependency{Name: moduleB, Tag: "v1.0.0"})
 	require.NoError(t, err)
 
 	// Seed drift events for newer dependency tags.

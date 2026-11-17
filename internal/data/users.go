@@ -23,7 +23,6 @@ type UserRepository interface {
 	ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, int, error)
 	UpdateUser(ctx context.Context, user *model.User) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
-	SetUserActive(ctx context.Context, id uuid.UUID, isActive bool) error
 }
 
 type userRepo struct {
@@ -168,20 +167,6 @@ func (r *userRepo) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	)
 	if err != nil {
 		return fmt.Errorf("could not delete user from database: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrUserNotFound
-	}
-	return nil
-}
-
-func (r *userRepo) SetUserActive(ctx context.Context, id uuid.UUID, isActive bool) error {
-	result, err := r.pool.Exec(ctx,
-		`UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2`,
-		isActive, id,
-	)
-	if err != nil {
-		return fmt.Errorf("could not update user active status in database: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return ErrUserNotFound

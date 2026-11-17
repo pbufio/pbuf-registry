@@ -15,24 +15,6 @@ type RegistryRepository struct {
 	mock.Mock
 }
 
-// AddModuleDependencies provides a mock function with given fields: ctx, name, tag, dependencies
-func (_m *RegistryRepository) AddModuleDependencies(ctx context.Context, name string, tag string, dependencies []*v1.Dependency) error {
-	ret := _m.Called(ctx, name, tag, dependencies)
-
-	if len(ret) == 0 {
-		panic("no return value specified for AddModuleDependencies")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []*v1.Dependency) error); ok {
-		r0 = rf(ctx, name, tag, dependencies)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // DeleteModule provides a mock function with given fields: ctx, name
 func (_m *RegistryRepository) DeleteModule(ctx context.Context, name string) error {
 	ret := _m.Called(ctx, name)

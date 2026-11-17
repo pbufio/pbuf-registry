@@ -68,9 +68,6 @@ func (m *memoryUserRepo) ListUsers(_ context.Context, _, _ int) ([]*model.User, 
 
 func (m *memoryUserRepo) UpdateUser(_ context.Context, _ *model.User) error { return nil }
 func (m *memoryUserRepo) DeleteUser(_ context.Context, _ uuid.UUID) error   { return nil }
-func (m *memoryUserRepo) SetUserActive(_ context.Context, _ uuid.UUID, _ bool) error {
-	return nil
-}
 
 type handlerRoundTripper struct {
 	handler http.Handler

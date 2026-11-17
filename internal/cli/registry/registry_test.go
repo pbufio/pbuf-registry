@@ -152,6 +152,19 @@ func TestClientAddrAndNetrcHelpers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "secret-tok", md["authorization"])
 
+	// Standard .netrc format (`machine <host> login user password <token>`) without custom `token` key
+	stdNetrcPath := filepath.Join(t.TempDir(), ".netrc")
+	require.NoError(t, os.WriteFile(stdNetrcPath, []byte("machine pbuf.io login user password std-password-tok\nmachine empty.pbuf.io login user password unused\n"), 0o600))
+	parsedStdNrc, err := netrc.Parse(stdNetrcPath)
+	require.NoError(t, err)
+
+	stdCreds := credentialsFromNetrc("pbuf.io", parsedStdNrc)
+	require.NotNil(t, stdCreds)
+	stdMD, err := stdCreds.GetRequestMetadata(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "std-password-tok", stdMD["authorization"])
+	assert.Nil(t, credentialsFromNetrc("empty.pbuf.io", parsedStdNrc))
+
 	conn, err := NewInsecureConn(&model.Config{Registry: model.Registry{Addr: "localhost:6777", Insecure: true}}, parsedNrc)
 	require.NoError(t, err)
 	require.NotNil(t, conn)

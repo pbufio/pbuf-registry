@@ -176,6 +176,19 @@ func TestSaveTokenToNetrcAndAuthCmd(t *testing.T) {
 	m := parsed.Machine("registry.example.com")
 	require.NotNil(t, m)
 	assert.Equal(t, "my-secret-token", m.Get("token"))
+	assert.Equal(t, "my-secret-token", m.Get("password"))
+
+	// Rotating an existing host entry updates both password and token
+	rotateCmd := NewAuthCmd(cfg, usr, nil)
+	rotateCmd.SetArgs([]string{"rotated-secret-token"})
+	require.NoError(t, rotateCmd.Execute())
+
+	parsedAfter, err := netrc.Parse(filepath.Join(tmpDir, ".netrc"))
+	require.NoError(t, err)
+	mAfter := parsedAfter.Machine("registry.example.com")
+	require.NotNil(t, mAfter)
+	assert.Equal(t, "rotated-secret-token", mAfter.Get("token"))
+	assert.Equal(t, "rotated-secret-token", mAfter.Get("password"))
 }
 
 func TestInitAndModuleCommands(t *testing.T) {
@@ -193,6 +206,7 @@ func TestInitAndModuleCommands(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), "org/hello")
 	assert.Contains(t, string(raw), "localhost:6777")
+	assert.NotContains(t, string(raw), "pbufio/pbuf-registry")
 
 	initDomainCmd := CreateInitCmd()
 	initDomainCmd.SetArgs([]string{"org/hello", "--domain", "https://pbuf.io/"})
@@ -229,6 +243,19 @@ func TestInitAndModuleCommands(t *testing.T) {
 		require.NoError(t, modCmd.Execute())
 	}
 	assert.Equal(t, "v1.2.0", cfg.Modules[0].Tag)
+
+	// Missing dependency tag fails before PushModule RPC
+	badDepCfg := &model.Config{
+		Name:   "org/hello",
+		Export: model.Export{Paths: []string{"api"}},
+		Modules: []*model.Module{
+			{Name: "org/untagged-dep"},
+		},
+	}
+	badModCmd := NewModuleCmd(badDepCfg, regClient)
+	badModCmd.SetArgs([]string{"push", "v1.0.1"})
+	err = badModCmd.Execute()
+	require.ErrorContains(t, err, `dependency "org/untagged-dep" in pbuf.yaml is missing a tag`)
 }
 
 func TestUsersMetadataAndDriftCommands(t *testing.T) {
