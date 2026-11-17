@@ -617,6 +617,7 @@ It checks `.proto` syntax plus the following style rules and exits non-zero when
 
 - explicit `syntax` set to `proto3` or `proto2`
 - a non-empty `package` declaration
+- `lower_snake_case` base filenames without the `.proto` extension (`FILE_NAME`), e.g. `order_service.proto`
 - `PascalCase` message, enum, service, and RPC names
 - `snake_case` field, map, and oneof names
 - `UPPER_SNAKE_CASE` enum value names, with the first enum value set to `0` in `proto3`
@@ -630,7 +631,17 @@ pbuf lint api ../shared/proto/payment.proto
 
 # Machine-readable output for CI (-o / --output or --format)
 pbuf lint -o json
+
+# Suppress selected rules while migrating legacy schemas
+pbuf lint --ignore-rule FILE_NAME,ENUM_ZERO_VALUE
+pbuf lint --ignore-rule FILE_NAME --ignore-rule ENUM_ZERO_VALUE
 ```
+
+`--ignore-rule` accepts case-insensitive rule IDs and trims surrounding whitespace.
+Supported IDs are `SYNTAX`, `PACKAGE`, `FILE_NAME`, `MESSAGE_NAME`, `FIELD_NAME`,
+`ENUM_NAME`, `ENUM_VALUE_NAME`, `ENUM_ZERO_VALUE`, `SERVICE_NAME`, and `RPC_NAME`.
+Unknown or empty IDs are rejected. Ignored findings are omitted from both table
+and JSON output and do not affect the exit code; the linted file count is unchanged.
 
 ---
 
