@@ -21,6 +21,10 @@ spec:
       app.kubernetes.io/component: ui
   template:
     metadata:
+      {{- if and .Values.secrets.create (not .Values.secrets.eso.create) }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      {{- end }}
       labels:
         app.kubernetes.io/name: {{ include "pbuf-registry.name" . }}-ui
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -43,9 +47,16 @@ spec:
               value: "http://{{ include "pbuf-registry.fullname" . }}:{{ .Values.service.http.port }}"
             - name: PUBLIC_ENABLED
               value: "{{ .Values.ui.publicEnabled }}"
-            {{- if .Values.ui.apiToken }}
+            {{- if and (or (not .Values.secrets.create) .Values.secrets.eso.create) .Values.ui.apiToken (not .Values.secrets.eso.uiApiTokenProperty) }}
             - name: API_TOKEN
-              value: "{{ .Values.ui.apiToken }}"
+              value: {{ .Values.ui.apiToken | quote }}
+            {{- else }}
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pbuf-registry.fullname" . }}
+                  key: UI_API_TOKEN
+                  optional: true
             {{- end }}
             {{- if .Values.ui.oidc.enabled }}
             - name: OIDC_ENABLED

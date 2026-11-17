@@ -127,8 +127,12 @@ const loadModule = async () => {
   }
 }
 
+const defaultExampleTag = computed(() => {
+  return module.value?.tags?.[0] || module.value?.draftTags?.[0] || 'v1.0.0'
+})
+
 const viewVersion = (tag) => {
-  router.push(`/modules/${moduleName.value}/tags/${tag}`)
+  router.push(`/modules/${moduleName.value}/tags/${encodeURIComponent(tag)}`)
 }
 
 const vendorConfig = (tag, genOut = '') => {
@@ -163,7 +167,7 @@ onMounted(() => {
         <!-- Quick Install -->
         <div class="mb-8">
           <h2 class="text-2xl font-semibold mb-4">Vendor This Module</h2>
-          <PCodeBlock :code="vendorConfig(module.tags[0] || 'v1.0.0')" />
+          <PCodeBlock :code="vendorConfig(defaultExampleTag)" />
           <p class="text-zinc-400 text-sm mt-2">
             Learn more: 
             <a href="https://github.com/pbufio/pbuf-registry#cli-reference" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
@@ -215,12 +219,16 @@ onMounted(() => {
               <div 
                 v-for="tag in module.draftTags" 
                 :key="tag"
-                class="flex items-center justify-between p-4 bg-surface-base rounded-lg"
+                class="flex items-center justify-between p-4 bg-surface-base rounded-lg hover:bg-zinc-900/50 transition-colors cursor-pointer"
+                @click="viewVersion(tag)"
               >
                 <div class="flex items-center gap-3">
                   <PBadge variant="draft">{{ tag }}</PBadge>
                   <span class="text-zinc-400 font-mono text-sm">{{ module.name }}@{{ tag }} (draft)</span>
                 </div>
+                <PButton variant="secondary" @click.stop="viewVersion(tag)">
+                  View Draft →
+                </PButton>
               </div>
             </div>
           </PCard>
@@ -244,7 +252,7 @@ onMounted(() => {
           <div class="space-y-4">
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Vendor a specific version</h3>
-              <PCodeBlock :code="vendorConfig(module.tags[0] || 'v1.0.0')" />
+              <PCodeBlock :code="vendorConfig(defaultExampleTag)" />
             </div>
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Get module information</h3>
@@ -252,7 +260,7 @@ onMounted(() => {
             </div>
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Advanced: Vendor with code generation path</h3>
-              <PCodeBlock :code="vendorConfig(module.tags[0] || 'v1.0.0', 'gen')" />
+              <PCodeBlock :code="vendorConfig(defaultExampleTag, 'gen')" />
             </div>
           </div>
         </div>

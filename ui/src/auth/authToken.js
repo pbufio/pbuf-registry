@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { normalizeToken } from '../utils/authUtils.js'
 
-export { normalizeToken, validateTokenFormat } from '../utils/authUtils.js'
+export { normalizeToken, sanitizeNextUrl, validateTokenFormat } from '../utils/authUtils.js'
 
 const STORAGE_KEY = 'pbuf_registry_ui_token'
 

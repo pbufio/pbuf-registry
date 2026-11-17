@@ -5,7 +5,7 @@ import PCard from '@/components/PCard.vue'
 import PInput from '@/components/PInput.vue'
 import PButton from '@/components/PButton.vue'
 import { appConfig } from '@/config/appConfig'
-import { authToken, normalizeToken, validateTokenFormat } from '@/auth/authToken'
+import { authToken, normalizeToken, sanitizeNextUrl, validateTokenFormat } from '@/auth/authToken'
 import { handleOidcCallback, startOidcLogin } from '@/auth/oidcAuth'
 import { registryApi } from '@/services/registryApi'
 import { getLoginValidationErrorMessage } from '@/utils/loginValidationUtils'
@@ -18,12 +18,7 @@ const error = ref('')
 const submitting = ref(false)
 const oidcLoading = ref(false)
 
-const nextUrl = computed(() => {
-  const next = route.query.next
-  if (!next) return '/modules'
-  if (Array.isArray(next)) return next[0] || '/modules'
-  return String(next)
-})
+const nextUrl = computed(() => sanitizeNextUrl(route.query.next, '/modules'))
 
 const submit = async () => {
   error.value = ''
@@ -77,7 +72,7 @@ onMounted(async () => {
     if (result?.token) {
       authToken.setToken(result.token)
       await registryApi.listModules(1)
-      await router.replace(result.nextUrl || nextUrl.value)
+      await router.replace(sanitizeNextUrl(result.nextUrl, nextUrl.value))
     }
   } catch (e) {
     authToken.clearToken()
@@ -104,7 +99,7 @@ onMounted(async () => {
 
           <PInput
             v-model="token"
-            placeholder="pbuf_user_... (or pbuf_bot_...)"
+            placeholder="pbuf_user_..., pbuf_bot_..., or static token"
             type="password"
             @keyup.enter="submit"
           />

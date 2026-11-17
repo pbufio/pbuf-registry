@@ -133,6 +133,7 @@ helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
 | `secrets.create` | Create Kubernetes Secret resource | `true` |
 | `secrets.databaseDSN` | External PostgreSQL connection string (when `postgresql.enabled=false`) | `""` |
 | `secrets.staticToken` | Static admin token (`SERVER_STATIC_TOKEN`) | `""` |
+| `secrets.uiApiToken` | Optional Web UI server-side proxy token (`UI_API_TOKEN`) | `""` |
 | `secrets.driftWebhookUrl` | Optional Slack or HTTP webhook URL for drift notifications (`DAEMONS_PROTOPARSING_WEBHOOK_URL`) | `""` |
 | `secrets.grpcTlsCert` | PEM-encoded gRPC TLS certificate | `""` |
 | `secrets.grpcTlsKey` | PEM-encoded gRPC TLS private key | `""` |
@@ -141,6 +142,7 @@ helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
 | `secrets.eso.remoteRefKey` | Key in remote secret store | `""` |
 | `secrets.eso.databaseDSNProperty` | Remote secret property for database DSN | `""` |
 | `secrets.eso.serverStaticTokenProperty` | Remote secret property for static token | `""` |
+| `secrets.eso.uiApiTokenProperty` | Remote secret property for Web UI proxy token | `""` |
 | `secrets.eso.driftWebhookUrlProperty` | Remote secret property for drift webhook URL | `""` |
 | `secrets.eso.serverGrpcTlsCertFileProperty` | Remote secret property for TLS cert | `""` |
 | `secrets.eso.serverGrpcTlsKeyFileProperty` | Remote secret property for TLS key | `""` |
@@ -174,7 +176,7 @@ helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
 | `ui.service.type` | Web UI Service type | `ClusterIP` |
 | `ui.service.port` | Web UI Service port | `80` |
 | `ui.publicEnabled` | Allow unauthenticated public read-only browsing | `false` |
-| `ui.apiToken` | Optional server-side proxy token (`API_TOKEN`) | `""` |
+| `ui.apiToken` | Optional server-side proxy token (`API_TOKEN`; prefer `secrets.uiApiToken`) | `""` |
 | `ui.oidc.enabled` | Enable OIDC SSO login button in the Web UI | `false` |
 | `ui.oidc.issuerUrl` | OIDC Issuer URL for browser PKCE flow | `""` |
 | `ui.oidc.clientId` | OIDC Client ID for browser PKCE flow | `""` |
