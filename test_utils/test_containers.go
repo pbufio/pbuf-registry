@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -33,8 +32,9 @@ func (c PostgreSQLContainer) GetDSN() string {
 
 func NewPostgreSQLContainer(ctx context.Context, opts ...PostgreSQLContainerOption) (*PostgreSQLContainer, error) {
 	const (
-		psqlImage = "postgres"
-		psqlPort  = "5432"
+		psqlImage     = "postgres"
+		psqlPort      = "5432"
+		containerPort = psqlPort + "/tcp"
 	)
 
 	config := PostgreSQLContainerConfig{
@@ -48,11 +48,6 @@ func NewPostgreSQLContainer(ctx context.Context, opts ...PostgreSQLContainerOpti
 		opt(&config)
 	}
 
-	containerPort, err := nat.NewPort("tcp", psqlPort)
-	if err != nil {
-		return nil, err
-	}
-
 	req := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Env: map[string]string{
@@ -61,7 +56,7 @@ func NewPostgreSQLContainer(ctx context.Context, opts ...PostgreSQLContainerOpti
 				"POSTGRES_DB":       config.Database,
 			},
 			ExposedPorts: []string{
-				containerPort.Port(),
+				containerPort,
 			},
 			Image:      fmt.Sprintf("%s:%s", psqlImage, config.ImageTag),
 			WaitingFor: wait.ForListeningPort(containerPort),
@@ -79,7 +74,7 @@ func NewPostgreSQLContainer(ctx context.Context, opts ...PostgreSQLContainerOpti
 		return nil, fmt.Errorf("getting host for: %w", err)
 	}
 
-	mappedPort, err := container.MappedPort(ctx, nat.Port(containerPort))
+	mappedPort, err := container.MappedPort(ctx, containerPort)
 	if err != nil {
 		return nil, fmt.Errorf("getting mapped port for (%s): %w", containerPort, err)
 	}

@@ -24,7 +24,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v6
         with:
-          go-version: 1.26.x
+          go-version-file: go.mod
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -80,7 +80,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v6
         with:
-          go-version: 1.26.x
+          go-version-file: go.mod
 
       - name: Run E2E Tests (Migrations + Server + CLI + Examples)
         run: make test-e2e
@@ -124,7 +124,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v6
         with:
-          go-version: 1.26.x
+          go-version-file: go.mod
 
       - name: Install UI dependencies and Playwright Chromium
         run: cd ui && npm ci && npx playwright install --with-deps chromium

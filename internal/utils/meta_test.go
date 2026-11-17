@@ -20,6 +20,16 @@ func TestRetrieveMeta(t *testing.T) {
 		return
 	}
 
+	minimalProtoFiles, err := ParseProtoFilesContents([]*v1.ProtoFile{
+		{
+			Filename: "minimal.proto",
+			Content:  `syntax = "proto3"; package simple.v1; message Ping { string id = 1; }`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseProtoFilesContents() minimal error = %v", err)
+	}
+
 	type args struct {
 		files []*model.ParsedProtoFile
 	}
@@ -49,6 +59,26 @@ func TestRetrieveMeta(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "minimal proto file preserves empty non-nil slices",
+			args: args{
+				files: minimalProtoFiles,
+			},
+			want: &model.TagMeta{
+				Packages:    []string{"simple.v1"},
+				Imports:     []string{},
+				RefPackages: []string{},
+				FilesMeta: []*model.FileMeta{
+					{
+						Filename:    "minimal.proto",
+						Packages:    []string{"simple.v1"},
+						Imports:     []string{},
+						RefPackages: []string{},
+					},
+				},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -57,8 +87,8 @@ func TestRetrieveMeta(t *testing.T) {
 				t.Errorf("RetrieveMeta() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(&got, &tt.want) {
-				t.Errorf("RetrieveMeta() got = %v, want %v", got, tt.want)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("RetrieveMeta() got = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

@@ -8,12 +8,20 @@ import (
 	"github.com/pbufio/pbuf-registry/internal/config"
 )
 
+func methodNotAllowedHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	})
+}
+
 func NewDebugServer(cfg *config.Server, logger log.Logger) *kratosHttp.Server {
 	logHelper := log.NewHelper(logger)
 
 	opts := []kratosHttp.ServerOption{
 		kratosHttp.Address(cfg.Debug.Addr),
 		kratosHttp.Timeout(cfg.Debug.Timeout),
+		kratosHttp.NotFoundHandler(http.NotFoundHandler()),
+		kratosHttp.MethodNotAllowedHandler(methodNotAllowedHandler()),
 	}
 
 	srv := kratosHttp.NewServer(opts...)
