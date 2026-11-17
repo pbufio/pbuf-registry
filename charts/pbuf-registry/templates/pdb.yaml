@@ -1,0 +1,24 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- $hasMin := ne .Values.podDisruptionBudget.minAvailable nil }}
+{{- $hasMax := ne .Values.podDisruptionBudget.maxUnavailable nil }}
+{{- if and $hasMin $hasMax }}
+{{- fail "set only one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pbuf-registry.fullname" . }}
+  labels:
+    {{- include "pbuf-registry.labels" . | nindent 4 }}
+spec:
+  {{- if $hasMax }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable | toJson }}
+  {{- else if $hasMin }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable | toJson }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pbuf-registry.selectorLabels" . | nindent 6 }}
+{{- end }}

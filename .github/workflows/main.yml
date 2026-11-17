@@ -31,6 +31,9 @@ jobs:
         with:
           version: v2.15
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
       - name: Test Go (Server + CLI) with Coverage
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -45,9 +48,6 @@ jobs:
 
       - name: Test and Build Web UI
         run: make test-ui && make build-ui
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
 
       - name: Lint and Validate Helm Chart
         run: |

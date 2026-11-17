@@ -1,5 +1,12 @@
 replicaCount: 2
 
+podDisruptionBudget:
+  enabled: false
+  # Set at most one budget as an integer or a percentage (e.g. "50%").
+  # When both are null, the enabled PDB defaults to minAvailable: 1.
+  minAvailable: null
+  maxUnavailable: null
+
 image:
   repository: ghcr.io/pbufio/registry
   pullPolicy: IfNotPresent
