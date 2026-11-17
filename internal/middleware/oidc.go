@@ -82,6 +82,7 @@ func NewOIDCVerifier(cfg config.OIDCConfig) (*OIDCVerifier, error) {
 	if cfg.ClientID == "" {
 		return nil, errors.New("oidc clientId is required")
 	}
+	cfg.UsernameClaim = strings.TrimSpace(cfg.UsernameClaim)
 	if cfg.UsernameClaim == "" {
 		cfg.UsernameClaim = "email"
 	}
@@ -149,9 +150,9 @@ func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCC
 	}
 
 	sub, _ := claims.GetSubject()
-	username := extractUsernameClaim(claims, v.cfg.UsernameClaim, sub)
-	if username == "" {
-		return nil, errors.New("oidc token missing username or subject claim")
+	username, err := extractVerifiedUsernameClaim(claims, v.cfg.UsernameClaim)
+	if err != nil {
+		return nil, err
 	}
 
 	groups := extractStringSliceClaim(claims, v.cfg.GroupsClaim)
@@ -380,17 +381,33 @@ func normalizeIssuer(iss string) string {
 	return strings.TrimSuffix(strings.TrimSpace(iss), "/")
 }
 
-func extractUsernameClaim(claims jwtv5.MapClaims, preferredClaim, fallbackSub string) string {
-	candidates := []string{preferredClaim, "email", "preferred_username", "upn", "name"}
-	for _, key := range candidates {
-		if key == "" {
-			continue
-		}
-		if val, ok := claims[key].(string); ok && strings.TrimSpace(val) != "" {
-			return strings.TrimSpace(val)
+func extractVerifiedUsernameClaim(claims jwtv5.MapClaims, claimName string) (string, error) {
+	key := strings.TrimSpace(claimName)
+	if key == "" {
+		key = "email"
+	}
+	rawVal, ok := claims[key].(string)
+	username := strings.TrimSpace(rawVal)
+	if !ok || username == "" {
+		return "", fmt.Errorf("oidc token missing %q claim", key)
+	}
+	if strings.EqualFold(key, "email") {
+		if rawVerified, exists := claims["email_verified"]; exists {
+			switch verified := rawVerified.(type) {
+			case bool:
+				if !verified {
+					return "", errors.New("oidc token email is not verified")
+				}
+			case string:
+				if !strings.EqualFold(strings.TrimSpace(verified), "true") {
+					return "", errors.New("oidc token email is not verified")
+				}
+			default:
+				return "", errors.New("oidc token email is not verified")
+			}
 		}
 	}
-	return strings.TrimSpace(fallbackSub)
+	return username, nil
 }
 
 func extractStringSliceClaim(claims jwtv5.MapClaims, key string) []string {

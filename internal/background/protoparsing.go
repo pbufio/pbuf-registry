@@ -50,8 +50,9 @@ func (p protoParsingDaemon) Run() error {
 		return err
 	}
 
-	// Track successfully processed tags for drift detection
+	// Track successfully processed tags and transient DB parse failures for drift detection
 	var processedTagIds []string
+	failedParseTags := make(map[string]bool)
 
 	// iterate over tags and parse proto files
 	for _, tagId := range tagIds {
@@ -59,6 +60,7 @@ func (p protoParsingDaemon) Run() error {
 		protofiles, err := p.metadataRepository.GetProtoFilesForTagId(ctx, tagId)
 		if err != nil {
 			p.log.Errorf("GetProtoFilesForTagId error for tag %s: %v", tagId, err)
+			failedParseTags[tagId] = true
 			continue
 		}
 		// parse proto files
@@ -72,6 +74,7 @@ func (p protoParsingDaemon) Run() error {
 		err = p.metadataRepository.SaveParsedProtoFiles(ctx, tagId, parsedProtoFiles)
 		if err != nil {
 			p.log.Errorf("SaveParsedProtoFiles error for tag %s: %v", tagId, err)
+			failedParseTags[tagId] = true
 			continue
 		}
 
@@ -82,14 +85,14 @@ func (p protoParsingDaemon) Run() error {
 
 	// Run drift detection for processed tags
 	if len(processedTagIds) > 0 {
-		p.runDriftDetection(ctx, processedTagIds)
+		p.runDriftDetection(ctx, processedTagIds, failedParseTags)
 	}
 
 	return nil
 }
 
 // runDriftDetection runs drift detection for the given tags
-func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []string) {
+func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []string, failedParseTags map[string]bool) {
 	p.log.Infof("Running drift detection for %d tags", len(tagIds))
 
 	// Phase 1: Compute and store hashes for ALL tags that don't have them yet
@@ -102,10 +105,12 @@ func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []stri
 
 	p.log.Infof("Phase 1: Found %d tags without hashes", len(tagsWithoutHashes))
 
+	failedHashTags := make(map[string]bool)
 	for _, tagID := range tagsWithoutHashes {
 		err := p.driftRepository.ComputeAndStoreHashes(ctx, tagID)
 		if err != nil {
 			p.log.Errorf("ComputeAndStoreHashes error for tag %s: %v", tagID, err)
+			failedHashTags[tagID] = true
 			continue
 		}
 		p.log.Infof("Computed hashes for tag %s", tagID)
@@ -117,10 +122,14 @@ func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []stri
 	driftDetector := &driftDetection{
 		driftRepository:    p.driftRepository,
 		metadataRepository: p.metadataRepository,
+		failedParseTags:    failedParseTags,
 		log:                p.log,
 	}
 
 	for _, tagID := range tagIds {
+		if failedHashTags[tagID] {
+			continue
+		}
 		result, err := driftDetector.detectDrift(ctx, tagID)
 		if err != nil {
 			p.log.Errorf("detectDrift error for tag %s: %v", tagID, err)
@@ -155,6 +164,10 @@ func (p protoParsingDaemon) runDriftDetection(ctx context.Context, tagIds []stri
 			}
 		} else {
 			p.log.Infof("No drift detected for tag %s", tagID)
+		}
+
+		if err := p.metadataRepository.MarkTagProcessed(ctx, tagID); err != nil {
+			p.log.Errorf("MarkTagProcessed error for tag %s: %v", tagID, err)
 		}
 	}
 

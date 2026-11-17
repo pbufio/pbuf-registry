@@ -144,7 +144,7 @@ func (_m *UserRepository) GetUserByToken(ctx context.Context, token string) (*mo
 }
 
 // ListUsers provides a mock function with given fields: ctx, limit, offset
-func (_m *UserRepository) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, error) {
+func (_m *UserRepository) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, int, error) {
 	ret := _m.Called(ctx, limit, offset)
 
 	if len(ret) == 0 {
@@ -152,8 +152,9 @@ func (_m *UserRepository) ListUsers(ctx context.Context, limit int, offset int) 
 	}
 
 	var r0 []*model.User
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int, int) ([]*model.User, error)); ok {
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) ([]*model.User, int, error)); ok {
 		return rf(ctx, limit, offset)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, int, int) []*model.User); ok {
@@ -164,13 +165,19 @@ func (_m *UserRepository) ListUsers(ctx context.Context, limit int, offset int) 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, int, int) int); ok {
 		r1 = rf(ctx, limit, offset)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Int(1)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, int, int) error); ok {
+		r2 = rf(ctx, limit, offset)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // SetUserActive provides a mock function with given fields: ctx, id, isActive

@@ -1194,7 +1194,7 @@ const file_pbuf_registry_v1_users_proto_rawDesc = "" +
 	"\x16PERMISSION_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPERMISSION_READ\x10\x01\x12\x14\n" +
 	"\x10PERMISSION_WRITE\x10\x02\x12\x14\n" +
-	"\x10PERMISSION_ADMIN\x10\x032\xf2\b\n" +
+	"\x10PERMISSION_ADMIN\x10\x032\xf5\b\n" +
 	"\vUserService\x12k\n" +
 	"\n" +
 	"CreateUser\x12\".pbufregistry.v1.CreateUserRequest\x1a#.pbufregistry.v1.CreateUserResponse\"\x14\x82\xd3\xe4\x93\x02\x0e:\x01*\"\t/v1/users\x12e\n" +
@@ -1205,8 +1205,8 @@ const file_pbuf_registry_v1_users_proto_rawDesc = "" +
 	"\n" +
 	"DeleteUser\x12\".pbufregistry.v1.DeleteUserRequest\x1a#.pbufregistry.v1.DeleteUserResponse\"\x16\x82\xd3\xe4\x93\x02\x10*\x0e/v1/users/{id}\x12\x90\x01\n" +
 	"\x0fRegenerateToken\x12'.pbufregistry.v1.RegenerateTokenRequest\x1a(.pbufregistry.v1.RegenerateTokenResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/users/{id}/regenerate-token\x12\x90\x01\n" +
-	"\x0fGrantPermission\x12'.pbufregistry.v1.GrantPermissionRequest\x1a(.pbufregistry.v1.GrantPermissionResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/users/{user_id}/permissions\x12\x9e\x01\n" +
-	"\x10RevokePermission\x12(.pbufregistry.v1.RevokePermissionRequest\x1a).pbufregistry.v1.RevokePermissionResponse\"5\x82\xd3\xe4\x93\x02/*-/v1/users/{user_id}/permissions/{module_name}\x12\x99\x01\n" +
+	"\x0fGrantPermission\x12'.pbufregistry.v1.GrantPermissionRequest\x1a(.pbufregistry.v1.GrantPermissionResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/users/{user_id}/permissions\x12\xa1\x01\n" +
+	"\x10RevokePermission\x12(.pbufregistry.v1.RevokePermissionRequest\x1a).pbufregistry.v1.RevokePermissionResponse\"8\x82\xd3\xe4\x93\x022*0/v1/users/{user_id}/permissions/{module_name=**}\x12\x99\x01\n" +
 	"\x13ListUserPermissions\x12+.pbufregistry.v1.ListUserPermissionsRequest\x1a,.pbufregistry.v1.ListUserPermissionsResponse\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/users/{user_id}/permissionsB\x18Z\x16pbufregistry/api/v1;v1b\x06proto3"
 
 var (

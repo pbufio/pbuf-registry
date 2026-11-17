@@ -30,11 +30,23 @@ func (m MetadataServer) GetMetadata(ctx context.Context, request *v1.GetMetadata
 		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "module name is required")
 	}
 
-	if request.Tag == "" {
-		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag is required")
+	tag := request.Tag
+	if tag == "" {
+		module, err := m.registryRepository.GetModuleWithDrafts(ctx, request.Name, false)
+		if err != nil {
+			m.logger.Infof("error getting module: %v", err)
+			return nil, err
+		}
+		if module == nil {
+			return nil, kerrors.NotFound("MODULE_NOT_FOUND", "module not found")
+		}
+		if len(module.Tags) == 0 {
+			return nil, kerrors.NotFound("MODULE_TAG_NOT_FOUND", "module tag not found")
+		}
+		tag = module.Tags[0]
 	}
 
-	tagId, err := m.registryRepository.GetModuleTagId(ctx, request.Name, request.Tag)
+	tagId, err := m.registryRepository.GetModuleTagId(ctx, request.Name, tag)
 	if err != nil {
 		m.logger.Infof("error getting module tag id: %v", err)
 		return nil, err

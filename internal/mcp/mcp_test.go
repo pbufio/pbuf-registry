@@ -41,7 +41,11 @@ func (s *stubServer) ListModules(_ context.Context, _ *v1.ListModulesRequest) (*
 }
 
 func (s *stubServer) GetModule(_ context.Context, req *v1.GetModuleRequest) (*v1.Module, error) {
-	return &v1.Module{Id: "1", Name: req.Name, Tags: []string{"v1.0.0"}}, nil
+	mod := &v1.Module{Id: "1", Name: req.Name, Tags: []string{"v1.0.0"}}
+	if req.IncludeDraftTags {
+		mod.DraftTags = []string{"v1.1.0-rc1"}
+	}
+	return mod, nil
 }
 
 func (s *stubServer) GetModuleDependencies(_ context.Context, _ *v1.GetModuleDependenciesRequest) (*v1.GetModuleDependenciesResponse, error) {
@@ -128,6 +132,9 @@ func TestServeStdioAndHTTP(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_modules"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_module","arguments":{"name":"org/mod"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_module","arguments":{"name":"org/mod","include_draft_tags":false}}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_drift_events","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":null,"method":"ping"}`,
 		`{}`,
 	}, "\n") + "\n"
@@ -136,11 +143,14 @@ func TestServeStdioAndHTTP(t *testing.T) {
 	require.NoError(t, srv.ServeStdio(context.Background(), strings.NewReader(in), &out))
 
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	require.Len(t, lines, 4)
+	require.Len(t, lines, 7)
 	assert.Contains(t, lines[0], `"protocolVersion":"2024-11-05"`)
 	assert.Contains(t, lines[1], "org/mod")
-	assert.Contains(t, lines[2], `"id":null,"result":{}`)
-	assert.Contains(t, lines[3], `"code":-32600`)
+	assert.Contains(t, lines[2], "v1.1.0-rc1")
+	assert.NotContains(t, lines[3], "v1.1.0-rc1")
+	assert.NotContains(t, lines[4], "acknowledged")
+	assert.Contains(t, lines[5], `"id":null,"result":{}`)
+	assert.Contains(t, lines[6], `"code":-32600`)
 
 	stub.fail = true
 	out.Reset()

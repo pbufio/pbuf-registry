@@ -62,8 +62,8 @@ func (m *memoryUserRepo) GetUserByToken(_ context.Context, token string) (*model
 	return nil, data.ErrUserNotFound
 }
 
-func (m *memoryUserRepo) ListUsers(_ context.Context, _, _ int) ([]*model.User, error) {
-	return nil, nil
+func (m *memoryUserRepo) ListUsers(_ context.Context, _, _ int) ([]*model.User, int, error) {
+	return nil, 0, nil
 }
 
 func (m *memoryUserRepo) UpdateUser(_ context.Context, _ *model.User) error { return nil }
@@ -253,6 +253,44 @@ func TestOIDCVerifierAndMiddleware(t *testing.T) {
 			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer "+botJWT)},
 		)
 		_, err = handler(impersonateCtx, nil)
+		require.Error(t, err)
+	})
+
+	t.Run("rejects fallback display name impersonation and unverified emails", func(t *testing.T) {
+		handler := authMW(func(_ context.Context, _ interface{}) (interface{}, error) {
+			return "ok", nil
+		})
+
+		// Omitting email while setting name="alice@example.com" must NOT impersonate Alice
+		nameFallbackJWT := signTestJWT(t, privKey, kid, jwtv5.MapClaims{
+			"iss":                issuerURL,
+			"sub":                "attacker-sub",
+			"aud":                "pbuf-registry",
+			"name":               "alice@example.com",
+			"preferred_username": "alice@example.com",
+			"exp":                time.Now().Add(10 * time.Minute).Unix(),
+		})
+		sCtx := transport.NewServerContext(
+			context.Background(),
+			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer "+nameFallbackJWT)},
+		)
+		_, err := handler(sCtx, nil)
+		require.Error(t, err)
+
+		// Unverified email (email_verified=false) must be rejected
+		unverifiedJWT := signTestJWT(t, privKey, kid, jwtv5.MapClaims{
+			"iss":            issuerURL,
+			"sub":            "attacker-sub",
+			"aud":            "pbuf-registry",
+			"email":          "alice@example.com",
+			"email_verified": false,
+			"exp":            time.Now().Add(10 * time.Minute).Unix(),
+		})
+		unverifiedCtx := transport.NewServerContext(
+			context.Background(),
+			&Transport{reqHeader: newTokenHeader(authorizationKey, "Bearer "+unverifiedJWT)},
+		)
+		_, err = handler(unverifiedCtx, nil)
 		require.Error(t, err)
 	})
 

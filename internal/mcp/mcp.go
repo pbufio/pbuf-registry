@@ -57,6 +57,7 @@ type toolSpec struct {
 	name        string
 	description string
 	schema      map[string]any
+	defaults    map[string]string
 	newReq      func() proto.Message
 	call        func(ctx context.Context, req proto.Message) (proto.Message, error)
 	callRaw     func(ctx context.Context, rawArgs json.RawMessage) (string, error)
@@ -107,7 +108,8 @@ func NewServer(registry v1.RegistryClient, metadata v1.MetadataServiceClient, dr
 					},
 					"required": []string{"name"},
 				},
-				newReq: func() proto.Message { return &v1.GetModuleRequest{} },
+				defaults: map[string]string{"include_draft_tags": "true"},
+				newReq:   func() proto.Message { return &v1.GetModuleRequest{IncludeDraftTags: true} },
 				call: func(ctx context.Context, req proto.Message) (proto.Message, error) {
 					return registry.GetModule(ctx, req.(*v1.GetModuleRequest))
 				},
@@ -170,7 +172,8 @@ func NewServer(registry v1.RegistryClient, metadata v1.MetadataServiceClient, dr
 						"unacknowledged_only": map[string]any{"type": "boolean", "description": "Only return unacknowledged drift events (default: true)."},
 					},
 				},
-				newReq: func() proto.Message { return &v1.ListDriftEventsRequest{UnacknowledgedOnly: true} },
+				defaults: map[string]string{"unacknowledged_only": "true"},
+				newReq:   func() proto.Message { return &v1.ListDriftEventsRequest{UnacknowledgedOnly: true} },
 				call: func(ctx context.Context, req proto.Message) (proto.Message, error) {
 					return drift.ListDriftEvents(ctx, req.(*v1.ListDriftEventsRequest))
 				},
@@ -344,7 +347,8 @@ func (s *Server) callTool(ctx context.Context, rawParams json.RawMessage) (any, 
 		} else {
 			reqMsg := tool.newReq()
 			if len(call.Arguments) > 0 && string(call.Arguments) != "null" {
-				if unmarshalErr := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(call.Arguments, reqMsg); unmarshalErr != nil {
+				argsJSON := applyJSONDefaults(call.Arguments, tool.defaults)
+				if unmarshalErr := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(argsJSON, reqMsg); unmarshalErr != nil {
 					return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("invalid arguments for %s: %v", call.Name, unmarshalErr)}, nil
 				}
 			}
@@ -380,6 +384,43 @@ func (s *Server) callTool(ctx context.Context, rawParams json.RawMessage) (any, 
 	}
 
 	return nil, &rpcError{Code: -32602, Message: "unknown tool: " + call.Name}, nil
+}
+
+func applyJSONDefaults(raw json.RawMessage, defaults map[string]string) json.RawMessage {
+	if len(defaults) == 0 {
+		return raw
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return raw
+	}
+	changed := false
+	for key, val := range defaults {
+		if _, ok := obj[key]; !ok {
+			if _, okCamel := obj[snakeToCamel(key)]; !okCamel {
+				obj[key] = json.RawMessage(val)
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return raw
+	}
+	merged, err := json.Marshal(obj)
+	if err != nil {
+		return raw
+	}
+	return merged
+}
+
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 type httpCtxKeyType struct{}

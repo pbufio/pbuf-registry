@@ -3,6 +3,8 @@ package middleware
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"strings"
@@ -52,13 +54,35 @@ func NewStaticTokenAuth(token string) AuthMiddleware {
 	}
 }
 
+func extractAuthToken(authHeader string) string {
+	trimmed := strings.TrimSpace(authHeader)
+	if len(trimmed) >= 6 && strings.EqualFold(trimmed[:6], "bearer") {
+		if len(trimmed) == 6 {
+			return ""
+		}
+		if trimmed[6] == ' ' || trimmed[6] == '\t' {
+			return strings.TrimSpace(trimmed[7:])
+		}
+	}
+	return trimmed
+}
+
+func secureTokenEqual(provided, expected string) bool {
+	if provided == "" || expected == "" {
+		return false
+	}
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
+}
+
 func (s staticTokenAuth) NewAuthMiddleware() middleware.Middleware {
 	return func(handler middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req interface{}) (reply interface{}, err error) {
 			if serverContext, ok := transport.FromServerContext(ctx); ok {
 				authHeader := serverContext.RequestHeader().Get(authorizationKey)
-				token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-				if token == "" || token != s.token {
+				token := extractAuthToken(authHeader)
+				if !secureTokenEqual(token, s.token) {
 					return nil, jwt.ErrTokenInvalid
 				}
 				return handler(ctx, req)
@@ -119,14 +143,14 @@ func (a *aclAuth) NewAuthMiddleware() middleware.Middleware {
 				return nil, jwt.ErrTokenInvalid
 			}
 
-			// Extract token from "Bearer <token>" format
-			token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+			// Extract token from "Bearer <token>" format (RFC 9110 case-insensitive)
+			token := extractAuthToken(authHeader)
 			if token == "" {
 				return nil, jwt.ErrTokenInvalid
 			}
 
 			// Check if it's the admin token
-			if a.adminToken != "" && token == a.adminToken {
+			if secureTokenEqual(token, a.adminToken) {
 				// Admin has full access
 				ctx = model.ContextWithAdmin(ctx, true)
 				return handler(ctx, req)

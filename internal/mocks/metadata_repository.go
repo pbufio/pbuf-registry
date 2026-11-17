@@ -137,6 +137,24 @@ func (_m *MetadataRepository) GetUnprocessedTagIds(ctx context.Context) ([]strin
 	return r0, r1
 }
 
+// MarkTagProcessed provides a mock function with given fields: ctx, tagId
+func (_m *MetadataRepository) MarkTagProcessed(ctx context.Context, tagId string) error {
+	ret := _m.Called(ctx, tagId)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MarkTagProcessed")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, tagId)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SaveParsedProtoFiles provides a mock function with given fields: ctx, tagId, files
 func (_m *MetadataRepository) SaveParsedProtoFiles(ctx context.Context, tagId string, files []*model.ParsedProtoFile) error {
 	ret := _m.Called(ctx, tagId, files)

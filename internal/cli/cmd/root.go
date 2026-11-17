@@ -489,7 +489,8 @@ func NewGetModuleCmd(config *model.Config, client v1.RegistryClient) *cobra.Comm
 			}
 
 			module, err := client.GetModule(cmd.Context(), &v1.GetModuleRequest{
-				Name: moduleName,
+				Name:             moduleName,
+				IncludeDraftTags: true,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to get: %w", err)

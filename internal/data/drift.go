@@ -212,7 +212,7 @@ func (d *driftRepo) GetFileHashesForTag(ctx context.Context, tagID string) (map[
 	rows, err := d.pool.Query(ctx, `
 		SELECT filename, content_hash 
 		FROM protofiles 
-		WHERE tag_id = $1 AND content_hash IS NOT NULL
+		WHERE tag_id = $1
 	`, tagID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -224,12 +224,16 @@ func (d *driftRepo) GetFileHashesForTag(ctx context.Context, tagID string) (map[
 	defer rows.Close()
 
 	for rows.Next() {
-		var filename, hash string
+		var filename string
+		var hash *string
 		if err := rows.Scan(&filename, &hash); err != nil {
 			d.logger.Errorf("error scanning file hash: %v", err)
 			return nil, err
 		}
-		files[filename] = hash
+		if hash == nil {
+			return nil, fmt.Errorf("protofile %s in tag %s is missing content_hash", filename, tagID)
+		}
+		files[filename] = *hash
 	}
 	if err := rows.Err(); err != nil {
 		d.logger.Errorf("error iterating file hashes: %v", err)
@@ -387,7 +391,7 @@ func (d *driftRepo) GetDriftEvents(ctx context.Context, unacknowledgedOnly bool)
 	if unacknowledgedOnly {
 		query += ` WHERE de.acknowledged = false`
 	}
-	query += ` ORDER BY de.detected_at DESC`
+	query += ` ORDER BY de.detected_at DESC LIMIT 1000`
 
 	rows, err := d.pool.Query(ctx, query)
 	if err != nil {

@@ -20,7 +20,7 @@ type UserRepository interface {
 	GetUser(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetUserByName(ctx context.Context, name string) (*model.User, error)
 	GetUserByToken(ctx context.Context, token string) (*model.User, error)
-	ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, error)
+	ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, int, error)
 	UpdateUser(ctx context.Context, user *model.User) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	SetUserActive(ctx context.Context, id uuid.UUID, isActive bool) error
@@ -102,28 +102,41 @@ func (r *userRepo) GetUserByToken(ctx context.Context, token string) (*model.Use
 	return &user, nil
 }
 
-func (r *userRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, error) {
+func (r *userRepo) ListUsers(ctx context.Context, limit int, offset int) ([]*model.User, int, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, name, token, type, is_active, created_at, updated_at
+		`SELECT id, name, token, type, is_active, created_at, updated_at, COUNT(*) OVER()
 		FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
 		limit, offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("could not select users from database: %w", err)
+		return nil, 0, fmt.Errorf("could not select users from database: %w", err)
 	}
 	defer rows.Close()
 
-	var users []*model.User
+	var (
+		users []*model.User
+		total int
+	)
 	for rows.Next() {
 		var user model.User
-		err := rows.Scan(&user.ID, &user.Name, &user.Token, &user.Type, &user.IsActive, &user.CreatedAt, &user.UpdatedAt)
+		err := rows.Scan(&user.ID, &user.Name, &user.Token, &user.Type, &user.IsActive, &user.CreatedAt, &user.UpdatedAt, &total)
 		if err != nil {
-			return nil, fmt.Errorf("could not scan user: %w", err)
+			return nil, 0, fmt.Errorf("could not scan user: %w", err)
 		}
 		users = append(users, &user)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("could not iterate users: %w", err)
+	}
+	rows.Close()
 
-	return users, nil
+	if len(users) == 0 && offset > 0 {
+		if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("could not count users in database: %w", err)
+		}
+	}
+
+	return users, total, nil
 }
 
 func (r *userRepo) UpdateUser(ctx context.Context, user *model.User) error {

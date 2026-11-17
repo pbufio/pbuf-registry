@@ -18,6 +18,7 @@ type MetadataRepository interface {
 	GetUnprocessedTagIds(ctx context.Context) ([]string, error)
 	GetProtoFilesForTagId(ctx context.Context, tagId string) ([]*v1.ProtoFile, error)
 	SaveParsedProtoFiles(ctx context.Context, tagId string, files []*model.ParsedProtoFile) error
+	MarkTagProcessed(ctx context.Context, tagId string) error
 	GetParsedProtoFiles(ctx context.Context, tagId string) ([]*model.ParsedProtoFile, error)
 	GetTagMetaByTagId(ctx context.Context, tagId string) (*model.TagMeta, error)
 }
@@ -30,7 +31,7 @@ type metadataRepo struct {
 func (m metadataRepo) GetUnprocessedTagIds(ctx context.Context) ([]string, error) {
 	var tagIds []string
 
-	rows, err := m.pool.Query(ctx, "SELECT id FROM tags WHERE is_processed = false")
+	rows, err := m.pool.Query(ctx, "SELECT id FROM tags WHERE is_processed = false ORDER BY updated_at ASC, id ASC")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tagIds, nil
@@ -129,19 +130,20 @@ func (m metadataRepo) SaveParsedProtoFiles(ctx context.Context, tagId string, fi
 		return err
 	}
 
-	// update tag to processed
-	_, err = tx.Exec(ctx, "UPDATE tags SET is_processed = true WHERE id = $1", tagId)
-	if err != nil {
-		m.logger.Errorf("error updating tag to processed: %v", err)
-		return err
-	}
-
 	err = tx.Commit(ctx)
 	if err != nil {
 		m.logger.Errorf("error committing transaction: %v", err)
 		return err
 	}
 
+	return nil
+}
+
+func (m metadataRepo) MarkTagProcessed(ctx context.Context, tagId string) error {
+	if _, err := m.pool.Exec(ctx, "UPDATE tags SET is_processed = true WHERE id = $1", tagId); err != nil {
+		m.logger.Errorf("error updating tag %s to processed: %v", tagId, err)
+		return err
+	}
 	return nil
 }
 

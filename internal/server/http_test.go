@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,11 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/google/uuid"
 	"github.com/pbufio/pbuf-registry/internal/config"
+	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,5 +61,35 @@ func TestServersDoNotExposeDefaultServeMux(t *testing.T) {
 		debugSrv.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.NotContains(t, rec.Body.String(), "leaked-default-mux")
+	})
+
+	t.Run("http server caps request body size before auth and routes slash module_name on RevokePermission", func(t *testing.T) {
+		oversized := bytes.NewReader(make([]byte, maxHTTPRequestBytes+1024))
+		pushRec := httptest.NewRecorder()
+		pushReq := httptest.NewRequest(http.MethodPost, "/v1/modules/push", oversized)
+		pushReq.Header.Set("Content-Type", "application/json")
+		httpSrv.ServeHTTP(pushRec, pushReq)
+		assert.GreaterOrEqual(t, pushRec.Code, 400)
+		// Ensure reader was cut off right after maxHTTPRequestBytes rather than reading entire buffer
+		assert.Greater(t, oversized.Len(), 512)
+
+		aclRepo := mocks.NewACLRepository(t)
+		userID := uuid.New()
+		aclRepo.On("RevokePermission", mock.Anything, userID, "myorg/payment-service").Return(nil).Once()
+		aclRepo.On("RevokePermission", mock.Anything, userID, "*").Return(nil).Once()
+		usersSrv := NewUsersServer(mocks.NewUserRepository(t), aclRepo, logger)
+		authedHTTP := NewHTTPServer(cfg, &RegistryServer{}, &MetadataServer{}, usersSrv, &DriftServer{}, nil, nil, logger)
+
+		delRec := httptest.NewRecorder()
+		delReq := httptest.NewRequest(http.MethodDelete, "/v1/users/"+userID.String()+"/permissions/myorg/payment-service", nil)
+		delReq.Header.Set("Authorization", "bearer super-secret-admin-token")
+		authedHTTP.ServeHTTP(delRec, delReq)
+		assert.Equal(t, http.StatusOK, delRec.Code)
+
+		starRec := httptest.NewRecorder()
+		starReq := httptest.NewRequest(http.MethodDelete, "/v1/users/"+userID.String()+"/permissions/*", nil)
+		starReq.Header.Set("Authorization", "bearer super-secret-admin-token")
+		authedHTTP.ServeHTTP(starRec, starReq)
+		assert.Equal(t, http.StatusOK, starRec.Code)
 	})
 }

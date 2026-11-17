@@ -59,7 +59,7 @@ func RegisterUserServiceHTTPServer(s *http.Server, srv UserServiceHTTPServer) {
 	r.DELETE("/v1/users/{id}", _UserService_DeleteUser0_HTTP_Handler(srv))
 	r.POST("/v1/users/{id}/regenerate-token", _UserService_RegenerateToken0_HTTP_Handler(srv))
 	r.POST("/v1/users/{user_id}/permissions", _UserService_GrantPermission0_HTTP_Handler(srv))
-	r.DELETE("/v1/users/{user_id}/permissions/{module_name}", _UserService_RevokePermission0_HTTP_Handler(srv))
+	r.DELETE("/v1/users/{user_id}/permissions/{module_name:.*.*}", _UserService_RevokePermission0_HTTP_Handler(srv))
 	r.GET("/v1/users/{user_id}/permissions", _UserService_ListUserPermissions0_HTTP_Handler(srv))
 }
 
@@ -397,7 +397,7 @@ func (c *UserServiceHTTPClientImpl) RegenerateToken(ctx context.Context, in *Reg
 // RevokePermission Revoke permission from a user or bot
 func (c *UserServiceHTTPClientImpl) RevokePermission(ctx context.Context, in *RevokePermissionRequest, opts ...http.CallOption) (*RevokePermissionResponse, error) {
 	var out RevokePermissionResponse
-	pattern := "/v1/users/{user_id}/permissions/{module_name}"
+	pattern := "/v1/users/{user_id}/permissions/{module_name:.*.*}"
 	path := binding.EncodeURL(pattern, in, true)
 	opts = append(opts, http.Operation(OperationUserServiceRevokePermission))
 	opts = append(opts, http.PathTemplate(pattern))
