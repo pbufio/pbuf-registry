@@ -127,11 +127,21 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 			t.Fatal("timed out waiting for first job run")
 		}
 
-		require.NoError(t, job.RunNow())
-		select {
-		case <-doneCh:
-		case <-time.After(2 * time.Second):
-			t.Fatal("timed out waiting for second job run")
+		// Retry RunNow briefly in case gocron's singleton wrapper is still releasing the lock
+		// after runFn's defer signaled doneCh.
+		deadline := time.After(2 * time.Second)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+	waitSecondRun:
+		for {
+			require.NoError(t, job.RunNow())
+			select {
+			case <-doneCh:
+				break waitSecondRun
+			case <-ticker.C:
+			case <-deadline:
+				t.Fatal("timed out waiting for second job run")
+			}
 		}
 
 		assert.Equal(t, int32(2), daemon.runs.Load())
