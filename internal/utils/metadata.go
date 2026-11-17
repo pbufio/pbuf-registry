@@ -1,14 +1,12 @@
 package utils
 
 import (
-	"sort"
 	"strconv"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
 	"github.com/yoheimuta/go-protoparser/v4/parser"
-	"golang.org/x/exp/maps"
 )
 
 // ToMetadata converts array of ParsedProtoFile to []v1.Packages
@@ -32,8 +30,7 @@ func ToMetadata(files []*model.ParsedProtoFile) []*v1.Package {
 		}
 	}
 
-	packagesNames := maps.Keys(packagesMap)
-	sort.Strings(packagesNames)
+	packagesNames := sortedKeys(packagesMap)
 
 	var packages []*v1.Package
 	for _, packageName := range packagesNames {

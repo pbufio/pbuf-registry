@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/go-kratos/kratos/v2/log"
 	kratosmiddleware "github.com/go-kratos/kratos/v2/middleware"
 	kratosHttp "github.com/go-kratos/kratos/v2/transport/http"
@@ -44,6 +46,8 @@ func NewHTTPServer(cfg *config.Server,
 		kratosHttp.Address(cfg.HTTP.Addr),
 		kratosHttp.Timeout(cfg.HTTP.Timeout),
 		kratosHttp.Middleware(serverMiddlewares...),
+		kratosHttp.NotFoundHandler(http.NotFoundHandler()),
+		kratosHttp.MethodNotAllowedHandler(methodNotAllowedHandler()),
 	}
 
 	srv := kratosHttp.NewServer(opts...)

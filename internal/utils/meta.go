@@ -1,14 +1,21 @@
 package utils
 
 import (
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
 	"github.com/yoheimuta/go-protoparser/v4/parser"
-	"golang.org/x/exp/maps"
 )
+
+func sortedKeys[V any](m map[string]V) []string {
+	if len(m) == 0 {
+		return []string{}
+	}
+	return slices.Sorted(maps.Keys(m))
+}
 
 // RetrieveMeta retrieves metadata from parsed proto files
 func RetrieveMeta(files []*model.ParsedProtoFile) (*model.TagMeta, error) {
@@ -58,36 +65,18 @@ func RetrieveMeta(files []*model.ParsedProtoFile) (*model.TagMeta, error) {
 			}
 		}
 
-		uniquePackages := maps.Keys(filePackages)
-		sort.Strings(uniquePackages)
-
-		uniqueImports := maps.Keys(fileImports)
-		sort.Strings(uniqueImports)
-
-		uniqueRefPackages := maps.Keys(fileRefPackages)
-		sort.Strings(uniqueRefPackages)
-
 		filesMeta[i] = &model.FileMeta{
 			Filename:    file.Filename,
-			Packages:    uniquePackages,
-			Imports:     uniqueImports,
-			RefPackages: uniqueRefPackages,
+			Packages:    sortedKeys(filePackages),
+			Imports:     sortedKeys(fileImports),
+			RefPackages: sortedKeys(fileRefPackages),
 		}
 	}
 
-	uniquePackages := maps.Keys(packages)
-	sort.Strings(uniquePackages)
-
-	uniqueImports := maps.Keys(imports)
-	sort.Strings(uniqueImports)
-
-	uniqueRefPackages := maps.Keys(refPackages)
-	sort.Strings(uniqueRefPackages)
-
 	return &model.TagMeta{
-		Packages:    uniquePackages,
-		Imports:     uniqueImports,
-		RefPackages: uniqueRefPackages,
+		Packages:    sortedKeys(packages),
+		Imports:     sortedKeys(imports),
+		RefPackages: sortedKeys(refPackages),
 		FilesMeta:   filesMeta,
 	}, nil
 }
