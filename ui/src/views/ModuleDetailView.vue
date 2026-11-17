@@ -7,6 +7,7 @@ import PButton from '@/components/PButton.vue'
 import PCodeBlock from '@/components/PCodeBlock.vue'
 import { registryApi } from '@/services/registryApi'
 import { driftApi } from '@/services/driftApi'
+import { buildVendorSnippet } from '@/utils/protoDiff'
 
 const route = useRoute()
 const router = useRouter()
@@ -130,17 +131,8 @@ const viewVersion = (tag) => {
   router.push(`/modules/${moduleName.value}/tags/${tag}`)
 }
 
-const vendorConfig = (tag) => {
-  return `# Add to your pbuf.yaml:
-version: v1
-domain: https://pbuf.io
-modules:
-  - name: ${moduleName.value}
-    tag: ${tag}
-    out: third_party
-
-# Then run:
-# pbuf vendor`
+const vendorConfig = (tag, genOut = '') => {
+  return buildVendorSnippet({ moduleName: moduleName.value, tag, genOut })
 }
 
 onMounted(() => {
@@ -260,17 +252,7 @@ onMounted(() => {
             </div>
             <div>
               <h3 class="text-lg font-medium mb-2 text-zinc-200">Advanced: Vendor with code generation path</h3>
-              <PCodeBlock :code="`# Add to your pbuf.yaml:
-version: v1
-domain: https://pbuf.io
-modules:
-  - name: ${module.name}
-    tag: ${module.tags[0] || 'v1.0.0'}
-    out: third_party
-    gen_out: gen  # patches go_package option
-
-# Then run:
-# pbuf vendor`" />
+              <PCodeBlock :code="vendorConfig(module.tags[0] || 'v1.0.0', 'gen')" />
             </div>
           </div>
         </div>

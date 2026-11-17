@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
@@ -24,13 +25,17 @@ func TestMetadataServer_GetMetadata_Validation(t *testing.T) {
 	t.Run("missing module name", func(t *testing.T) {
 		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "", Tag: "v1.0.0"})
 		assert.Nil(t, resp)
-		require.EqualError(t, err, "module name is required")
+		require.Error(t, err)
+		assert.True(t, kerrors.IsBadRequest(err))
+		assert.Equal(t, "module name is required", kerrors.FromError(err).Message)
 	})
 
 	t.Run("missing tag", func(t *testing.T) {
 		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/orders", Tag: ""})
 		assert.Nil(t, resp)
-		require.EqualError(t, err, "tag is required")
+		require.Error(t, err)
+		assert.True(t, kerrors.IsBadRequest(err))
+		assert.Equal(t, "tag is required", kerrors.FromError(err).Message)
 	})
 }
 
@@ -60,7 +65,9 @@ func TestMetadataServer_GetMetadata_NotFoundAndErrors(t *testing.T) {
 
 		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/orders", Tag: "v1.0.0"})
 		assert.Nil(t, resp)
-		require.EqualError(t, err, "module tag not found")
+		require.Error(t, err)
+		assert.True(t, kerrors.IsNotFound(err))
+		assert.Equal(t, "MODULE_TAG_NOT_FOUND", kerrors.FromError(err).Reason)
 	})
 
 	t.Run("GetTagMetaByTagId error", func(t *testing.T) {
@@ -90,7 +97,9 @@ func TestMetadataServer_GetMetadata_NotFoundAndErrors(t *testing.T) {
 
 		resp, err := srv.GetMetadata(ctx, &v1.GetMetadataRequest{Name: "acme/orders", Tag: "v1.0.0"})
 		assert.Nil(t, resp)
-		require.EqualError(t, err, "tag meta not found")
+		require.Error(t, err)
+		assert.True(t, kerrors.IsNotFound(err))
+		assert.Equal(t, "TAG_META_NOT_FOUND", kerrors.FromError(err).Reason)
 	})
 
 	t.Run("GetParsedProtoFiles error", func(t *testing.T) {

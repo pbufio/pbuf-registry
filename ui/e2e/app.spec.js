@@ -354,6 +354,101 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page.getByRole('button', { name: 'Acknowledge', exact: true })).toHaveCount(0)
   })
 
+  test('renders unparsed newly-pushed tag gracefully, emits registry.addr snippet, and compares tag-to-tag .proto diffs', async ({ page }) => {
+    await page.route('**/api/v1/metadata', async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 404, reason: 'TAG_META_NOT_FOUND', message: 'tag meta not found' })
+      })
+    })
+    await page.route('**/api/v1/modules/dependencies', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ dependencies: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ statuses: [] }) })
+    })
+    await page.route('**/api/v1/drift/modules/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
+    await page.route('**/api/v1/modules/get', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'mod-1',
+          name: 'acme/order-service',
+          tags: ['v2.0.0', 'v1.1.0', 'v1.0.0'],
+          draftTags: []
+        })
+      })
+    })
+    await page.route('**/api/v1/modules/pull', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.tag === 'v2.0.0') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            protofiles: [
+              { filename: 'order/v1/order.proto', content: 'syntax = "proto3";\nmessage Order {\n  string id = 1;\n  string status = 2;\n}\n' },
+              { filename: 'order/v2/events.proto', content: 'syntax = "proto3";\nmessage OrderCreated {}\n' }
+            ]
+          })
+        })
+        return
+      }
+      if (body.tag === 'v1.1.0') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            protofiles: [
+              { filename: 'order/v1/order.proto', content: 'syntax = "proto3";\nmessage Order {\n  string id = 1;\n}\n' },
+              { filename: 'order/v1/legacy.proto', content: 'syntax = "proto3";\nmessage Legacy {}\n' }
+            ]
+          })
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          protofiles: [
+            { filename: 'order/v1/order.proto', content: 'syntax = "proto3";\nmessage Order {}\n' }
+          ]
+        })
+      })
+    })
+
+    await page.goto('/modules/acme/order-service/tags/v2.0.0')
+
+    // Quick-start snippet emits valid registry.addr instead of deprecated domain:
+    const snippet = page.locator('.whitespace-pre').first()
+    await expect(snippet).toContainText('registry:')
+    await expect(snippet).toContainText('addr:')
+    await expect(snippet).not.toContainText('domain:')
+    await expect(page.getByText('order/v1/order.proto')).toBeVisible()
+
+    // Unparsed metadata 404 shows pending notice without failing the page
+    await page.getByRole('button', { name: 'Metadata', exact: true }).click()
+    await expect(page.getByText(/Metadata is pending background indexing/i)).toBeVisible()
+
+    // Compare tab defaults to immediately preceding tag v1.1.0 and renders added/modified/deleted diffs
+    await page.getByRole('button', { name: 'Compare', exact: true }).click()
+    const panel = page.getByTestId('compare-tab-panel')
+    const select = panel.getByLabel('Compare against tag')
+    await expect(select).toHaveValue('v1.1.0')
+    await expect(panel).toContainText('1 added, 1 modified, 1 deleted')
+    await expect(panel).toContainText('string status = 2;')
+    await expect(panel).toContainText('order/v1/legacy.proto')
+
+    // Switching baseline tag updates diff cleanly
+    await select.selectOption('v1.0.0')
+    await expect(panel).toContainText('Comparing v1.0.0 → v2.0.0: 1 added, 1 modified, 0 deleted')
+  })
+
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {
     test.skip(process.env.PLAYWRIGHT_LIVE_BACKEND !== '1', 'Requires live Docker Compose stack')
 
