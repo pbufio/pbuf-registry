@@ -32,3 +32,5 @@ dist-ssr
 # Build output
 coverage
 *.tsbuildinfo
+test-results
+playwright-report

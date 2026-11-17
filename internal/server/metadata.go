@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"errors"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
@@ -26,12 +26,12 @@ func NewMetadataServer(registryRepository data.RegistryRepository, metadataRepos
 }
 
 func (m MetadataServer) GetMetadata(ctx context.Context, request *v1.GetMetadataRequest) (*v1.GetMetadataResponse, error) {
-	if request.Name == "" {
-		return nil, errors.New("module name is required")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "module name is required")
 	}
 
 	if request.Tag == "" {
-		return nil, errors.New("tag is required")
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag is required")
 	}
 
 	tagId, err := m.registryRepository.GetModuleTagId(ctx, request.Name, request.Tag)
@@ -41,7 +41,7 @@ func (m MetadataServer) GetMetadata(ctx context.Context, request *v1.GetMetadata
 	}
 
 	if tagId == "" {
-		return nil, errors.New("module tag not found")
+		return nil, kerrors.NotFound("MODULE_TAG_NOT_FOUND", "module tag not found")
 	}
 
 	tagMeta, err := m.metadataRepository.GetTagMetaByTagId(ctx, tagId)
@@ -51,7 +51,7 @@ func (m MetadataServer) GetMetadata(ctx context.Context, request *v1.GetMetadata
 	}
 
 	if tagMeta == nil {
-		return nil, errors.New("tag meta not found")
+		return nil, kerrors.NotFound("TAG_META_NOT_FOUND", "tag meta not found")
 	}
 
 	parsedProtoFiles, err := m.metadataRepository.GetParsedProtoFiles(ctx, tagId)

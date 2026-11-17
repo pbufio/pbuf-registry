@@ -16,6 +16,11 @@ import {
   getAcknowledgeDriftErrorMessage,
   replaceDriftEvent
 } from '@/utils/driftAcknowledgeUtils'
+import {
+  buildVendorSnippet,
+  diffProtoFileSets,
+  pickDefaultBaseTag
+} from '@/utils/protoDiff'
 
 const MAX_GRAPH_EDGE_PARENTS = 20
 
@@ -24,12 +29,22 @@ const router = useRouter()
 const protoFiles = ref([])
 const dependencies = ref([])
 const metadata = ref(null)
+const metadataPending = ref(false)
 const loading = ref(true)
 const loadingProtoFiles = ref(false)
 const protoFilesLoaded = ref(false)
 const activeTab = ref('files')
 const error = ref(null)
 const protoFilesError = ref(null)
+
+const compareTags = ref([])
+const compareTagsLoaded = ref(false)
+const compareBaseTag = ref('')
+const compareBaseFiles = ref([])
+const compareLoading = ref(false)
+const compareError = ref(null)
+let compareProtoCache = new Map()
+let protoFilesPromise = null
 
 const driftEvents = ref([])
 const driftLoading = ref(false)
@@ -53,15 +68,27 @@ const moduleName = computed(() => {
 })
 const tag = computed(() => route.params.tag)
 
-watch([moduleName, tag], () => {
+watch([moduleName, tag], (newVals, oldVals) => {
   // Reset state when navigating between tags without recreating the component
+  if (!oldVals || newVals[0] !== oldVals[0]) {
+    compareProtoCache = new Map()
+    compareTags.value = []
+    compareTagsLoaded.value = false
+  }
   protoFiles.value = []
   dependencies.value = []
   metadata.value = null
+  metadataPending.value = false
   error.value = null
   protoFilesError.value = null
+  loadingProtoFiles.value = false
+  protoFilesPromise = null
 
   protoFilesLoaded.value = false
+  compareBaseTag.value = ''
+  compareBaseFiles.value = []
+  compareLoading.value = false
+  compareError.value = null
   driftLoaded.value = false
   driftEvents.value = []
   driftError.value = null
@@ -340,6 +367,7 @@ const onSelectGraphNode = (node) => {
 const loadVersionDetails = async () => {
   loading.value = true
   error.value = null
+  metadataPending.value = false
   dependencyDriftStatuses.value = []
   dependencyDriftError.value = null
   graphEdgesByParent.value = {}
@@ -348,9 +376,19 @@ const loadVersionDetails = async () => {
   graphEdgesError.value = null
   resolvingGraphEdges.value = false
   try {
-    // Get metadata (parsed proto structure) - Level 3
-    const metadataResponse = await metadataApi.getMetadata(moduleName.value, tag.value)
-    metadata.value = metadataResponse
+    // Get metadata (parsed proto structure) - Level 3. Newly pushed tags return 404 (TAG_META_NOT_FOUND)
+    // until background proto-parsing runs; degrade gracefully so files/deps/compare still render.
+    try {
+      const metadataResponse = await metadataApi.getMetadata(moduleName.value, tag.value)
+      metadata.value = metadataResponse
+    } catch (metaErr) {
+      if (metaErr?.response?.status === 404 && metaErr?.response?.data?.reason === 'TAG_META_NOT_FOUND') {
+        metadata.value = null
+        metadataPending.value = true
+      } else {
+        throw metaErr
+      }
+    }
 
     // Get direct + transitive dependencies
     const depsResponse = await registryApi.getModuleDependencies(moduleName.value, tag.value, true)
@@ -372,22 +410,42 @@ const loadVersionDetails = async () => {
   }
 }
 
-const loadProtoFiles = async () => {
-  if (protoFilesLoaded.value) return
-  
+const loadProtoFiles = () => {
+  if (protoFilesLoaded.value) return Promise.resolve()
+  if (protoFilesPromise) return protoFilesPromise
+
+  const currentModule = moduleName.value
+  const currentTag = tag.value
   loadingProtoFiles.value = true
   protoFilesError.value = null
-  try {
-    // Pull module to get proto files - only when needed
-    const pullResponse = await registryApi.pullModule(moduleName.value, tag.value)
-    protoFiles.value = pullResponse.protofiles || []
-    protoFilesLoaded.value = true
-  } catch (err) {
-    console.error('Failed to load proto files:', err)
-    protoFilesError.value = err.response?.data?.message || err.message || 'Failed to load proto files'
-  } finally {
-    loadingProtoFiles.value = false
-  }
+
+  const p = (async () => {
+    try {
+      // Pull module to get proto files - only when needed
+      const pullResponse = await registryApi.pullModule(currentModule, currentTag)
+      const files = pullResponse.protofiles || []
+      if (moduleName.value === currentModule && tag.value === currentTag) {
+        protoFiles.value = files
+        protoFilesLoaded.value = true
+        compareProtoCache.set(currentTag, files)
+      }
+    } catch (err) {
+      if (moduleName.value === currentModule && tag.value === currentTag) {
+        console.error('Failed to load proto files:', err)
+        protoFilesError.value = err.response?.data?.message || err.message || 'Failed to load proto files'
+      }
+    } finally {
+      if (protoFilesPromise === p) {
+        protoFilesPromise = null
+      }
+      if (moduleName.value === currentModule && tag.value === currentTag) {
+        loadingProtoFiles.value = false
+      }
+    }
+  })()
+
+  protoFilesPromise = p
+  return p
 }
 
 const loadDriftEvents = async () => {
@@ -430,6 +488,91 @@ const acknowledgeDriftEvent = async (event) => {
   }
 }
 
+const compareCandidateTags = computed(() =>
+  (compareTags.value || []).filter((t) => t && t !== tag.value)
+)
+
+const compareDiff = computed(() => {
+  if (!compareBaseTag.value || compareLoading.value || compareError.value || !protoFilesLoaded.value) {
+    return null
+  }
+  return diffProtoFileSets(compareBaseFiles.value, protoFiles.value)
+})
+
+const diffStatusVariant = (status) => {
+  if (status === 'added') return 'info'
+  if (status === 'deleted') return 'critical'
+  return 'warning'
+}
+
+const loadCompareBaseFiles = async (baseTag) => {
+  if (!baseTag) {
+    compareBaseFiles.value = []
+    compareError.value = null
+    compareLoading.value = false
+    return
+  }
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  compareLoading.value = true
+  compareError.value = null
+  try {
+    if (!protoFilesLoaded.value) {
+      await loadProtoFiles()
+    }
+    if (moduleName.value !== currentModule || tag.value !== currentTag) return
+    if (!protoFilesLoaded.value) {
+      throw new Error(protoFilesError.value || 'Failed to load proto files')
+    }
+    let files = compareProtoCache.get(baseTag)
+    if (!files) {
+      const pullResp = await registryApi.pullModule(currentModule, baseTag)
+      files = pullResp.protofiles || []
+      if (moduleName.value === currentModule) {
+        compareProtoCache.set(baseTag, files)
+      }
+    }
+    if (moduleName.value === currentModule && tag.value === currentTag && compareBaseTag.value === baseTag) {
+      compareBaseFiles.value = files
+    }
+  } catch (err) {
+    if (moduleName.value === currentModule && tag.value === currentTag && compareBaseTag.value === baseTag) {
+      console.error('Failed to load baseline tag for comparison:', err)
+      compareError.value = err.response?.data?.message || err.message || 'Failed to load baseline tag'
+    }
+  } finally {
+    if (moduleName.value === currentModule && tag.value === currentTag && compareBaseTag.value === baseTag) {
+      compareLoading.value = false
+    }
+  }
+}
+
+const loadCompareView = async () => {
+  const currentModule = moduleName.value
+  const currentTag = tag.value
+  compareError.value = null
+  try {
+    if (!compareTagsLoaded.value) {
+      compareLoading.value = true
+      const mod = await registryApi.getModule(currentModule, true)
+      if (moduleName.value !== currentModule || tag.value !== currentTag) return
+      const merged = Array.from(new Set([...(mod.tags || []), ...(mod.draftTags || [])]))
+      compareTags.value = merged
+      compareTagsLoaded.value = true
+    }
+    if (!compareBaseTag.value || compareBaseTag.value === currentTag) {
+      compareBaseTag.value = pickDefaultBaseTag(compareTags.value, currentTag)
+    }
+    await loadCompareBaseFiles(compareBaseTag.value)
+  } catch (err) {
+    if (moduleName.value === currentModule && tag.value === currentTag) {
+      console.error('Failed to load module tags for comparison:', err)
+      compareError.value = err.response?.data?.message || err.message || 'Failed to load module tags'
+      compareLoading.value = false
+    }
+  }
+}
+
 const retryLoadDriftEvents = async () => {
   driftLoaded.value = false
   await loadDriftEvents()
@@ -439,6 +582,9 @@ const retryLoadDriftEvents = async () => {
 watch(activeTab, (newTab) => {
   if (newTab === 'files' && !protoFilesLoaded.value) {
     loadProtoFiles()
+  }
+  if (newTab === 'compare') {
+    loadCompareView()
   }
   if (newTab === 'graph' && !graphEdgesLoaded.value) {
     loadTransitiveGraphEdges()
@@ -499,16 +645,7 @@ onMounted(() => {
         <!-- Quick Vendor Command -->
         <div class="mb-8">
           <h2 class="text-2xl font-semibold mb-4">Vendor This Version</h2>
-          <PCodeBlock :code="`# Add to your pbuf.yaml:
-version: v1
-domain: https://pbuf.io
-modules:
-  - name: ${moduleName}
-    tag: ${tag}
-    out: third_party
-
-# Then run:
-# pbuf vendor`" />
+          <PCodeBlock :code="buildVendorSnippet({ moduleName, tag })" />
           <p class="text-zinc-400 text-sm mt-2">
             Learn more: 
             <a href="https://github.com/pbufio/pbuf-registry#cli-reference" target="_blank" rel="noopener noreferrer" class="text-brand hover:underline">
@@ -530,6 +667,17 @@ modules:
               ]"
             >
               Proto Files ({{ protoFiles.length }})
+            </button>
+            <button
+              @click="activeTab = 'compare'"
+              :class="[
+                'pb-3 px-1 font-medium transition-colors cursor-pointer',
+                activeTab === 'compare'
+                  ? 'text-brand border-b-2 border-brand'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              ]"
+            >
+              Compare
             </button>
             <button
               @click="activeTab = 'dependencies'"
@@ -610,6 +758,84 @@ modules:
               </div>
             </PCard>
             <p v-if="protoFiles.length === 0 && !protoFilesError" class="text-zinc-400 text-center py-8">No proto files available.</p>
+          </template>
+        </div>
+
+        <!-- Compare Tab -->
+        <div v-if="activeTab === 'compare'" class="space-y-4" data-testid="compare-tab-panel">
+          <PCard>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 class="text-lg font-semibold text-zinc-100">Compare Schema Against Baseline Tag</h3>
+                <p v-if="compareDiff && compareBaseTag" class="text-sm text-zinc-400 mt-1">
+                  Comparing <span class="font-mono text-zinc-200">{{ compareBaseTag }}</span> → <span class="font-mono text-zinc-200">{{ tag }}</span>:
+                  {{ compareDiff.added }} added, {{ compareDiff.modified }} modified, {{ compareDiff.deleted }} deleted, {{ compareDiff.unchanged }} unchanged
+                </p>
+                <p v-else-if="compareTagsLoaded && compareCandidateTags.length === 0" class="text-sm text-zinc-400 mt-1">
+                  No other tags exist on this module to compare against yet.
+                </p>
+              </div>
+              <div v-if="compareCandidateTags.length > 0" class="flex items-center gap-2">
+                <label for="compare-base-tag" class="text-sm text-zinc-400 whitespace-nowrap">Compare against tag</label>
+                <select
+                  id="compare-base-tag"
+                  v-model="compareBaseTag"
+                  aria-label="Compare against tag"
+                  class="bg-surface-base border border-surface-border rounded-lg px-3 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus:border-brand"
+                  @change="loadCompareBaseFiles(compareBaseTag)"
+                >
+                  <option v-for="candidate in compareCandidateTags" :key="candidate" :value="candidate">
+                    {{ candidate }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </PCard>
+
+          <div v-if="compareLoading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand"></div>
+            <p class="text-zinc-400 mt-4">Loading tag diff...</p>
+          </div>
+          <PCard v-else-if="compareError" class="text-center py-8">
+            <p class="text-zinc-300 font-semibold mb-2">Failed to Load Tag Diff</p>
+            <p class="text-zinc-400 text-sm mb-4">{{ compareError }}</p>
+            <PButton variant="primary" @click="loadCompareView">Retry</PButton>
+          </PCard>
+          <template v-else-if="compareDiff && compareBaseTag">
+            <p v-if="compareDiff.files.length === 0" class="text-zinc-400 text-center py-8">
+              No .proto file differences between {{ compareBaseTag }} and {{ tag }}.
+            </p>
+            <PCard v-for="fileDiff in compareDiff.files" :key="fileDiff.filename">
+              <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <div class="flex items-center gap-2">
+                  <PBadge :variant="diffStatusVariant(fileDiff.status)">{{ fileDiff.status.toUpperCase() }}</PBadge>
+                  <h4 class="font-mono text-sm sm:text-base font-semibold text-zinc-100">{{ fileDiff.filename }}</h4>
+                </div>
+                <div class="font-mono text-xs flex items-center gap-2">
+                  <span class="text-emerald-400">+{{ fileDiff.additions }}</span>
+                  <span class="text-red-400">-{{ fileDiff.deletions }}</span>
+                </div>
+              </div>
+              <div class="bg-surface-base rounded-lg overflow-x-auto border border-surface-border">
+                <div
+                  v-for="(line, idx) in fileDiff.lines"
+                  :key="idx"
+                  :class="[
+                    'grid grid-cols-[3rem_3rem_1.5rem_1fr] font-mono text-xs leading-5 px-2',
+                    line.type === 'add'
+                      ? 'bg-emerald-950/40 text-emerald-200'
+                      : line.type === 'del'
+                        ? 'bg-red-950/40 text-red-200'
+                        : 'text-zinc-400'
+                  ]"
+                >
+                  <span class="select-none text-right pr-2 text-zinc-600">{{ line.oldLine ?? '' }}</span>
+                  <span class="select-none text-right pr-2 text-zinc-600">{{ line.newLine ?? '' }}</span>
+                  <span class="select-none text-center">{{ line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ' }}</span>
+                  <span class="whitespace-pre">{{ line.text }}</span>
+                </div>
+              </div>
+            </PCard>
           </template>
         </div>
 
@@ -742,6 +968,9 @@ modules:
               </div>
             </PCard>
           </div>
+          <p v-else-if="metadataPending" class="text-zinc-400 text-center py-8">
+            Metadata is pending background indexing — refresh shortly.
+          </p>
           <p v-else class="text-zinc-400 text-center py-8">No metadata available.</p>
         </div>
 
