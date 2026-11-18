@@ -14,6 +14,7 @@ import (
 	"github.com/jdx/go-netrc"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -80,13 +81,19 @@ func (f *fakeRegistryClient) ListModules(_ context.Context, in *v1.ListModulesRe
 
 type fakeUsersClient struct {
 	v1.UserServiceClient
+	listResponse *v1.ListUsersResponse
+	listRequests []*v1.ListUsersRequest
 }
 
 func (f *fakeUsersClient) CreateUser(_ context.Context, in *v1.CreateUserRequest, _ ...grpc.CallOption) (*v1.CreateUserResponse, error) {
 	return &v1.CreateUserResponse{User: &v1.User{Id: "u-1", Name: in.Name, Type: in.Type}, Token: "tok"}, nil
 }
 
-func (f *fakeUsersClient) ListUsers(_ context.Context, _ *v1.ListUsersRequest, _ ...grpc.CallOption) (*v1.ListUsersResponse, error) {
+func (f *fakeUsersClient) ListUsers(_ context.Context, in *v1.ListUsersRequest, _ ...grpc.CallOption) (*v1.ListUsersResponse, error) {
+	f.listRequests = append(f.listRequests, in)
+	if f.listResponse != nil {
+		return f.listResponse, nil
+	}
 	return &v1.ListUsersResponse{Users: []*v1.User{{Id: "u-1", Name: "alice"}}}, nil
 }
 
@@ -120,10 +127,110 @@ func (f *fakeUsersClient) ListUserPermissions(_ context.Context, _ *v1.ListUserP
 
 type fakeMetadataClient struct {
 	v1.MetadataServiceClient
+	getResponse *v1.GetMetadataResponse
+	getRequests []*v1.GetMetadataRequest
 }
 
-func (f *fakeMetadataClient) GetMetadata(_ context.Context, _ *v1.GetMetadataRequest, _ ...grpc.CallOption) (*v1.GetMetadataResponse, error) {
+func (f *fakeMetadataClient) GetMetadata(_ context.Context, in *v1.GetMetadataRequest, _ ...grpc.CallOption) (*v1.GetMetadataResponse, error) {
+	f.getRequests = append(f.getRequests, in)
+	if f.getResponse != nil {
+		return f.getResponse, nil
+	}
 	return &v1.GetMetadataResponse{}, nil
+}
+
+func TestUsersListOutputFormats(t *testing.T) {
+	response := &v1.ListUsersResponse{Total: 3, Users: []*v1.User{
+		{Id: "u-1", Name: "alice", Type: v1.UserType_USER_TYPE_USER, IsActive: true},
+		{Id: "u-2", Name: "nightly", Type: v1.UserType_USER_TYPE_BOT},
+	}}
+	tests := []struct {
+		name     string
+		args     []string
+		wantJSON bool
+		wantErr  string
+	}{
+		{name: "default JSON", wantJSON: true},
+		{name: "explicit JSON", args: []string{"-o", "json"}, wantJSON: true},
+		{name: "table", args: []string{"--output", "table"}},
+		{name: "invalid", args: []string{"--output", "yaml"}, wantErr: "invalid --output value"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeUsersClient{listResponse: response}
+			cmd := NewUsersCmd(&model.Config{}, client)
+			out, err := runOutputCommand(cmd, append([]string{"list", "--page-size", "2", "--page", "1"}, test.args...))
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				require.Empty(t, client.listRequests)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, client.listRequests, 1)
+			assert.EqualValues(t, 2, client.listRequests[0].GetPageSize())
+			assert.EqualValues(t, 1, client.listRequests[0].GetPage())
+			if test.wantJSON {
+				expected, err := json.Marshal(response)
+				require.NoError(t, err)
+				assert.JSONEq(t, string(expected), out)
+				return
+			}
+			assert.Equal(t, []string{"ID", "NAME", "TYPE", "ACTIVE", "u-1", "alice", "user", "true", "u-2", "nightly", "bot", "false"}, strings.Fields(out))
+		})
+	}
+}
+
+func TestMetadataGetOutputFormats(t *testing.T) {
+	response := &v1.GetMetadataResponse{Packages: []*v1.Package{
+		{Name: "orders.v1", ProtoFiles: []*v1.ParsedProtoFile{
+			{Filename: "order.proto", Messages: []*v1.Message{{Name: "Request", NestedMessages: []*v1.Message{{Name: "Options"}}}}},
+			{Filename: "service.proto", Services: []*v1.Service{{Name: "Orders", Methods: []*v1.Method{{Name: "Get"}, {Name: "List"}}}}},
+		}},
+		{Name: "common.v1", ProtoFiles: []*v1.ParsedProtoFile{{Filename: "common.proto", Messages: []*v1.Message{{Name: "Reply"}}}}},
+	}}
+	tests := []struct {
+		name     string
+		args     []string
+		wantJSON bool
+		wantErr  string
+	}{
+		{name: "default JSON", wantJSON: true},
+		{name: "explicit JSON", args: []string{"--output", "json"}, wantJSON: true},
+		{name: "table", args: []string{"-o", "table"}},
+		{name: "invalid", args: []string{"-o", "yaml"}, wantErr: "invalid --output value"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeMetadataClient{getResponse: response}
+			cmd := NewMetadataCmd(&model.Config{Name: "default/module"}, client)
+			out, err := runOutputCommand(cmd, append([]string{"get", "acme/orders", "v1.0.0"}, test.args...))
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				require.Empty(t, client.getRequests)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, client.getRequests, 1)
+			assert.Equal(t, "acme/orders", client.getRequests[0].GetName())
+			assert.Equal(t, "v1.0.0", client.getRequests[0].GetTag())
+			if test.wantJSON {
+				expected, err := json.Marshal(response)
+				require.NoError(t, err)
+				assert.JSONEq(t, string(expected), out)
+				return
+			}
+			assert.Equal(t, []string{"PACKAGE", "FILES", "MESSAGES", "SERVICES", "RPCS", "orders.v1", "2", "2", "1", "2", "common.v1", "1", "1", "0", "0"}, strings.Fields(out))
+		})
+	}
+}
+
+func runOutputCommand(cmd *cobra.Command, args []string) (string, error) {
+	var out bytes.Buffer
+	cmd.SetArgs(args)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := cmd.Execute()
+	return out.String(), err
 }
 
 type fakeDriftClient struct {

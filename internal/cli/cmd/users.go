@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"text/tabwriter"
+	"unicode"
 
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
@@ -75,6 +77,10 @@ func newListUsersCmd(client v1.UserServiceClient) *cobra.Command {
 		Long:  "List is a command to list users and bots",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			outputFormat, err := parseOutputFormat(cmd)
+			if err != nil {
+				return err
+			}
 			pageSize, err := cmd.Flags().GetInt32("page-size")
 			if err != nil {
 				return err
@@ -92,13 +98,46 @@ func newListUsersCmd(client v1.UserServiceClient) *cobra.Command {
 				return err
 			}
 
-			return printJSON(cmd.OutOrStdout(), resp)
+			if outputFormat == "json" {
+				return printJSON(cmd.OutOrStdout(), resp)
+			}
+			return printUsersTable(cmd.OutOrStdout(), resp.GetUsers())
 		},
 	}
 
+	listCmd.Flags().StringP("output", "o", "json", "output format: table|json")
 	listCmd.Flags().Int32("page-size", 50, "max number of users to return")
 	listCmd.Flags().Int32("page", 0, "page number (0-indexed)")
 	return listCmd
+}
+
+func printUsersTable(w io.Writer, users []*v1.User) error {
+	if len(users) == 0 {
+		_, err := fmt.Fprintln(w, "No users found.")
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "ID\tNAME\tTYPE\tACTIVE"); err != nil {
+		return err
+	}
+	for _, user := range users {
+		userType := strings.ToLower(strings.TrimPrefix(user.GetType().String(), "USER_TYPE_"))
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%t\n", tableText(user.GetId()), tableText(user.GetName()), userType, user.GetIsActive()); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
+}
+
+// Table cells must fit on one line even when values contain control characters.
+func tableText(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, value)
 }
 
 func newGetUserCmd(client v1.UserServiceClient) *cobra.Command {
