@@ -100,9 +100,18 @@ func printMetadataTable(w io.Writer, packages []*v1.Package) error {
 }
 
 func countMetadataMessages(messages []*v1.Message) int {
-	count := len(messages)
-	for _, message := range messages {
-		count += countMetadataMessages(message.GetNestedMessages())
+	count := 0
+	groups := [][]*v1.Message{messages}
+	for len(groups) > 0 {
+		last := len(groups) - 1
+		group := groups[last]
+		groups = groups[:last]
+		count += len(group)
+		for _, message := range group {
+			if nested := message.GetNestedMessages(); len(nested) > 0 {
+				groups = append(groups, nested)
+			}
+		}
 	}
 	return count
 }

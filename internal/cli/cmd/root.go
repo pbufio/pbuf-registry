@@ -458,9 +458,13 @@ func parseOutputFormat(cmd *cobra.Command) (string, error) {
 }
 
 func parseFlagFormat(cmd *cobra.Command, flagName string) (string, error) {
-	raw, err := cmd.Flags().GetString(flagName)
+	flags := cmd.Flags()
+	raw, err := flags.GetString(flagName)
 	if err != nil {
 		return "", err
+	}
+	if strings.TrimSpace(raw) == "" {
+		raw = flags.Lookup(flagName).DefValue
 	}
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "table", "":

@@ -152,6 +152,7 @@ func TestUsersListOutputFormats(t *testing.T) {
 	}{
 		{name: "default JSON", wantJSON: true},
 		{name: "explicit JSON", args: []string{"-o", "json"}, wantJSON: true},
+		{name: "empty option uses default JSON", args: []string{"--output="}, wantJSON: true},
 		{name: "table", args: []string{"--output", "table"}},
 		{name: "invalid", args: []string{"--output", "yaml"}, wantErr: "invalid --output value"},
 	}
@@ -183,7 +184,12 @@ func TestUsersListOutputFormats(t *testing.T) {
 func TestMetadataGetOutputFormats(t *testing.T) {
 	response := &v1.GetMetadataResponse{Packages: []*v1.Package{
 		{Name: "orders.v1", ProtoFiles: []*v1.ParsedProtoFile{
-			{Filename: "order.proto", Messages: []*v1.Message{{Name: "Request", NestedMessages: []*v1.Message{{Name: "Options"}}}}},
+			{Filename: "order.proto", Messages: []*v1.Message{
+				{Name: "Request", NestedMessages: []*v1.Message{
+					{Name: "Options", NestedMessages: []*v1.Message{{Name: "Filters"}}},
+					{Name: "Pagination"},
+				}},
+			}},
 			{Filename: "service.proto", Services: []*v1.Service{{Name: "Orders", Methods: []*v1.Method{{Name: "Get"}, {Name: "List"}}}}},
 		}},
 		{Name: "common.v1", ProtoFiles: []*v1.ParsedProtoFile{{Filename: "common.proto", Messages: []*v1.Message{{Name: "Reply"}}}}},
@@ -196,6 +202,7 @@ func TestMetadataGetOutputFormats(t *testing.T) {
 	}{
 		{name: "default JSON", wantJSON: true},
 		{name: "explicit JSON", args: []string{"--output", "json"}, wantJSON: true},
+		{name: "blank option uses default JSON", args: []string{"-o", "  "}, wantJSON: true},
 		{name: "table", args: []string{"-o", "table"}},
 		{name: "invalid", args: []string{"-o", "yaml"}, wantErr: "invalid --output value"},
 	}
@@ -219,7 +226,7 @@ func TestMetadataGetOutputFormats(t *testing.T) {
 				assert.JSONEq(t, string(expected), out)
 				return
 			}
-			assert.Equal(t, []string{"PACKAGE", "FILES", "MESSAGES", "SERVICES", "RPCS", "orders.v1", "2", "2", "1", "2", "common.v1", "1", "1", "0", "0"}, strings.Fields(out))
+			assert.Equal(t, []string{"PACKAGE", "FILES", "MESSAGES", "SERVICES", "RPCS", "orders.v1", "2", "4", "1", "2", "common.v1", "1", "1", "0", "0"}, strings.Fields(out))
 		})
 	}
 }
@@ -622,6 +629,13 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			config:      cfg,
 			args:        []string{"list"},
 			wantSubstrs: []string{"NAME", "ID", "LATEST TAG", "TAGS", "acme/payment", "mod-1", "v1.2.0", "v1.2.0, v1.1.0", "acme/empty", "mod-2"},
+		},
+		{
+			name:        "list empty output uses default table",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"list", "--output="},
+			wantSubstrs: []string{"NAME", "ID", "acme/payment", "mod-1"},
 		},
 		{
 			name: "list single page with page-size and page-token",
