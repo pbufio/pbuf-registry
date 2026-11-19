@@ -1,6 +1,6 @@
 # pbuf-registry Helm Chart
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.9.0](https://img.shields.io/badge/AppVersion-v0.9.0-informational?style=flat-square)
+![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![Release](https://img.shields.io/github/v/release/pbufio/pbuf-registry?style=flat-square)
 
 Official Kubernetes Helm chart for deploying [`pbuf-registry`](https://github.com/pbufio/pbuf-registry) — including the Registry Server, background workers (compaction and proto-parsing/drift detection), optional Web UI (`pbuf-registry-ui`), and optional internal PostgreSQL.
 
@@ -12,7 +12,6 @@ Official Kubernetes Helm chart for deploying [`pbuf-registry`](https://github.co
 
 ```shell
 helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
-  --version 0.9.0 \
   --set secrets.staticToken="your-admin-token"
 ```
 
@@ -97,6 +96,16 @@ helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
 | `tolerations` | Tolerations for pod assignment | `[]` |
 | `affinity` | Node/pod affinities | `{}` |
 | `customSidecarContainers` | Additional sidecar containers on the server pod | `[]` |
+
+### Pod Disruption Budget
+
+| Key | Description | Default |
+|---|---|---|
+| `podDisruptionBudget.enabled` | Create a `policy/v1` PodDisruptionBudget for registry server pods | `false` |
+| `podDisruptionBudget.minAvailable` | Minimum available server pods (`0+` integer or `"0%"`–`"100%"`); mutually exclusive with `maxUnavailable` | `null` (`1` when both unset) |
+| `podDisruptionBudget.maxUnavailable` | Maximum unavailable server pods (`0+` integer or `"0%"`–`"100%"`); mutually exclusive with `minAvailable` | `null` |
+
+Targets only the registry server Deployment (`pbuf-registry.selectorLabels`) and defaults to `minAvailable: 1` when enabled with both budgets unset (`null` or `""`). With `replicaCount: 1`, set `maxUnavailable: 1` (or scale `replicaCount >= 2`) so voluntary node drains are not blocked; see the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
 
 ### Service, Authentication & OIDC SSO
 
@@ -220,6 +229,9 @@ From the repository root:
 ```shell
 # Lint the Helm chart
 make lint-charts
+
+# Run PDB rendering regression tests (requires Helm; no cluster needed)
+go test ./charts -v
 
 # Run Kind Kubernetes E2E tests
 cd e2e/chart

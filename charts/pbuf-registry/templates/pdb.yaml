@@ -1,0 +1,38 @@
+{{- $pdb := .Values.podDisruptionBudget | default dict }}
+{{- if $pdb.enabled }}
+{{- $minRaw := $pdb.minAvailable }}
+{{- $maxRaw := $pdb.maxUnavailable }}
+{{- $hasMin := and (ne $minRaw nil) (ne (toString $minRaw) "") }}
+{{- $hasMax := and (ne $maxRaw nil) (ne (toString $maxRaw) "") }}
+{{- if and $hasMin $hasMax }}
+{{- fail "set only one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable" }}
+{{- end }}
+{{- $field := "minAvailable" }}
+{{- $rendered := "1" }}
+{{- if or $hasMax $hasMin }}
+{{- $val := $minRaw }}
+{{- if $hasMax }}{{- $field = "maxUnavailable" }}{{- $val = $maxRaw }}{{- end }}
+{{- if not (or (kindIs "int" $val) (kindIs "int64" $val) (kindIs "float64" $val) (kindIs "string" $val)) }}
+{{- fail (printf "invalid podDisruptionBudget.%s %v: expected non-negative integer or percentage (0%%-100%%)" $field $val) }}
+{{- end }}
+{{- $str := toString $val }}
+{{- if regexMatch "^(0|[1-9][0-9]*)$" $str }}
+{{- $rendered = $str }}
+{{- else if and (kindIs "string" $val) (regexMatch "^(100|[1-9]?[0-9])%$" $str) }}
+{{- $rendered = quote $str }}
+{{- else }}
+{{- fail (printf "invalid podDisruptionBudget.%s %q: expected non-negative integer or percentage (0%%-100%%)" $field $str) }}
+{{- end }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pbuf-registry.fullname" . }}
+  labels:
+    {{- include "pbuf-registry.labels" . | nindent 4 }}
+spec:
+  {{ $field }}: {{ $rendered }}
+  selector:
+    matchLabels:
+      {{- include "pbuf-registry.selectorLabels" . | nindent 6 }}
+{{- end }}
