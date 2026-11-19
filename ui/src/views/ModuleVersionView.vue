@@ -1025,8 +1025,8 @@ onBeforeUnmount(() => {
         <!-- Metadata Tab -->
         <div v-if="activeTab === 'metadata'" class="space-y-4">
           <div v-if="metadata && metadata.packages">
-            <PCard v-for="pkg in metadata.packages" :key="pkg.name" class="mb-4">
-              <h3 class="text-xl font-bold mb-4 text-brand">Package: {{ pkg.name }}</h3>
+            <PCard v-for="(pkg, pkgIdx) in metadata.packages" :key="`${pkg.name}-${pkgIdx}`" class="mb-4">
+              <h3 class="text-xl font-bold mb-4 text-brand">Package: {{ pkg.name || '(no package)' }}</h3>
 
               <!-- Proto Files in Package -->
               <div v-for="protoFile in pkg.protoFiles" :key="protoFile.filename" class="mb-6">
@@ -1072,14 +1072,34 @@ onBeforeUnmount(() => {
                         </template>
                       </div>
                       <div v-if="message.nestedEnums.length > 0" class="pl-6 mt-3 space-y-2">
-                        <div v-for="enumDef in message.nestedEnums" :key="enumDef.name" class="text-sm font-mono">
+                        <div v-for="(enumDef, enumIdx) in message.nestedEnums" :key="`${enumDef.name}-${enumIdx}`" class="text-sm font-mono">
                           <p class="text-zinc-400">enum <span class="text-brand">{{ enumDef.name }}</span></p>
                           <div class="pl-4 space-y-0.5 text-zinc-400">
-                            <div v-for="val in (enumDef.values || [])" :key="val.name">
+                            <div v-for="(val, valIdx) in (enumDef.values || [])" :key="`${val.name}-${valIdx}`">
                               <span class="text-zinc-300">{{ val.name }}</span>
-                              <span class="text-zinc-500"> = {{ val.tag }}</span>
+                              <span class="text-zinc-500"> = {{ val.tag ?? 0 }}</span>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Top-Level Enums -->
+                <div v-if="protoFile.enums && protoFile.enums.length > 0" class="mb-4">
+                  <h5 class="text-md font-medium mb-2 text-zinc-300">Enums</h5>
+                  <div class="space-y-3">
+                    <div
+                      v-for="(enumDef, enumIdx) in protoFile.enums"
+                      :key="`${enumDef.name}-${enumIdx}`"
+                      class="bg-surface-base rounded-lg p-4 font-mono text-sm"
+                    >
+                      <p class="text-brand mb-2">{{ enumDef.name }}</p>
+                      <div v-if="enumDef.values && enumDef.values.length > 0" class="pl-4 space-y-1 text-zinc-400">
+                        <div v-for="(val, valIdx) in enumDef.values" :key="`${val.name}-${valIdx}`">
+                          <span class="text-zinc-300">{{ val.name }}</span>
+                          <span class="text-zinc-500"> = {{ val.tag ?? 0 }}</span>
                         </div>
                       </div>
                     </div>

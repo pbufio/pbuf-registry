@@ -521,6 +521,15 @@ test.describe('pbuf-registry Web UI', () => {
               protoFiles: [
                 {
                   filename: 'checkout.proto',
+                  enums: [
+                    {
+                      name: 'OrderStatus',
+                      values: [
+                        { name: 'ORDER_STATUS_UNSPECIFIED' },
+                        { name: 'ORDER_STATUS_PAID', tag: 1 }
+                      ]
+                    }
+                  ],
                   messages: [
                     {
                       name: 'CheckoutRequest',
@@ -562,13 +571,17 @@ test.describe('pbuf-registry Web UI', () => {
     await page.getByRole('button', { name: 'Metadata', exact: true }).click()
     await expect(page.getByText(/Metadata indexing is only available for published tags/i)).toBeVisible()
 
-    // Navigate to published tag v1.0.0 and verify map, oneof, nested message, and nested enum rendering
+    // Navigate to published tag v1.0.0 and verify map, oneof, nested message, nested enum, and top-level enum rendering
     await page.goto('/modules/acme/checkout/tags/v1.0.0')
     await page.getByRole('button', { name: 'Metadata', exact: true }).click()
     await expect(page.getByText('map<string, string>')).toBeVisible()
     await expect(page.getByText('card_token')).toBeVisible()
     await expect(page.getByText('CheckoutRequest.Address')).toBeVisible()
     await expect(page.getByText('CURRENCY_USD')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Enums', exact: true })).toBeVisible()
+    await expect(page.getByText('OrderStatus')).toBeVisible()
+    await expect(page.getByText('ORDER_STATUS_UNSPECIFIED = 0')).toBeVisible()
+    await expect(page.getByText('ORDER_STATUS_PAID = 1')).toBeVisible()
   })
 
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {

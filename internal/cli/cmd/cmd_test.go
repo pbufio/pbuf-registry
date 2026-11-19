@@ -203,12 +203,20 @@ func TestUsersListOutputFormats(t *testing.T) {
 func TestMetadataGetOutputFormats(t *testing.T) {
 	response := &v1.GetMetadataResponse{Packages: []*v1.Package{
 		{Name: "orders.v1", ProtoFiles: []*v1.ParsedProtoFile{
-			{Filename: "order.proto", Messages: []*v1.Message{
-				{Name: "Request", NestedMessages: []*v1.Message{
-					{Name: "Options", NestedMessages: []*v1.Message{{Name: "Filters"}}},
-					{Name: "Pagination"},
-				}},
-			}},
+			{
+				Filename: "order.proto",
+				Enums:    []*v1.Enum{{Name: "OrderStatus"}},
+				Messages: []*v1.Message{
+					{
+						Name:        "Request",
+						NestedEnums: []*v1.Enum{{Name: "Priority"}},
+						NestedMessages: []*v1.Message{
+							{Name: "Options", NestedMessages: []*v1.Message{{Name: "Filters", NestedEnums: []*v1.Enum{{Name: "SortOrder"}}}}},
+							{Name: "Pagination"},
+						},
+					},
+				},
+			},
 			{Filename: "service.proto", Services: []*v1.Service{{Name: "Orders", Methods: []*v1.Method{{Name: "Get"}, {Name: "List"}}}}},
 		}},
 		{Name: "", ProtoFiles: []*v1.ParsedProtoFile{{Filename: "common.proto", Messages: []*v1.Message{{Name: "Reply"}}}}},
@@ -225,10 +233,10 @@ func TestMetadataGetOutputFormats(t *testing.T) {
 		{name: "explicit JSON", resp: response, args: []string{"--output", "json"}, wantJSON: true},
 		{name: "blank option uses default JSON", resp: response, args: []string{"-o", "  "}, wantJSON: true},
 		{
-			name:    "table with nested messages and unnamed package",
+			name:    "table with nested messages, enums, and unnamed package",
 			resp:    response,
 			args:    []string{"-o", "table"},
-			wantOut: "PACKAGE       FILES  MESSAGES  SERVICES  RPCS\norders.v1     2      4         1         2\n(no package)  1      1         0         0\n",
+			wantOut: "PACKAGE       FILES  MESSAGES  ENUMS  SERVICES  RPCS\norders.v1     2      4         3      1         2\n(no package)  1      1         0      0         0\n",
 		},
 		{
 			name:    "table empty packages",

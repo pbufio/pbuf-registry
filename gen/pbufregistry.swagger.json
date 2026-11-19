@@ -1563,9 +1563,17 @@
             "$ref": "#/definitions/v1Service"
           },
           "description": "The services in the proto file."
+        },
+        "enums": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Enum"
+          },
+          "description": "The top-level enums in the proto file."
         }
       },
-      "title": "ParsedProtoFile is a proto file parsed by the registry\ncontains information about messages and services in the proto file"
+      "title": "ParsedProtoFile is a proto file parsed by the registry\ncontains information about messages, services, and enums in the proto file"
     },
     "v1Permission": {
       "type": "string",
