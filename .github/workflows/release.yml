@@ -67,6 +67,9 @@ jobs:
         with:
           version: v2.15
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
       - name: Test
         run: make test && make test-ui
 

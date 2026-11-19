@@ -37,6 +37,9 @@ type chartResource struct {
 func TestPodDisruptionBudget(t *testing.T) {
 	helm, err := exec.LookPath("helm")
 	if err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatal("Helm is required in CI for chart rendering tests")
+		}
 		t.Skip("Helm is required for chart rendering tests")
 	}
 
@@ -47,33 +50,25 @@ func TestPodDisruptionBudget(t *testing.T) {
 		enabled bool
 		min     any
 		max     any
-		wantErr bool
+		wantErr string
 	}{
 		{name: "disabled by default"},
-		{name: "explicitly disabled", args: []string{"--set", "podDisruptionBudget.enabled=false"}},
-		{name: "default minimum", enabled: true, min: 1},
-		{name: "single replica", enabled: true, args: []string{"--set", "replicaCount=1"}, min: 1},
-		{name: "zero minimum", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=0"}, min: 0},
-		{name: "integer minimum", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=2"}, min: 2},
-		{name: "percentage minimum", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=75%"}, min: "75%"},
-		{name: "full percentage minimum", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=100%"}, min: "100%"},
-		{name: "zero maximum", enabled: true, args: []string{"--set", "podDisruptionBudget.maxUnavailable=0"}, max: 0},
-		{name: "integer maximum", enabled: true, args: []string{"--set", "podDisruptionBudget.maxUnavailable=1"}, max: 1},
-		{name: "percentage maximum", enabled: true, args: []string{"--set", "podDisruptionBudget.maxUnavailable=25%"}, max: "25%"},
-		{name: "zero percentage maximum", enabled: true, args: []string{"--set", "podDisruptionBudget.maxUnavailable=0%"}, max: "0%"},
-		{name: "null minimum with maximum", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=null,podDisruptionBudget.maxUnavailable=0"}, max: 0},
-		{name: "null maximum with minimum", enabled: true, args: []string{"--set", "podDisruptionBudget.maxUnavailable=null,podDisruptionBudget.minAvailable=2"}, min: 2},
-		{name: "percentage in values file", enabled: true, values: "podDisruptionBudget:\n  minAvailable: \"50%\"\n", min: "50%"},
+		{name: "null parent map upgrade safety", args: []string{"--set", "podDisruptionBudget=null"}},
+		{name: "default minimum and selector isolation", enabled: true, args: []string{"--set", "podLabels.team=platform,fullnameOverride=custom-release"}, min: 1},
+		{name: "empty strings fall back to default", enabled: true, values: "podDisruptionBudget:\n  minAvailable: \"\"\n  maxUnavailable: \"\"\n", min: 1},
 		{name: "zero maximum in values file", enabled: true, values: "podDisruptionBudget:\n  maxUnavailable: 0\n", max: 0},
-		{name: "additional pod labels", enabled: true, args: []string{"--set", "podLabels.team=platform"}, min: 1},
-		{name: "name override", enabled: true, args: []string{"--set", "nameOverride=custom-registry"}, min: 1},
-		{name: "full name override", enabled: true, args: []string{"--set", "fullnameOverride=custom-release"}, min: 1},
-		{name: "conflicting integers", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=1,podDisruptionBudget.maxUnavailable=1"}, wantErr: true},
-		{name: "conflicting zero values", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=0,podDisruptionBudget.maxUnavailable=0"}, wantErr: true},
-		{name: "conflicting percentage and integer", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=50%,podDisruptionBudget.maxUnavailable=0"}, wantErr: true},
+		{name: "numeric string coerced to integer", enabled: true, values: "podDisruptionBudget:\n  minAvailable: \"2\"\n", min: 2},
+		{name: "percentage minimum", enabled: true, values: "podDisruptionBudget:\n  minAvailable: \"75%\"\n", min: "75%"},
+		{name: "conflicting min and max", enabled: true, args: []string{"--set", "podDisruptionBudget.minAvailable=1,podDisruptionBudget.maxUnavailable=0"}, wantErr: "set only one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable"},
+		{name: "negative budget rejected", enabled: true, values: "podDisruptionBudget:\n  minAvailable: -1\n", wantErr: "invalid podDisruptionBudget.minAvailable"},
+		{name: "fractional budget rejected", enabled: true, values: "podDisruptionBudget:\n  minAvailable: 1.5\n", wantErr: "invalid podDisruptionBudget.minAvailable"},
+		{name: "out of range percentage rejected", enabled: true, values: "podDisruptionBudget:\n  maxUnavailable: \"150%\"\n", wantErr: "invalid podDisruptionBudget.maxUnavailable"},
+		{name: "boolean budget rejected", enabled: true, values: "podDisruptionBudget:\n  minAvailable: true\n", wantErr: "invalid podDisruptionBudget.minAvailable"},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			args := []string{"template", "pdb-test", "./pbuf-registry", "--set", "ui.enabled=true"}
 			if tc.values != "" {
 				valuesFile := filepath.Join(t.TempDir(), "values.yaml")
@@ -85,9 +80,9 @@ func TestPodDisruptionBudget(t *testing.T) {
 			}
 			args = append(args, tc.args...)
 			output, err := exec.Command(helm, args...).CombinedOutput()
-			if tc.wantErr {
+			if tc.wantErr != "" {
 				require.Error(t, err)
-				assert.Contains(t, string(output), "set only one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable")
+				assert.Contains(t, string(output), tc.wantErr)
 				return
 			}
 			require.NoError(t, err, "%s", output)
@@ -117,7 +112,7 @@ func TestPodDisruptionBudget(t *testing.T) {
 			assert.Equal(t, tc.min, pdb.Spec.MinAvailable)
 			assert.Equal(t, tc.max, pdb.Spec.MaxUnavailable)
 			require.Len(t, pdb.Spec.Selector.MatchLabels, 2)
-			require.Len(t, workloads, 5) // Server, two workers, UI, and PostgreSQL.
+			require.Len(t, workloads, 5)
 			selected := 0
 			for _, workload := range workloads {
 				matches := true

@@ -1,6 +1,6 @@
 # pbuf-registry Helm Chart
 
-![Version: 0.21.0](https://img.shields.io/badge/Version-0.21.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.19.0](https://img.shields.io/badge/AppVersion-v0.19.0-informational?style=flat-square)
+![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![Release](https://img.shields.io/github/v/release/pbufio/pbuf-registry?style=flat-square)
 
 Official Kubernetes Helm chart for deploying [`pbuf-registry`](https://github.com/pbufio/pbuf-registry) — including the Registry Server, background workers (compaction and proto-parsing/drift detection), optional Web UI (`pbuf-registry-ui`), and optional internal PostgreSQL.
 
@@ -12,7 +12,6 @@ Official Kubernetes Helm chart for deploying [`pbuf-registry`](https://github.co
 
 ```shell
 helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
-  --version 0.21.0 \
   --set secrets.staticToken="your-admin-token"
 ```
 
@@ -103,38 +102,10 @@ helm install my-pbuf-registry oci://ghcr.io/pbufio/charts/pbuf-registry \
 | Key | Description | Default |
 |---|---|---|
 | `podDisruptionBudget.enabled` | Create a `policy/v1` PodDisruptionBudget for registry server pods | `false` |
-| `podDisruptionBudget.minAvailable` | Minimum available server pods, as an integer or percentage; mutually exclusive with `maxUnavailable` | `null` (effective `1` when both budgets are unset) |
-| `podDisruptionBudget.maxUnavailable` | Maximum unavailable server pods, as an integer or percentage; mutually exclusive with `minAvailable` | `null` |
+| `podDisruptionBudget.minAvailable` | Minimum available server pods (`0+` integer or `"0%"`–`"100%"`); mutually exclusive with `maxUnavailable` | `null` (`1` when both unset) |
+| `podDisruptionBudget.maxUnavailable` | Maximum unavailable server pods (`0+` integer or `"0%"`–`"100%"`); mutually exclusive with `minAvailable` | `null` |
 
-When enabled without an explicit budget, the PDB uses `minAvailable: 1`.
-Both values default to `null` so that setting `maxUnavailable` alone replaces this
-fallback without also having to clear `minAvailable`. If both values are non-null,
-Helm rendering fails. Integer `0` is supported and is not treated as an unset value.
-
-```shell
-# Keep at least one registry server pod available during voluntary disruptions
-helm install my-pbuf-registry ./charts/pbuf-registry \
-  --set podDisruptionBudget.enabled=true
-
-# Block voluntary evictions of registry server pods
-helm install my-pbuf-registry ./charts/pbuf-registry \
-  --set podDisruptionBudget.enabled=true \
-  --set podDisruptionBudget.maxUnavailable=0
-```
-
-For percentage budgets, use values such as `minAvailable: "50%"` or
-`maxUnavailable: "25%"`. Kubernetes rounds percentage budgets up; a percentage
-`maxUnavailable` can therefore allow all pods of a single-replica deployment to be
-evicted. Choose a budget appropriate for your replica count.
-
-The PDB uses the registry Deployment's selector and does not cover background
-workers, the Web UI, or PostgreSQL. It limits voluntary disruptions through the
-Eviction API, such as `kubectl drain`; it does not prevent involuntary failures or
-guarantee service availability. With `replicaCount: 1` and `minAvailable: 1`, the
-only server pod cannot be voluntarily evicted, so a drain can remain blocked until
-you increase the replica count or relax the budget. See the Kubernetes
-[PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
-for budget and eviction behavior.
+Targets only the registry server Deployment (`pbuf-registry.selectorLabels`) and defaults to `minAvailable: 1` when enabled with both budgets unset (`null` or `""`). With `replicaCount: 1`, set `maxUnavailable: 1` (or scale `replicaCount >= 2`) so voluntary node drains are not blocked; see the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
 
 ### Service, Authentication & OIDC SSO
 

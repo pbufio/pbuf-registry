@@ -37,4 +37,7 @@ if command -v ct &> /dev/null; then
     ct lint --target-branch main --chart-dirs charts
 fi
 
+log_info "Running Helm template rendering tests..."
+go test ./charts
+
 log_info "${GREEN}All lint checks passed!${NC}"
