@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onBeforeUnmount } from 'vue';
+import { copyTextToClipboard } from '@/utils/protoDiff';
 
 const props = defineProps({
   code: { type: String, required: true },
@@ -7,12 +8,21 @@ const props = defineProps({
 });
 
 const copied = ref(false);
+let copyTimer = null;
 
-const copyToClipboard = () => {
-  navigator.clipboard.writeText(props.code);
+const copyToClipboard = async () => {
+  if (!(await copyTextToClipboard(props.code))) return;
+  if (copyTimer) clearTimeout(copyTimer);
   copied.value = true;
-  setTimeout(() => copied.value = false, 2000);
+  copyTimer = setTimeout(() => {
+    copied.value = false;
+    copyTimer = null;
+  }, 2000);
 };
+
+onBeforeUnmount(() => {
+  if (copyTimer) clearTimeout(copyTimer);
+});
 </script>
 
 <template>
