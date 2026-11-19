@@ -101,7 +101,7 @@ func newListUsersCmd(client v1.UserServiceClient) *cobra.Command {
 			if outputFormat == "json" {
 				return printJSON(cmd.OutOrStdout(), resp)
 			}
-			return printUsersTable(cmd.OutOrStdout(), resp.GetUsers())
+			return printUsersTable(cmd.OutOrStdout(), resp.GetUsers(), resp.GetTotal())
 		},
 	}
 
@@ -111,8 +111,12 @@ func newListUsersCmd(client v1.UserServiceClient) *cobra.Command {
 	return listCmd
 }
 
-func printUsersTable(w io.Writer, users []*v1.User) error {
+func printUsersTable(w io.Writer, users []*v1.User, total int32) error {
 	if len(users) == 0 {
+		if total > 0 {
+			_, err := fmt.Fprintf(w, "No users on this page (total: %d).\n", total)
+			return err
+		}
 		_, err := fmt.Fprintln(w, "No users found.")
 		return err
 	}
@@ -127,13 +131,20 @@ func printUsersTable(w io.Writer, users []*v1.User) error {
 			return err
 		}
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if int32(len(users)) < total {
+		_, err := fmt.Fprintf(w, "\nShowing %d of %d users.\n", len(users), total)
+		return err
+	}
+	return nil
 }
 
-// Table cells must fit on one line even when values contain control characters.
+// Table cells must fit on one line even when values contain non-printable or formatting characters.
 func tableText(value string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if !unicode.IsPrint(r) {
 			return ' '
 		}
 		return r
