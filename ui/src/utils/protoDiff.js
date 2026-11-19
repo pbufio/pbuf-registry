@@ -51,12 +51,58 @@ export function pickDefaultBaseTag(tags = [], currentTag = '') {
 
 function splitLines(text) {
   if (!text) return []
-  const normalized = String(text).replace(/\r\n/g, '\n')
+  const normalized = String(text).replace(/\r\n|\r/g, '\n')
   const parts = normalized.split('\n')
   if (parts.length > 0 && parts[parts.length - 1] === '') {
     parts.pop()
   }
   return parts
+}
+
+/**
+ * Formats a .proto file string for display alongside 1-based line numbers without phantom trailing blank lines.
+ */
+export function formatProtoViewer(content = '') {
+  const code = String(content ?? '').replace(/\r\n|\r/g, '\n')
+  const lines = splitLines(code)
+  if (lines.length === 0) {
+    return { code: '', lineNumbers: '1' }
+  }
+  return {
+    code,
+    lineNumbers: Array.from({ length: lines.length }, (_, i) => i + 1).join('\n')
+  }
+}
+
+/**
+ * Copies text to the clipboard via navigator.clipboard in secure contexts, falling back to execCommand on plain HTTP.
+ */
+export async function copyTextToClipboard(text = '') {
+  const value = String(text ?? '')
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      return true
+    } catch {
+      // fall back to execCommand when clipboard permission is unavailable
+    }
+  }
+  if (typeof document === 'undefined' || !document.body) return false
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+  try {
+    textarea.select()
+    return Boolean(document.execCommand && document.execCommand('copy'))
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(textarea)
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PCard from '@/components/PCard.vue'
 import PBadge from '@/components/PBadge.vue'
@@ -18,7 +18,9 @@ import {
 } from '@/utils/driftAcknowledgeUtils'
 import {
   buildVendorSnippet,
+  copyTextToClipboard,
   diffProtoFileSets,
+  formatProtoViewer,
   pickDefaultBaseTag
 } from '@/utils/protoDiff'
 import {
@@ -40,6 +42,34 @@ const protoFilesLoaded = ref(false)
 const activeTab = ref('files')
 const error = ref(null)
 const protoFilesError = ref(null)
+const copiedFilename = ref('')
+let copyResetTimer = null
+
+const clearCopyFeedback = () => {
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer)
+    copyResetTimer = null
+  }
+  copiedFilename.value = ''
+}
+
+const copyProtoFile = async (file) => {
+  if (!file?.filename) return
+  if (!(await copyTextToClipboard(file.content))) return
+  if (copyResetTimer) clearTimeout(copyResetTimer)
+  copiedFilename.value = file.filename
+  copyResetTimer = setTimeout(() => {
+    copiedFilename.value = ''
+    copyResetTimer = null
+  }, 2000)
+}
+
+const displayProtoFiles = computed(() =>
+  (protoFiles.value || []).map((file) => ({
+    ...file,
+    ...formatProtoViewer(file?.content)
+  }))
+)
 
 const compareTags = ref([])
 const compareTagsLoaded = ref(false)
@@ -86,6 +116,7 @@ watch([moduleName, tag], (newVals, oldVals) => {
   isDraftTag.value = false
   error.value = null
   protoFilesError.value = null
+  clearCopyFeedback()
   loadingProtoFiles.value = false
   protoFilesPromise = null
 
@@ -646,6 +677,10 @@ onMounted(() => {
   loadProtoFiles()
   loadDriftEvents()
 })
+
+onBeforeUnmount(() => {
+  clearCopyFeedback()
+})
 </script>
 
 <template>
@@ -799,13 +834,31 @@ onMounted(() => {
             </PCard>
           </div>
           <template v-else>
-            <PCard v-for="file in protoFiles" :key="file.filename">
-              <h3 class="text-lg font-semibold font-mono mb-3 text-zinc-100">{{ file.filename }}</h3>
-              <div class="bg-surface-base rounded-lg p-4 overflow-x-auto">
-                <pre class="font-mono text-sm text-zinc-300 whitespace-pre">{{ file.content }}</pre>
+            <PCard v-for="file in displayProtoFiles" :key="file.filename">
+              <div class="flex items-center justify-between gap-3 mb-3">
+                <h3 class="text-lg font-semibold font-mono text-zinc-100 truncate">{{ file.filename }}</h3>
+                <button
+                  type="button"
+                  :aria-label="`Copy ${file.filename}`"
+                  class="text-xs font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors px-2.5 py-1 rounded border border-surface-border hover:bg-zinc-800 shrink-0"
+                  @click="copyProtoFile(file)"
+                >
+                  {{ copiedFilename === file.filename ? 'Copied!' : 'Copy' }}
+                </button>
+              </div>
+              <div class="bg-surface-base rounded-lg p-4 flex font-mono text-sm leading-6">
+                <pre
+                  aria-hidden="true"
+                  data-testid="proto-line-numbers"
+                  class="select-none text-right pr-4 mr-4 border-r border-surface-border text-zinc-600 shrink-0"
+                >{{ file.lineNumbers }}</pre>
+                <pre
+                  data-testid="proto-file-content"
+                  class="text-zinc-300 whitespace-pre overflow-x-auto min-w-0 flex-1"
+                >{{ file.code }}</pre>
               </div>
             </PCard>
-            <p v-if="protoFiles.length === 0 && !protoFilesError" class="text-zinc-400 text-center py-8">No proto files available.</p>
+            <p v-if="displayProtoFiles.length === 0 && !protoFilesError" class="text-zinc-400 text-center py-8">No proto files available.</p>
           </template>
         </div>
 

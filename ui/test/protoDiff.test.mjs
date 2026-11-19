@@ -4,6 +4,7 @@ import {
   buildVendorSnippet,
   computeLineDiff,
   diffProtoFileSets,
+  formatProtoViewer,
   pickDefaultBaseTag,
   resolveRegistryAddr
 } from '../src/utils/protoDiff.js'
@@ -112,4 +113,27 @@ test('computeLineDiff handles >250k LCS cell fallback with contiguous line numbe
   assert.equal(last.text, '}')
   assert.equal(last.oldLine, 513)
   assert.equal(last.newLine, 513)
+})
+
+test('formatProtoViewer generates aligned 1-based line numbers across newline conventions', () => {
+  assert.deepEqual(formatProtoViewer('syntax = "proto3";\nmessage Order {\n  string id = 1;\n}\n'), {
+    code: 'syntax = "proto3";\nmessage Order {\n  string id = 1;\n}\n',
+    lineNumbers: '1\n2\n3\n4'
+  })
+  assert.deepEqual(formatProtoViewer('syntax = "proto3";'), {
+    code: 'syntax = "proto3";',
+    lineNumbers: '1'
+  })
+  assert.deepEqual(formatProtoViewer('line1\r\nline2\r\n'), {
+    code: 'line1\nline2\n',
+    lineNumbers: '1\n2'
+  })
+  assert.deepEqual(formatProtoViewer('line1\n\n'), {
+    code: 'line1\n\n',
+    lineNumbers: '1\n2'
+  })
+  assert.deepEqual(formatProtoViewer(''), {
+    code: '',
+    lineNumbers: '1'
+  })
 })

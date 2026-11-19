@@ -393,7 +393,7 @@ test.describe('pbuf-registry Web UI', () => {
           body: JSON.stringify({
             protofiles: [
               { filename: 'order/v1/order.proto', content: 'syntax = "proto3";\nmessage Order {\n  string id = 1;\n  string status = 2;\n}\n' },
-              { filename: 'order/v2/events.proto', content: 'syntax = "proto3";\nmessage OrderCreated {}\n' }
+              { filename: 'order/v2/events.proto', content: 'syntax = "proto3";\nmessage OrderCreated {}\n\n' }
             ]
           })
         })
@@ -423,6 +423,7 @@ test.describe('pbuf-registry Web UI', () => {
       })
     })
 
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('/modules/acme/order-service/tags/v2.0.0')
 
     // Quick-start snippet emits valid registry.addr instead of deprecated domain:
@@ -431,6 +432,34 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(snippet).toContainText('addr:')
     await expect(snippet).not.toContainText('domain:')
     await expect(page.getByText('order/v1/order.proto')).toBeVisible()
+
+    // Proto Files viewer renders non-selectable 1-based line numbers and per-file Copy button
+    const firstGutter = page.getByTestId('proto-line-numbers').first()
+    await expect(firstGutter).toHaveText('1\n2\n3\n4\n5')
+    await expect(firstGutter).toHaveClass(/select-none/)
+    const secondGutter = page.getByTestId('proto-line-numbers').nth(1)
+    const secondCode = page.getByTestId('proto-file-content').nth(1)
+    await expect(secondGutter).toHaveText('1\n2\n3')
+    expect(await secondGutter.evaluate((el) => el.clientHeight)).toBe(await secondCode.evaluate((el) => el.clientHeight))
+    const copyOrderBtn = page.getByRole('button', { name: 'Copy order/v1/order.proto' })
+    const copyEventsBtn = page.getByRole('button', { name: 'Copy order/v2/events.proto' })
+    await expect(copyOrderBtn).toHaveText('Copy')
+    await copyOrderBtn.click()
+    await expect(copyOrderBtn).toHaveText('Copied!')
+    await expect(copyEventsBtn).toHaveText('Copy')
+    const copiedText = await page.evaluate(() => navigator.clipboard.readText())
+    expect(copiedText).toBe('syntax = "proto3";\nmessage Order {\n  string id = 1;\n  string status = 2;\n}\n')
+
+    // Plain-HTTP fallback works when navigator.clipboard is unavailable
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    })
+    await copyEventsBtn.click()
+    await expect(copyEventsBtn).toHaveText('Copied!')
+    expect(await page.evaluate(async () => {
+      // execCommand('copy') wrote to system clipboard; verify button state transitioned cleanly
+      return document.activeElement?.tagName !== 'TEXTAREA'
+    })).toBe(true)
 
     // Unparsed metadata 404 shows pending notice without failing the page
     await page.getByRole('button', { name: 'Metadata', exact: true }).click()
