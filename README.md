@@ -475,7 +475,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules update` | Update `pbuf-registry` dependencies in `pbuf.yaml` to their latest published tags |
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
-| `pbuf metadata get [module_name] [tag] [-o table\|json]` | Get parsed AST metadata as JSON (default) or package counts of files, messages, services, and RPCs as a table |
+| `pbuf metadata get [module_name] [tag] [-o table\|json]` | Get parsed AST metadata as JSON (default) or package counts of files, messages, enums, services, and RPCs as a table |
 | `pbuf lint [paths...] [--ignore-rule <rules>] [-o table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
 | `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
@@ -606,7 +606,7 @@ Retrieves parsed AST metadata (packages, messages, fields, nested types, enums, 
 pbuf metadata get
 pbuf metadata get myorg/payment-service v1.0.0
 
-# Summarize files, messages, services, and RPCs by package
+# Summarize files, messages, enums, services, and RPCs by package
 pbuf metadata get myorg/payment-service v1.0.0 -o table
 ```
 

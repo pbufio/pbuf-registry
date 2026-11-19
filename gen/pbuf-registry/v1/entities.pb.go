@@ -287,7 +287,7 @@ func (x *Package) GetDependencies() []*PackageDependency {
 }
 
 // ParsedProtoFile is a proto file parsed by the registry
-// contains information about messages and services in the proto file
+// contains information about messages, services, and enums in the proto file
 type ParsedProtoFile struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The filename of the proto file.
@@ -295,7 +295,9 @@ type ParsedProtoFile struct {
 	// The messages in the proto file.
 	Messages []*Message `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
 	// The services in the proto file.
-	Services      []*Service `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty"`
+	Services []*Service `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty"`
+	// The top-level enums in the proto file.
+	Enums         []*Enum `protobuf:"bytes,4,rep,name=enums,proto3" json:"enums,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -347,6 +349,13 @@ func (x *ParsedProtoFile) GetMessages() []*Message {
 func (x *ParsedProtoFile) GetServices() []*Service {
 	if x != nil {
 		return x.Services
+	}
+	return nil
+}
+
+func (x *ParsedProtoFile) GetEnums() []*Enum {
+	if x != nil {
+		return x.Enums
 	}
 	return nil
 }
@@ -868,11 +877,12 @@ const file_pbuf_registry_v1_entities_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12A\n" +
 	"\vproto_files\x18\x02 \x03(\v2 .pbufregistry.v1.ParsedProtoFileR\n" +
 	"protoFiles\x12F\n" +
-	"\fdependencies\x18\x03 \x03(\v2\".pbufregistry.v1.PackageDependencyR\fdependencies\"\x99\x01\n" +
+	"\fdependencies\x18\x03 \x03(\v2\".pbufregistry.v1.PackageDependencyR\fdependencies\"\xc6\x01\n" +
 	"\x0fParsedProtoFile\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x124\n" +
 	"\bmessages\x18\x02 \x03(\v2\x18.pbufregistry.v1.MessageR\bmessages\x124\n" +
-	"\bservices\x18\x03 \x03(\v2\x18.pbufregistry.v1.ServiceR\bservices\"\xca\x01\n" +
+	"\bservices\x18\x03 \x03(\v2\x18.pbufregistry.v1.ServiceR\bservices\x12+\n" +
+	"\x05enums\x18\x04 \x03(\v2\x15.pbufregistry.v1.EnumR\x05enums\"\xca\x01\n" +
 	"\aMessage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12.\n" +
 	"\x06fields\x18\x02 \x03(\v2\x16.pbufregistry.v1.FieldR\x06fields\x12A\n" +
@@ -945,16 +955,17 @@ var file_pbuf_registry_v1_entities_proto_depIdxs = []int32{
 	11, // 1: pbufregistry.v1.Package.dependencies:type_name -> pbufregistry.v1.PackageDependency
 	5,  // 2: pbufregistry.v1.ParsedProtoFile.messages:type_name -> pbufregistry.v1.Message
 	9,  // 3: pbufregistry.v1.ParsedProtoFile.services:type_name -> pbufregistry.v1.Service
-	6,  // 4: pbufregistry.v1.Message.fields:type_name -> pbufregistry.v1.Field
-	5,  // 5: pbufregistry.v1.Message.nested_messages:type_name -> pbufregistry.v1.Message
-	7,  // 6: pbufregistry.v1.Message.nested_enums:type_name -> pbufregistry.v1.Enum
-	8,  // 7: pbufregistry.v1.Enum.values:type_name -> pbufregistry.v1.EnumValue
-	10, // 8: pbufregistry.v1.Service.methods:type_name -> pbufregistry.v1.Method
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	7,  // 4: pbufregistry.v1.ParsedProtoFile.enums:type_name -> pbufregistry.v1.Enum
+	6,  // 5: pbufregistry.v1.Message.fields:type_name -> pbufregistry.v1.Field
+	5,  // 6: pbufregistry.v1.Message.nested_messages:type_name -> pbufregistry.v1.Message
+	7,  // 7: pbufregistry.v1.Message.nested_enums:type_name -> pbufregistry.v1.Enum
+	8,  // 8: pbufregistry.v1.Enum.values:type_name -> pbufregistry.v1.EnumValue
+	10, // 9: pbufregistry.v1.Service.methods:type_name -> pbufregistry.v1.Method
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pbuf_registry_v1_entities_proto_init() }

@@ -75,14 +75,16 @@ func printMetadataTable(w io.Writer, packages []*v1.Package) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "PACKAGE\tFILES\tMESSAGES\tSERVICES\tRPCS"); err != nil {
+	if _, err := fmt.Fprintln(tw, "PACKAGE\tFILES\tMESSAGES\tENUMS\tSERVICES\tRPCS"); err != nil {
 		return err
 	}
 	for _, pkg := range packages {
 		files := pkg.GetProtoFiles()
-		messages, services, methods := 0, 0, 0
+		messages, enums, services, methods := 0, 0, 0, 0
 		for _, file := range files {
-			messages += countMetadataMessages(file.GetMessages())
+			msgCount, enumCount := countMetadataTypes(file.GetMessages(), 0)
+			messages += msgCount
+			enums += len(file.GetEnums()) + enumCount
 			services += len(file.GetServices())
 			for _, service := range file.GetServices() {
 				methods += len(service.GetMethods())
@@ -92,24 +94,24 @@ func printMetadataTable(w io.Writer, packages []*v1.Package) error {
 		if name == "" {
 			name = "(no package)"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\n", tableText(name), len(files), messages, services, methods); err != nil {
+		if _, err := fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\t%d\n", tableText(name), len(files), messages, enums, services, methods); err != nil {
 			return err
 		}
 	}
 	return tw.Flush()
 }
 
-func countMetadataMessages(messages []*v1.Message) int {
-	return countMetadataMessagesDepth(messages, 0)
-}
-
-func countMetadataMessagesDepth(messages []*v1.Message, depth int) int {
+func countMetadataTypes(messages []*v1.Message, depth int) (int, int) {
 	if depth > 100 {
-		return 0
+		return 0, 0
 	}
-	count := len(messages)
+	msgCount := len(messages)
+	enumCount := 0
 	for _, m := range messages {
-		count += countMetadataMessagesDepth(m.GetNestedMessages(), depth+1)
+		enumCount += len(m.GetNestedEnums())
+		subMsgs, subEnums := countMetadataTypes(m.GetNestedMessages(), depth+1)
+		msgCount += subMsgs
+		enumCount += subEnums
 	}
-	return count
+	return msgCount, enumCount
 }
