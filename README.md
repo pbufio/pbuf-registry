@@ -476,7 +476,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
 | `pbuf metadata get [module_name] [tag]` | Retrieve parsed AST metadata (packages, messages, services, enums) for a module tag |
-| `pbuf lint [paths...] [-o table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
+| `pbuf lint [paths...] [--ignore-rule <rules>] [-o table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
 | `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
 | `pbuf drift module <module_name> [--tag <tag>]` | List schema drift events for a specific module |
