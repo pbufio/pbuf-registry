@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+	"io"
+	"text/tabwriter"
+
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
 	"github.com/spf13/cobra"
@@ -28,6 +32,10 @@ func newGetMetadataCmd(config *model.Config, client v1.MetadataServiceClient) *c
 		Long:  "Get is a command to get parsed metadata (packages) for a module tag",
 		Args:  cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			outputFormat, err := parseOutputFormat(cmd)
+			if err != nil {
+				return err
+			}
 			moduleName := config.Name
 			if len(args) > 0 {
 				moduleName = args[0]
@@ -49,9 +57,59 @@ func newGetMetadataCmd(config *model.Config, client v1.MetadataServiceClient) *c
 				return err
 			}
 
-			return printJSON(cmd.OutOrStdout(), resp)
+			if outputFormat == "json" {
+				return printJSON(cmd.OutOrStdout(), resp)
+			}
+			return printMetadataTable(cmd.OutOrStdout(), resp.GetPackages())
 		},
 	}
 
+	getCmd.Flags().StringP("output", "o", "json", "output format: table|json")
 	return getCmd
+}
+
+func printMetadataTable(w io.Writer, packages []*v1.Package) error {
+	if len(packages) == 0 {
+		_, err := fmt.Fprintln(w, "No packages found.")
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "PACKAGE\tFILES\tMESSAGES\tSERVICES\tRPCS"); err != nil {
+		return err
+	}
+	for _, pkg := range packages {
+		files := pkg.GetProtoFiles()
+		messages, services, methods := 0, 0, 0
+		for _, file := range files {
+			messages += countMetadataMessages(file.GetMessages())
+			services += len(file.GetServices())
+			for _, service := range file.GetServices() {
+				methods += len(service.GetMethods())
+			}
+		}
+		name := pkg.GetName()
+		if name == "" {
+			name = "(no package)"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%d\n", tableText(name), len(files), messages, services, methods); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
+}
+
+func countMetadataMessages(messages []*v1.Message) int {
+	return countMetadataMessagesDepth(messages, 0)
+}
+
+func countMetadataMessagesDepth(messages []*v1.Message, depth int) int {
+	if depth > 100 {
+		return 0
+	}
+	count := len(messages)
+	for _, m := range messages {
+		count += countMetadataMessagesDepth(m.GetNestedMessages(), depth+1)
+	}
+	return count
 }

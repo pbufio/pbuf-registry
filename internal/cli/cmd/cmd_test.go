@@ -14,6 +14,7 @@ import (
 	"github.com/jdx/go-netrc"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -80,13 +81,19 @@ func (f *fakeRegistryClient) ListModules(_ context.Context, in *v1.ListModulesRe
 
 type fakeUsersClient struct {
 	v1.UserServiceClient
+	listResponse *v1.ListUsersResponse
+	listRequests []*v1.ListUsersRequest
 }
 
 func (f *fakeUsersClient) CreateUser(_ context.Context, in *v1.CreateUserRequest, _ ...grpc.CallOption) (*v1.CreateUserResponse, error) {
 	return &v1.CreateUserResponse{User: &v1.User{Id: "u-1", Name: in.Name, Type: in.Type}, Token: "tok"}, nil
 }
 
-func (f *fakeUsersClient) ListUsers(_ context.Context, _ *v1.ListUsersRequest, _ ...grpc.CallOption) (*v1.ListUsersResponse, error) {
+func (f *fakeUsersClient) ListUsers(_ context.Context, in *v1.ListUsersRequest, _ ...grpc.CallOption) (*v1.ListUsersResponse, error) {
+	f.listRequests = append(f.listRequests, in)
+	if f.listResponse != nil {
+		return f.listResponse, nil
+	}
 	return &v1.ListUsersResponse{Users: []*v1.User{{Id: "u-1", Name: "alice"}}}, nil
 }
 
@@ -120,10 +127,149 @@ func (f *fakeUsersClient) ListUserPermissions(_ context.Context, _ *v1.ListUserP
 
 type fakeMetadataClient struct {
 	v1.MetadataServiceClient
+	getResponse *v1.GetMetadataResponse
+	getRequests []*v1.GetMetadataRequest
 }
 
-func (f *fakeMetadataClient) GetMetadata(_ context.Context, _ *v1.GetMetadataRequest, _ ...grpc.CallOption) (*v1.GetMetadataResponse, error) {
+func (f *fakeMetadataClient) GetMetadata(_ context.Context, in *v1.GetMetadataRequest, _ ...grpc.CallOption) (*v1.GetMetadataResponse, error) {
+	f.getRequests = append(f.getRequests, in)
+	if f.getResponse != nil {
+		return f.getResponse, nil
+	}
 	return &v1.GetMetadataResponse{}, nil
+}
+
+func TestUsersListOutputFormats(t *testing.T) {
+	response := &v1.ListUsersResponse{Total: 3, Users: []*v1.User{
+		{Id: "u-1", Name: "alice", Type: v1.UserType_USER_TYPE_USER, IsActive: true},
+		{Id: "u-2", Name: "nightly\tbot\n\u202e", Type: v1.UserType_USER_TYPE_BOT},
+	}}
+	tests := []struct {
+		name     string
+		resp     *v1.ListUsersResponse
+		args     []string
+		wantJSON bool
+		wantOut  string
+		wantErr  string
+	}{
+		{name: "default JSON", resp: response, wantJSON: true},
+		{name: "explicit JSON", resp: response, args: []string{"-o", "json"}, wantJSON: true},
+		{name: "empty option uses default JSON", resp: response, args: []string{"--output="}, wantJSON: true},
+		{
+			name:    "table with pagination footer and sanitized control/bidi runes",
+			resp:    response,
+			args:    []string{"--output", "table"},
+			wantOut: "ID   NAME           TYPE  ACTIVE\nu-1  alice          user  true\nu-2  nightly bot    bot   false\n\nShowing 2 of 3 users.\n",
+		},
+		{
+			name:    "table empty registry",
+			resp:    &v1.ListUsersResponse{},
+			args:    []string{"-o", "table"},
+			wantOut: "No users found.\n",
+		},
+		{
+			name:    "table empty page beyond total",
+			resp:    &v1.ListUsersResponse{Total: 2},
+			args:    []string{"-o", "table"},
+			wantOut: "No users on this page (total: 2).\n",
+		},
+		{name: "invalid", resp: response, args: []string{"--output", "yaml"}, wantErr: "invalid --output value"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeUsersClient{listResponse: test.resp}
+			cmd := NewUsersCmd(&model.Config{}, client)
+			out, err := runOutputCommand(cmd, append([]string{"list", "--page-size", "2", "--page", "1"}, test.args...))
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				require.Empty(t, client.listRequests)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, client.listRequests, 1)
+			assert.EqualValues(t, 2, client.listRequests[0].GetPageSize())
+			assert.EqualValues(t, 1, client.listRequests[0].GetPage())
+			if test.wantJSON {
+				expected, err := json.Marshal(test.resp)
+				require.NoError(t, err)
+				assert.JSONEq(t, string(expected), out)
+				return
+			}
+			assert.Equal(t, test.wantOut, out)
+		})
+	}
+}
+
+func TestMetadataGetOutputFormats(t *testing.T) {
+	response := &v1.GetMetadataResponse{Packages: []*v1.Package{
+		{Name: "orders.v1", ProtoFiles: []*v1.ParsedProtoFile{
+			{Filename: "order.proto", Messages: []*v1.Message{
+				{Name: "Request", NestedMessages: []*v1.Message{
+					{Name: "Options", NestedMessages: []*v1.Message{{Name: "Filters"}}},
+					{Name: "Pagination"},
+				}},
+			}},
+			{Filename: "service.proto", Services: []*v1.Service{{Name: "Orders", Methods: []*v1.Method{{Name: "Get"}, {Name: "List"}}}}},
+		}},
+		{Name: "", ProtoFiles: []*v1.ParsedProtoFile{{Filename: "common.proto", Messages: []*v1.Message{{Name: "Reply"}}}}},
+	}}
+	tests := []struct {
+		name     string
+		resp     *v1.GetMetadataResponse
+		args     []string
+		wantJSON bool
+		wantOut  string
+		wantErr  string
+	}{
+		{name: "default JSON", resp: response, wantJSON: true},
+		{name: "explicit JSON", resp: response, args: []string{"--output", "json"}, wantJSON: true},
+		{name: "blank option uses default JSON", resp: response, args: []string{"-o", "  "}, wantJSON: true},
+		{
+			name:    "table with nested messages and unnamed package",
+			resp:    response,
+			args:    []string{"-o", "table"},
+			wantOut: "PACKAGE       FILES  MESSAGES  SERVICES  RPCS\norders.v1     2      4         1         2\n(no package)  1      1         0         0\n",
+		},
+		{
+			name:    "table empty packages",
+			resp:    &v1.GetMetadataResponse{},
+			args:    []string{"-o", "table"},
+			wantOut: "No packages found.\n",
+		},
+		{name: "invalid", resp: response, args: []string{"-o", "yaml"}, wantErr: "invalid --output value"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeMetadataClient{getResponse: test.resp}
+			cmd := NewMetadataCmd(&model.Config{Name: "default/module"}, client)
+			out, err := runOutputCommand(cmd, append([]string{"get", "acme/orders", "v1.0.0"}, test.args...))
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				require.Empty(t, client.getRequests)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, client.getRequests, 1)
+			assert.Equal(t, "acme/orders", client.getRequests[0].GetName())
+			assert.Equal(t, "v1.0.0", client.getRequests[0].GetTag())
+			if test.wantJSON {
+				expected, err := json.Marshal(test.resp)
+				require.NoError(t, err)
+				assert.JSONEq(t, string(expected), out)
+				return
+			}
+			assert.Equal(t, test.wantOut, out)
+		})
+	}
+}
+
+func runOutputCommand(cmd *cobra.Command, args []string) (string, error) {
+	var out bytes.Buffer
+	cmd.SetArgs(args)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := cmd.Execute()
+	return out.String(), err
 }
 
 type fakeDriftClient struct {
@@ -515,6 +661,13 @@ func TestModulesListAndGetOutputFormats(t *testing.T) {
 			config:      cfg,
 			args:        []string{"list"},
 			wantSubstrs: []string{"NAME", "ID", "LATEST TAG", "TAGS", "acme/payment", "mod-1", "v1.2.0", "v1.2.0, v1.1.0", "acme/empty", "mod-2"},
+		},
+		{
+			name:        "list empty output uses default table",
+			client:      populatedClient,
+			config:      cfg,
+			args:        []string{"list", "--output="},
+			wantSubstrs: []string{"NAME", "ID", "acme/payment", "mod-1"},
 		},
 		{
 			name: "list single page with page-size and page-token",

@@ -475,7 +475,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf modules update` | Update `pbuf-registry` dependencies in `pbuf.yaml` to their latest published tags |
 | `pbuf modules delete-tag <tag>` | Delete a specific tag of the current module |
 | `pbuf modules delete` | Delete the current module and all its tags |
-| `pbuf metadata get [module_name] [tag]` | Retrieve parsed AST metadata (packages, messages, services, enums) for a module tag |
+| `pbuf metadata get [module_name] [tag] [-o table\|json]` | Get parsed AST metadata as JSON (default) or package counts of files, messages, services, and RPCs as a table |
 | `pbuf lint [paths...] [--ignore-rule <rules>] [-o table\|json]` | Validate local `.proto` syntax and style rules offline, exits non-zero on violations |
 | `pbuf drift diff [module_name] [--against <tag>] [--format table\|markdown\|json] [--fail-on critical\|warning\|info\|none]` | Compare local `.proto` files against a registry tag and fail on breaking changes |
 | `pbuf drift list [--unacknowledged-only]` | List schema drift events across all modules |
@@ -485,7 +485,7 @@ For example, if your `go.mod` declares `module github.com/myorg/order-service`, 
 | `pbuf mcp` | Start a Model Context Protocol (MCP) server over `stdio` for AI coding agents |
 | `pbuf completion [bash\|zsh\|fish\|powershell]` | Generate shell autocompletion script |
 | `pbuf users create <name> [--type user\|bot]` | Create a user or bot and output its one-time token |
-| `pbuf users list [--page-size 50] [--page 0]` | List users and bots |
+| `pbuf users list [--page-size 50] [--page 0] [-o table\|json]` | List users and bots as JSON (default) or a table of IDs, names, types, and active status |
 | `pbuf users get <id>` | Get user or bot details by ID |
 | `pbuf users update <id> [--name <n>] [--active\|--inactive]` | Update a user or bot's name or active status |
 | `pbuf users delete <id>` | Delete a user or bot and revoke all permissions |
@@ -605,6 +605,9 @@ Retrieves parsed AST metadata (packages, messages, fields, nested types, enums, 
 # Uses module name from pbuf.yaml when omitted
 pbuf metadata get
 pbuf metadata get myorg/payment-service v1.0.0
+
+# Summarize files, messages, services, and RPCs by package
+pbuf metadata get myorg/payment-service v1.0.0 -o table
 ```
 
 ---
@@ -721,6 +724,7 @@ pbuf users create ci-deployer --type bot
 
 # List users with pagination
 pbuf users list --page-size 50 --page 0
+pbuf users list --page-size 50 --page 0 -o table
 
 # Get a user by UUID
 pbuf users get <user-id>
