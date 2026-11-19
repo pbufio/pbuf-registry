@@ -43,6 +43,7 @@ type LintReport struct {
 // NewLintCmd creates the `pbuf lint` command. It validates local .proto files
 // offline and never contacts a registry.
 func NewLintCmd(config *model.Config) *cobra.Command {
+	var ignoreRules []string
 	lintCmd := &cobra.Command{
 		Use:           "lint [paths...]",
 		Short:         "Lint local .proto files offline",
@@ -52,6 +53,10 @@ func NewLintCmd(config *model.Config) *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := parseLintOutputFormat(cmd)
+			if err != nil {
+				return err
+			}
+			ignoredRules, err := parseIgnoredLintRules(ignoreRules)
 			if err != nil {
 				return err
 			}
@@ -70,6 +75,13 @@ func NewLintCmd(config *model.Config) *cobra.Command {
 			}
 
 			report := lintProtoFiles(files)
+			findings := report.Findings[:0]
+			for _, finding := range report.Findings {
+				if _, ignored := ignoredRules[finding.Rule]; !ignored {
+					findings = append(findings, finding)
+				}
+			}
+			report.Findings = findings
 
 			if err := renderLintReport(cmd.OutOrStdout(), report, format); err != nil {
 				return err
@@ -84,7 +96,25 @@ func NewLintCmd(config *model.Config) *cobra.Command {
 
 	lintCmd.Flags().StringP("output", "o", "table", "output format: table|json")
 	lintCmd.Flags().String("format", "table", "output format: table|json")
+	lintCmd.Flags().StringArrayVar(&ignoreRules, "ignore-rule", nil, "rule IDs to ignore (case-insensitive; repeat or separate with commas)")
 	return lintCmd
+}
+
+func parseIgnoredLintRules(values []string) (map[string]struct{}, error) {
+	ignored := make(map[string]struct{})
+	for _, value := range values {
+		for _, rule := range strings.Split(value, ",") {
+			rule = strings.ToUpper(strings.TrimSpace(rule))
+			switch rule {
+			case "SYNTAX", "PACKAGE", "FILE_NAME", "MESSAGE_NAME", "FIELD_NAME",
+				"ENUM_NAME", "ENUM_VALUE_NAME", "ENUM_ZERO_VALUE", "SERVICE_NAME", "RPC_NAME":
+				ignored[rule] = struct{}{}
+			default:
+				return nil, fmt.Errorf("invalid --ignore-rule %q: unknown or empty rule ID", rule)
+			}
+		}
+	}
+	return ignored, nil
 }
 
 func parseLintOutputFormat(cmd *cobra.Command) (string, error) {
@@ -259,6 +289,11 @@ func (l *protoLinter) add(rule, message string, pos meta.Position) {
 
 func lintProtoFile(filename, content string) []LintFinding {
 	l := &protoLinter{filename: filename}
+
+	name := strings.TrimSuffix(filepath.Base(filename), ".proto")
+	if !snakeCaseRe.MatchString(name) {
+		l.add("FILE_NAME", fmt.Sprintf("file name %q should be lower_snake_case", name), meta.Position{Line: 1, Column: 1})
+	}
 
 	if strings.TrimSpace(content) == "" {
 		l.add("SYNTAX", "file is empty", meta.Position{})

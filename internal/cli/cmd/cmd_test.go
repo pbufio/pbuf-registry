@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jdx/go-netrc"
@@ -780,14 +781,15 @@ enum Mode {
 `
 
 	tests := []struct {
-		name        string
-		files       map[string]string
-		args        []string
-		wantErr     string
-		wantSubstrs []string
-		wantRules   []string
-		wantClean   bool
-		wantJSON    bool
+		name            string
+		files           map[string]string
+		args            []string
+		wantErr         string
+		wantSubstrs     []string
+		wantRules       []string
+		wantAbsentRules []string
+		wantClean       bool
+		wantJSON        bool
 	}{
 		{
 			name:      "valid schema passes",
@@ -870,6 +872,84 @@ enum Mode {
 			wantErr: "invalid --output",
 		},
 		{
+			name:        "file name violation reported at line one",
+			files:       map[string]string{"api/v1/OrderService.proto": validProto},
+			args:        []string{"lint", "-o", "json"},
+			wantErr:     "lint failed: 1 violation(s) found",
+			wantRules:   []string{"FILE_NAME"},
+			wantSubstrs: []string{"should be lower_snake_case"},
+			wantJSON:    true,
+		},
+		{
+			name:            "ignored file name passes with clean table output",
+			files:           map[string]string{"api/OrderService.proto": validProto},
+			args:            []string{"lint", "--ignore-rule", "FILE_NAME"},
+			wantAbsentRules: []string{"FILE_NAME"},
+			wantClean:       true,
+		},
+		{
+			name:            "ignored file names preserve file count and empty JSON array",
+			files:           map[string]string{"api/OrderService.proto": validProto, "api/PayService.proto": validProto},
+			args:            []string{"lint", "--ignore-rule", "file_name", "--format", "json"},
+			wantAbsentRules: []string{"FILE_NAME"},
+			wantJSON:        true,
+		},
+		{
+			name:  "repeated comma-separated rules normalize case and whitespace and allow duplicates",
+			files: map[string]string{"api/OrderService.proto": styleViolationsProto},
+			args: []string{"lint", "--ignore-rule", " file_name , enum_name,ENUM_VALUE_NAME ",
+				"--ignore-rule", "enum_zero_value,MESSAGE_NAME", "--ignore-rule", "field_NAME,SERVICE_NAME,rpc_name,FILE_NAME"},
+			wantAbsentRules: []string{"FILE_NAME", "ENUM_NAME", "ENUM_VALUE_NAME", "ENUM_ZERO_VALUE", "MESSAGE_NAME", "FIELD_NAME", "SERVICE_NAME", "RPC_NAME"},
+			wantClean:       true,
+		},
+		{
+			name:            "partial suppression keeps remaining findings and table totals",
+			files:           map[string]string{"api/OrderService.proto": missingSyntaxProto},
+			args:            []string{"lint", "--ignore-rule", "FILE_NAME"},
+			wantErr:         "lint failed: 1 violation(s) found",
+			wantRules:       []string{"SYNTAX"},
+			wantAbsentRules: []string{"FILE_NAME"},
+			wantSubstrs:     []string{"1 issue(s) found across 1 file(s)."},
+		},
+		{
+			name:            "partial suppression keeps remaining JSON findings and exit status",
+			files:           map[string]string{"api/OrderService.proto": brokenProto},
+			args:            []string{"lint", "--ignore-rule", "FILE_NAME", "-o", "json"},
+			wantErr:         "lint failed: 1 violation(s) found",
+			wantRules:       []string{"SYNTAX"},
+			wantAbsentRules: []string{"FILE_NAME"},
+			wantJSON:        true,
+		},
+		{
+			name:            "file name checked even when syntax cannot be parsed",
+			files:           map[string]string{"api/OrderService.proto": brokenProto},
+			args:            []string{"lint", "--ignore-rule", "syntax", "-o", "json"},
+			wantErr:         "lint failed: 1 violation(s) found",
+			wantRules:       []string{"FILE_NAME"},
+			wantAbsentRules: []string{"SYNTAX"},
+			wantJSON:        true,
+		},
+		{
+			name:            "syntax finding can be ignored",
+			files:           map[string]string{"api/broken.proto": brokenProto},
+			args:            []string{"lint", "--ignore-rule", "SYNTAX", "-o", "json"},
+			wantAbsentRules: []string{"SYNTAX"},
+			wantJSON:        true,
+		},
+		{
+			name:            "package finding can be ignored",
+			files:           map[string]string{"api/pay.proto": strings.Replace(validProto, "package acme.pay.v1;", "package acme.pay.v1; package duplicate;", 1)},
+			args:            []string{"lint", "--ignore-rule", "PACKAGE"},
+			wantAbsentRules: []string{"PACKAGE"},
+			wantClean:       true,
+		},
+		{
+			name:      "ignoring a rule with no findings passes",
+			files:     map[string]string{"api/pay.proto": validProto},
+			args:      []string{"lint", "--ignore-rule", "FILE_NAME"},
+			wantClean: true,
+		},
+		{
 			name:    "explicit path argument",
 			files:   map[string]string{"schemas/style.proto": styleViolationsProto},
 			args:    []string{"lint", "schemas"},
@@ -917,14 +997,58 @@ enum Mode {
 			for _, rule := range tc.wantRules {
 				assert.Contains(t, got, rule)
 			}
+			for _, rule := range tc.wantAbsentRules {
+				assert.NotContains(t, got, rule)
+			}
 			if tc.wantJSON {
 				var parsed LintReport
 				require.NoError(t, json.Unmarshal(out.Bytes(), &parsed))
-				assert.Equal(t, 1, parsed.Files)
-				assert.Empty(t, parsed.Findings)
+				assert.Equal(t, len(tc.files), parsed.Files)
+				assert.NotNil(t, parsed.Findings)
+				require.Len(t, parsed.Findings, len(tc.wantRules))
+				for i, finding := range parsed.Findings {
+					assert.Equal(t, tc.wantRules[i], finding.Rule)
+					assert.Contains(t, tc.files, finding.Filename)
+					if finding.Rule == "FILE_NAME" {
+						assert.Equal(t, 1, finding.Line)
+						assert.Equal(t, 1, finding.Column)
+					}
+				}
 			}
 		})
 	}
+
+	t.Run("invalid ignore rules fail before collecting files", func(t *testing.T) {
+		for _, value := range []string{"FILE_NAM", "file-name", "FILE NAME", "", " \t ", ",FILE_NAME", "FILE_NAME,", "FILE_NAME,,SYNTAX", "FILE_NAME,BOGUS"} {
+			t.Run(value, func(t *testing.T) {
+				lintCmd := NewLintCmd(&model.Config{})
+				var out bytes.Buffer
+				lintCmd.SetOut(&out)
+				lintCmd.SetErr(&out)
+				lintCmd.SetArgs([]string{"--ignore-rule", value, filepath.Join(t.TempDir(), "missing.proto")})
+				require.ErrorContains(t, lintCmd.Execute(), "invalid --ignore-rule")
+				assert.Empty(t, out.String())
+			})
+		}
+	})
+
+	t.Run("file name edge cases", func(t *testing.T) {
+		for _, filename := range []string{"order.proto", "api/v1/order_service.proto", "Upper-Dir/order_v2.proto", "v1.proto"} {
+			t.Run(filename, func(t *testing.T) {
+				assert.Empty(t, lintProtoFile(filename, validProto))
+			})
+		}
+		for _, filename := range []string{"OrderService.proto", "order-service.proto", "order.service.proto", "order__service.proto", "_order.proto", "order_.proto", "1order.proto", ".proto"} {
+			t.Run(filename, func(t *testing.T) {
+				findings := lintProtoFile(filename, validProto)
+				require.Len(t, findings, 1)
+				assert.Equal(t, "FILE_NAME", findings[0].Rule)
+				assert.Equal(t, filename, findings[0].Filename)
+				assert.Equal(t, 1, findings[0].Line)
+				assert.Equal(t, 1, findings[0].Column)
+			})
+		}
+	})
 
 	t.Run("runs offline via NewRootCmd with symlinked dirs, proto fallback, and invalid env vars", func(t *testing.T) {
 		parentDir := t.TempDir()
