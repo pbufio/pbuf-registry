@@ -112,7 +112,9 @@ def main() -> int:
 
         # Seed permissions
         upsert_acl(conn, reader_id, "*", "read")
+        upsert_acl(conn, writer_id, "*", "read")
         upsert_acl(conn, writer_id, module_name, "write")
+        upsert_acl(conn, bot_id, "*", "read")
         upsert_acl(conn, bot_id, module_name, "write")
 
     print("Seed complete.")
