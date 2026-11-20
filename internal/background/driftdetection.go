@@ -146,48 +146,19 @@ func (d *driftDetection) getParsedProtoMap(ctx context.Context, tagID string) (m
 // determineSeverityFromParsed analyzes the diff between two parsed proto files and determines severity
 // based on backward compatibility rules
 func determineSeverityFromParsed(previous, current *unordered.Proto) model.DriftSeverity {
-	if previous == nil || current == nil {
+	hasWarning := false
+	for _, item := range utils.DiffParsedProtoFile("", previous, current) {
+		switch item.Severity {
+		case "CRITICAL":
+			return model.DriftSeverityCritical
+		case "WARNING":
+			hasWarning = true
+		}
+	}
+	if hasWarning {
 		return model.DriftSeverityWarning
 	}
-
-	// Check for breaking changes (critical severity)
-	if hasBreakingChangesFromParsed(previous, current) {
-		return model.DriftSeverityCritical
-	}
-
-	// Check for potentially breaking changes (warning severity)
-	if hasPotentiallyBreakingChangesFromParsed(previous, current) {
-		return model.DriftSeverityWarning
-	}
-
-	// Non-breaking changes (info severity)
 	return model.DriftSeverityInfo
-}
-
-// hasBreakingChangesFromParsed checks for changes that break backward compatibility using parsed structures
-func hasBreakingChangesFromParsed(previous, current *unordered.Proto) bool {
-	if previous == nil || current == nil || previous.ProtoBody == nil || current.ProtoBody == nil {
-		return false
-	}
-	for _, item := range utils.DiffParsedProtoFile("", previous, current) {
-		if item.Severity == "CRITICAL" {
-			return true
-		}
-	}
-	return false
-}
-
-// hasPotentiallyBreakingChangesFromParsed checks for changes that might break compatibility using parsed structures
-func hasPotentiallyBreakingChangesFromParsed(previous, current *unordered.Proto) bool {
-	if previous == nil || current == nil || previous.ProtoBody == nil || current.ProtoBody == nil {
-		return false
-	}
-	for _, item := range utils.DiffParsedProtoFile("", previous, current) {
-		if item.Severity == "WARNING" {
-			return true
-		}
-	}
-	return false
 }
 
 // logSignificantChanges logs warning-level messages for significant drift events

@@ -38,14 +38,6 @@ type DriftEvent struct {
 	AcknowledgedBy string
 }
 
-// ProtoFileHash represents a proto file with its content hash
-type ProtoFileHash struct {
-	ID          string
-	TagID       string
-	Filename    string
-	ContentHash string
-}
-
 // DriftDetectionResult holds the results of drift detection for a tag
 type DriftDetectionResult struct {
 	TagID    string

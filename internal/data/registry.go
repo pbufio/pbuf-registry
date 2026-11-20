@@ -457,8 +457,8 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 	// insert protofiles
 	for _, protofile := range protofiles {
 		_, err = tx.Exec(ctx,
-			"INSERT INTO protofiles (tag_id, filename, content) VALUES ($1, $2, $3)",
-			tagId, protofile.Filename, protofile.Content)
+			"INSERT INTO protofiles (tag_id, filename, content, content_hash) VALUES ($1, $2, $3, $4)",
+			tagId, protofile.Filename, protofile.Content, computeHash(protofile.Content))
 		if err != nil {
 			return nil, fmt.Errorf("could not insert protofile into database: %w", err)
 		}

@@ -3,7 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -91,9 +91,13 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 		})
 	}
 
-	prevMsgs := collectMessageNames(prevBody.Messages, "")
-	currMsgs := collectMessageNames(currBody.Messages, "")
-	for _, msg := range sortedMissingKeys(prevMsgs, currMsgs) {
+	prevSym := collectProtoSymbols(prevBody)
+	currSym := collectProtoSymbols(currBody)
+
+	for _, msg := range sortedMissingKeys(prevSym.msgs, currSym.msgs) {
+		if idx := strings.LastIndexByte(msg, '.'); idx >= 0 && !currSym.msgs[msg[:idx]] {
+			continue
+		}
 		items = append(items, ProtoDiffItem{
 			Filename: filename,
 			Severity: "CRITICAL",
@@ -102,15 +106,7 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 		})
 	}
 
-	prevSvcs := make(map[string]bool, len(prevBody.Services))
-	for _, s := range prevBody.Services {
-		prevSvcs[s.ServiceName] = true
-	}
-	currSvcs := make(map[string]bool, len(currBody.Services))
-	for _, s := range currBody.Services {
-		currSvcs[s.ServiceName] = true
-	}
-	for _, svc := range sortedMissingKeys(prevSvcs, currSvcs) {
+	for _, svc := range sortedMissingKeys(prevSym.svcs, currSym.svcs) {
 		items = append(items, ProtoDiffItem{
 			Filename: filename,
 			Severity: "CRITICAL",
@@ -119,15 +115,10 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 		})
 	}
 
-	prevEnums := make(map[string]bool, len(prevBody.Enums))
-	for _, e := range prevBody.Enums {
-		prevEnums[e.EnumName] = true
-	}
-	currEnums := make(map[string]bool, len(currBody.Enums))
-	for _, e := range currBody.Enums {
-		currEnums[e.EnumName] = true
-	}
-	for _, enumName := range sortedMissingKeys(prevEnums, currEnums) {
+	for _, enumName := range sortedMissingKeys(prevSym.enums, currSym.enums) {
+		if idx := strings.LastIndexByte(enumName, '.'); idx >= 0 && !currSym.msgs[enumName[:idx]] {
+			continue
+		}
 		items = append(items, ProtoDiffItem{
 			Filename: filename,
 			Severity: "CRITICAL",
@@ -136,24 +127,29 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 		})
 	}
 
-	prevEnumVals := collectEnumValuesByNumber(prevBody.Enums)
-	currEnumVals := collectEnumValuesByNumber(currBody.Enums)
-	for _, evKey := range sortedMapKeys(prevEnumVals) {
-		if _, exists := currEnumVals[evKey]; !exists {
-			items = append(items, ProtoDiffItem{
-				Filename: filename,
-				Severity: "CRITICAL",
-				Change:   "ENUM_VALUE_REMOVED",
-				Details:  fmt.Sprintf("enum value %s (%s) was removed", evKey, prevEnumVals[evKey]),
-			})
+	for _, evKey := range sortedKeys(prevSym.enumVals) {
+		if enumName, _, ok := strings.Cut(evKey, "#"); ok && !currSym.enums[enumName] {
+			continue
+		}
+		currIdents := currSym.enumVals[evKey]
+		for _, ident := range prevSym.enumVals[evKey] {
+			if !slices.Contains(currIdents, ident) {
+				items = append(items, ProtoDiffItem{
+					Filename: filename,
+					Severity: "CRITICAL",
+					Change:   "ENUM_VALUE_REMOVED",
+					Details:  fmt.Sprintf("enum value %s (%s) was removed", evKey, ident),
+				})
+			}
 		}
 	}
 
-	prevFields := collectFieldsByTagNumber(prevBody.Messages, "")
-	currFields := collectFieldsByTagNumber(currBody.Messages, "")
-	for _, fk := range sortedMapKeys(prevFields) {
-		pf := prevFields[fk]
-		cf, exists := currFields[fk]
+	for _, fk := range sortedKeys(prevSym.fields) {
+		if msgName, _, ok := strings.Cut(fk, "#"); ok && !currSym.msgs[msgName] {
+			continue
+		}
+		pf := prevSym.fields[fk]
+		cf, exists := currSym.fields[fk]
 		if !exists {
 			items = append(items, ProtoDiffItem{
 				Filename: filename,
@@ -170,6 +166,13 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 				Change:   "FIELD_TYPE_CHANGED",
 				Details:  fmt.Sprintf("field %s (%s) type changed from %s to %s", fk, pf.Name, pf.Type, cf.Type),
 			})
+		} else if pf.cardinality() != cf.cardinality() {
+			items = append(items, ProtoDiffItem{
+				Filename: filename,
+				Severity: "CRITICAL",
+				Change:   "FIELD_CARDINALITY_CHANGED",
+				Details:  fmt.Sprintf("field %s (%s) cardinality changed from %s to %s", fk, pf.Name, pf.cardinality(), cf.cardinality()),
+			})
 		} else if pf.Name != cf.Name {
 			items = append(items, ProtoDiffItem{
 				Filename: filename,
@@ -180,20 +183,25 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 		}
 	}
 
-	if countRequiredFields(currBody.Messages) > countRequiredFields(prevBody.Messages) {
-		items = append(items, ProtoDiffItem{
-			Filename: filename,
-			Severity: "WARNING",
-			Change:   "REQUIRED_FIELD_ADDED",
-			Details:  "new required field added",
-		})
+	for _, fk := range sortedKeys(currSym.fields) {
+		cf := currSym.fields[fk]
+		if _, existed := prevSym.fields[fk]; cf.Required && !existed {
+			items = append(items, ProtoDiffItem{
+				Filename: filename,
+				Severity: "WARNING",
+				Change:   "REQUIRED_FIELD_ADDED",
+				Details:  "new required field added",
+			})
+			break
+		}
 	}
 
-	prevRPCs := collectRPCDetails(prevBody.Services)
-	currRPCs := collectRPCDetails(currBody.Services)
-	for _, rk := range sortedMapKeys(prevRPCs) {
-		pr := prevRPCs[rk]
-		cr, exists := currRPCs[rk]
+	for _, rk := range sortedKeys(prevSym.rpcs) {
+		if svcName, _, ok := strings.Cut(rk, "."); ok && !currSym.svcs[svcName] {
+			continue
+		}
+		pr := prevSym.rpcs[rk]
+		cr, exists := currSym.rpcs[rk]
 		if !exists {
 			items = append(items, ProtoDiffItem{
 				Filename: filename,
@@ -226,8 +234,21 @@ func DiffParsedProtoFile(filename string, prev, curr *unordered.Proto) []ProtoDi
 }
 
 type protoFieldInfo struct {
-	Name string
-	Type string
+	Name     string
+	Type     string
+	Repeated bool
+	Required bool
+}
+
+func (f protoFieldInfo) cardinality() string {
+	switch {
+	case f.Repeated:
+		return "repeated"
+	case f.Required:
+		return "required"
+	default:
+		return "singular"
+	}
 }
 
 type protoRPCInfo struct {
@@ -250,101 +271,134 @@ func (r protoRPCInfo) formatSig() string {
 }
 
 func firstPackageName(body *unordered.ProtoBody) string {
-	if body != nil && len(body.Packages) > 0 {
+	if body != nil && len(body.Packages) > 0 && body.Packages[0] != nil {
 		return body.Packages[0].Name
 	}
 	return ""
 }
 
-func collectMessageNames(messages []*unordered.Message, prefix string) map[string]bool {
-	res := make(map[string]bool)
-	for _, m := range messages {
-		name := m.MessageName
-		if prefix != "" {
-			name = prefix + "." + m.MessageName
-		}
-		res[name] = true
-		if m.MessageBody != nil {
-			for k, v := range collectMessageNames(m.MessageBody.Messages, name) {
-				res[k] = v
-			}
-		}
-	}
-	return res
+type protoSymbols struct {
+	msgs     map[string]bool
+	svcs     map[string]bool
+	enums    map[string]bool
+	enumVals map[string][]string
+	fields   map[string]protoFieldInfo
+	rpcs     map[string]protoRPCInfo
 }
 
-func collectEnumValuesByNumber(enums []*unordered.Enum) map[string]string {
-	res := make(map[string]string)
-	for _, e := range enums {
-		if e.EnumBody == nil {
-			continue
-		}
-		for _, f := range e.EnumBody.EnumFields {
-			if n, err := strconv.ParseInt(f.Number, 10, 32); err == nil {
-				res[e.EnumName+"#"+strconv.FormatInt(n, 10)] = f.Ident
-			}
-		}
+func protoTagKey(scope, raw string) (string, bool) {
+	n, err := strconv.ParseInt(raw, 0, 32)
+	if err != nil {
+		return "", false
 	}
-	return res
+	return scope + "#" + strconv.FormatInt(n, 10), true
 }
 
-func collectFieldsByTagNumber(messages []*unordered.Message, prefix string) map[string]protoFieldInfo {
-	res := make(map[string]protoFieldInfo)
-	for _, m := range messages {
-		msgName := m.MessageName
-		if prefix != "" {
-			msgName = prefix + "." + m.MessageName
-		}
-		if m.MessageBody == nil {
-			continue
-		}
-		for _, f := range m.MessageBody.Fields {
-			if n, err := strconv.ParseInt(f.FieldNumber, 10, 32); err == nil {
-				res[msgName+"#"+strconv.FormatInt(n, 10)] = protoFieldInfo{Name: f.FieldName, Type: f.Type}
+func collectProtoSymbols(body *unordered.ProtoBody) protoSymbols {
+	sym := protoSymbols{
+		msgs:     make(map[string]bool),
+		svcs:     make(map[string]bool),
+		enums:    make(map[string]bool),
+		enumVals: make(map[string][]string),
+		fields:   make(map[string]protoFieldInfo),
+		rpcs:     make(map[string]protoRPCInfo),
+	}
+	if body == nil {
+		return sym
+	}
+
+	walkEnums := func(list []*unordered.Enum, prefix string) {
+		for _, e := range list {
+			if e == nil {
+				continue
 			}
-		}
-		for _, mf := range m.MessageBody.Maps {
-			if n, err := strconv.ParseInt(mf.FieldNumber, 10, 32); err == nil {
-				res[msgName+"#"+strconv.FormatInt(n, 10)] = protoFieldInfo{Name: mf.MapName, Type: "map<" + mf.KeyType + "," + mf.Type + ">"}
+			enumName := e.EnumName
+			if prefix != "" {
+				enumName = prefix + "." + e.EnumName
 			}
-		}
-		for _, oo := range m.MessageBody.Oneofs {
-			for _, oof := range oo.OneofFields {
-				if n, err := strconv.ParseInt(oof.FieldNumber, 10, 32); err == nil {
-					res[msgName+"#"+strconv.FormatInt(n, 10)] = protoFieldInfo{Name: oof.FieldName, Type: oof.Type}
+			sym.enums[enumName] = true
+			if e.EnumBody == nil {
+				continue
+			}
+			for _, f := range e.EnumBody.EnumFields {
+				if f == nil {
+					continue
+				}
+				if key, ok := protoTagKey(enumName, f.Number); ok {
+					sym.enumVals[key] = append(sym.enumVals[key], f.Ident)
 				}
 			}
 		}
-		for k, v := range collectFieldsByTagNumber(m.MessageBody.Messages, msgName) {
-			res[k] = v
+	}
+
+	var walkMsgs func(list []*unordered.Message, prefix string)
+	walkMsgs = func(list []*unordered.Message, prefix string) {
+		for _, m := range list {
+			if m == nil {
+				continue
+			}
+			msgName := m.MessageName
+			if prefix != "" {
+				msgName = prefix + "." + m.MessageName
+			}
+			sym.msgs[msgName] = true
+			if m.MessageBody == nil {
+				continue
+			}
+			for _, f := range m.MessageBody.Fields {
+				if f == nil {
+					continue
+				}
+				if key, ok := protoTagKey(msgName, f.FieldNumber); ok {
+					sym.fields[key] = protoFieldInfo{
+						Name:     f.FieldName,
+						Type:     f.Type,
+						Repeated: f.IsRepeated,
+						Required: f.IsRequired,
+					}
+				}
+			}
+			for _, mf := range m.MessageBody.Maps {
+				if mf == nil {
+					continue
+				}
+				if key, ok := protoTagKey(msgName, mf.FieldNumber); ok {
+					sym.fields[key] = protoFieldInfo{Name: mf.MapName, Type: "map<" + mf.KeyType + "," + mf.Type + ">"}
+				}
+			}
+			for _, oo := range m.MessageBody.Oneofs {
+				if oo == nil {
+					continue
+				}
+				for _, oof := range oo.OneofFields {
+					if oof == nil {
+						continue
+					}
+					if key, ok := protoTagKey(msgName, oof.FieldNumber); ok {
+						sym.fields[key] = protoFieldInfo{Name: oof.FieldName, Type: oof.Type}
+					}
+				}
+			}
+			walkEnums(m.MessageBody.Enums, msgName)
+			walkMsgs(m.MessageBody.Messages, msgName)
 		}
 	}
-	return res
-}
 
-func countRequiredFields(messages []*unordered.Message) int {
-	count := 0
-	for _, m := range messages {
-		if m.MessageBody == nil {
+	walkEnums(body.Enums, "")
+	walkMsgs(body.Messages, "")
+
+	for _, s := range body.Services {
+		if s == nil {
 			continue
 		}
-		for _, f := range m.MessageBody.Fields {
-			if f.IsRequired {
-				count++
-			}
-		}
-		count += countRequiredFields(m.MessageBody.Messages)
-	}
-	return count
-}
-
-func collectRPCDetails(services []*unordered.Service) map[string]protoRPCInfo {
-	res := make(map[string]protoRPCInfo)
-	for _, s := range services {
+		sym.svcs[s.ServiceName] = true
 		if s.ServiceBody == nil {
 			continue
 		}
 		for _, r := range s.ServiceBody.RPCs {
+			if r == nil {
+				continue
+			}
 			var info protoRPCInfo
 			if r.RPCRequest != nil {
 				info.Req = r.RPCRequest.MessageType
@@ -354,10 +408,11 @@ func collectRPCDetails(services []*unordered.Service) map[string]protoRPCInfo {
 				info.Resp = r.RPCResponse.MessageType
 				info.RespStream = r.RPCResponse.IsStream
 			}
-			res[s.ServiceName+"."+r.RPCName] = info
+			sym.rpcs[s.ServiceName+"."+r.RPCName] = info
 		}
 	}
-	return res
+
+	return sym
 }
 
 func sortedMissingKeys(prev, curr map[string]bool) []string {
@@ -367,15 +422,6 @@ func sortedMissingKeys(prev, curr map[string]bool) []string {
 			missing = append(missing, k)
 		}
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 	return missing
-}
-
-func sortedMapKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

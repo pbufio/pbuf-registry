@@ -87,3 +87,198 @@ func TestParseProtoFilesContents(t *testing.T) {
 		})
 	}
 }
+
+func mustParseUnordered(t *testing.T, content string) *unordered.Proto {
+	t.Helper()
+	parsed, err := ParseProtoFilesContents([]*v1.ProtoFile{{Filename: "order.proto", Content: content}})
+	if err != nil {
+		t.Fatalf("ParseProtoFilesContents() unexpected error: %v", err)
+	}
+	return parsed[0].Proto
+}
+
+func TestDiffParsedProtoFile_NestedEnumsCardinalityAndHexTags(t *testing.T) {
+	t.Run("detects nested enum and nested enum value removals", func(t *testing.T) {
+		prev := mustParseUnordered(t, `
+			syntax = "proto3";
+			package shop.v1;
+			message Order {
+				enum Status {
+					STATUS_UNSPECIFIED = 0;
+					STATUS_PAID = 0x01;
+					STATUS_REFUNDED = 02;
+				}
+				message LineItem {
+					enum Kind {
+						KIND_UNSPECIFIED = 0;
+					}
+				}
+			}
+		`)
+		curr := mustParseUnordered(t, `
+			syntax = "proto3";
+			package shop.v1;
+			message Order {
+				enum Status {
+					STATUS_UNSPECIFIED = 0;
+					STATUS_PAID = 1;
+				}
+				message LineItem {}
+			}
+		`)
+
+		items := DiffParsedProtoFile("order.proto", prev, curr)
+		want := []ProtoDiffItem{
+			{
+				Filename: "order.proto",
+				Severity: "CRITICAL",
+				Change:   "ENUM_REMOVED",
+				Details:  "enum Order.LineItem.Kind was removed",
+			},
+			{
+				Filename: "order.proto",
+				Severity: "CRITICAL",
+				Change:   "ENUM_VALUE_REMOVED",
+				Details:  "enum value Order.Status#2 (STATUS_REFUNDED) was removed",
+			},
+		}
+		if !reflect.DeepEqual(items, want) {
+			t.Fatalf("DiffParsedProtoFile() = %#v, want %#v", items, want)
+		}
+	})
+
+	t.Run("detects repeated cardinality changes and hex/octal field tags", func(t *testing.T) {
+		prev := mustParseUnordered(t, `
+			syntax = "proto3";
+			message Order {
+				string tags = 1;
+				string hex_same = 0x10;
+				string hex_removed = 0x20;
+			}
+		`)
+		curr := mustParseUnordered(t, `
+			syntax = "proto3";
+			message Order {
+				repeated string tags = 1;
+				string hex_same = 16;
+			}
+		`)
+
+		items := DiffParsedProtoFile("order.proto", prev, curr)
+		want := []ProtoDiffItem{
+			{
+				Filename: "order.proto",
+				Severity: "CRITICAL",
+				Change:   "FIELD_CARDINALITY_CHANGED",
+				Details:  "field Order#1 (tags) cardinality changed from singular to repeated",
+			},
+			{
+				Filename: "order.proto",
+				Severity: "CRITICAL",
+				Change:   "FIELD_REMOVED",
+				Details:  "field Order#32 (string hex_removed) was removed",
+			},
+		}
+		if !reflect.DeepEqual(items, want) {
+			t.Fatalf("DiffParsedProtoFile() = %#v, want %#v", items, want)
+		}
+	})
+
+	t.Run("detects proto2 required field added, required<->optional cardinality, enum aliases, swapped enum numbers, and suppresses child noise", func(t *testing.T) {
+		prev := mustParseUnordered(t, `
+			syntax = "proto2";
+			enum Code {
+				option allow_alias = true;
+				CODE_LEGACY = -0x01;
+				CODE_UNSPECIFIED = 0;
+				CODE_PAID = 1;
+				CODE_SETTLED = 1;
+				CODE_REFUNDED = 2;
+			}
+			message Legacy {
+				required string old_req = 1;
+				required string downgraded = 3;
+			}
+			message DroppedMsg {
+				message Nested {
+					optional string id = 1;
+				}
+				enum InnerEnum {
+					INNER_ZERO = 0;
+				}
+				optional string secret = 1;
+			}
+			service DroppedSvc {
+				rpc Ping(Legacy) returns (Legacy);
+			}
+		`)
+		curr := mustParseUnordered(t, `
+			syntax = "proto2";
+			enum Code {
+				CODE_LEGACY = -1;
+				CODE_UNSPECIFIED = 0;
+				CODE_REFUNDED = 1;
+				CODE_PAID = 2;
+			}
+			message Legacy {
+				required string new_req = 2;
+				optional string downgraded = 3;
+			}
+		`)
+
+		items := DiffParsedProtoFile("legacy.proto", prev, curr)
+		want := []ProtoDiffItem{
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "MESSAGE_REMOVED",
+				Details:  "message DroppedMsg was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "SERVICE_REMOVED",
+				Details:  "service DroppedSvc was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "ENUM_VALUE_REMOVED",
+				Details:  "enum value Code#1 (CODE_PAID) was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "ENUM_VALUE_REMOVED",
+				Details:  "enum value Code#1 (CODE_SETTLED) was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "ENUM_VALUE_REMOVED",
+				Details:  "enum value Code#2 (CODE_REFUNDED) was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "FIELD_REMOVED",
+				Details:  "field Legacy#1 (string old_req) was removed",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "CRITICAL",
+				Change:   "FIELD_CARDINALITY_CHANGED",
+				Details:  "field Legacy#3 (downgraded) cardinality changed from required to singular",
+			},
+			{
+				Filename: "legacy.proto",
+				Severity: "WARNING",
+				Change:   "REQUIRED_FIELD_ADDED",
+				Details:  "new required field added",
+			},
+		}
+		if !reflect.DeepEqual(items, want) {
+			t.Fatalf("DiffParsedProtoFile() = %#v, want %#v", items, want)
+		}
+	})
+}
