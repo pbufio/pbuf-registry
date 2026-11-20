@@ -120,7 +120,7 @@ Targets only the registry server Deployment (`pbuf-registry.selectorLabels`) and
 | `service.http.auth.oidc.jwksUrl` | Optional explicit JWKS endpoint URL | `""` |
 | `service.http.auth.oidc.usernameClaim` | JWT claim mapped to username | `"email"` |
 | `service.http.auth.oidc.groupsClaim` | JWT claim mapped to user groups | `"groups"` |
-| `service.http.auth.oidc.adminGroups` | Comma-separated OIDC groups granted global admin | `""` |
+| `service.http.auth.oidc.adminGroups` | OIDC groups granted global admin (comma-separated string or YAML list) | `""` |
 | `service.http.auth.oidc.autoProvision` | Auto-provision users on first OIDC login | `true` |
 | `service.grpc.port` | gRPC server port | `6777` |
 | `service.grpc.tls.enabled` | Enable TLS on gRPC server | `false` |
@@ -131,7 +131,7 @@ Targets only the registry server Deployment (`pbuf-registry.selectorLabels`) and
 | `service.grpc.auth.oidc.jwksUrl` | Optional explicit JWKS endpoint URL | `""` |
 | `service.grpc.auth.oidc.usernameClaim` | JWT claim mapped to username | `"email"` |
 | `service.grpc.auth.oidc.groupsClaim` | JWT claim mapped to user groups | `"groups"` |
-| `service.grpc.auth.oidc.adminGroups` | Comma-separated OIDC groups granted global admin | `""` |
+| `service.grpc.auth.oidc.adminGroups` | OIDC groups granted global admin (comma-separated string or YAML list) | `""` |
 | `service.grpc.auth.oidc.autoProvision` | Auto-provision users on first OIDC login | `true` |
 | `service.debug.port` | Debug & Prometheus metrics port | `8082` |
 
@@ -210,7 +210,7 @@ Targets only the registry server Deployment (`pbuf-registry.selectorLabels`) and
 |---|---|---|
 | `postgresql.enabled` | Deploy internal PostgreSQL StatefulSet (disable in production) | `true` |
 | `postgresql.image.repository` | PostgreSQL image repository | `postgres` |
-| `postgresql.image.tag` | PostgreSQL image tag | `18.1-alpine3.21` |
+| `postgresql.image.tag` | PostgreSQL image tag | `18.1-alpine3.23` |
 | `postgresql.image.pullPolicy` | PostgreSQL image pull policy | `IfNotPresent` |
 | `postgresql.auth.username` | PostgreSQL username | `pbuf` |
 | `postgresql.auth.password` | PostgreSQL password | `pbuf` |

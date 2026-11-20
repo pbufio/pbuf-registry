@@ -65,7 +65,10 @@ Create the name of the service account to use
 Generate PostgreSQL DSN for internal database
 */}}
 {{- define "pbuf-registry.postgresql.dsn" -}}
-{{- printf "postgres://%s:%s@%s-postgresql:5432/%s?sslmode=disable" .Values.postgresql.auth.username .Values.postgresql.auth.password (include "pbuf-registry.fullname" .) .Values.postgresql.auth.database }}
+{{- $user := urlquery .Values.postgresql.auth.username | replace "+" "%20" -}}
+{{- $pass := urlquery .Values.postgresql.auth.password | replace "+" "%20" -}}
+{{- $db := urlquery .Values.postgresql.auth.database | replace "+" "%20" -}}
+{{- printf "postgres://%s:%s@%s-postgresql:5432/%s?sslmode=disable" $user $pass (include "pbuf-registry.fullname" .) $db }}
 {{- end }}
 
 
@@ -117,7 +120,11 @@ Environment variables helper
 {{- end }}
 {{- if .Values.service.grpc.auth.oidc.adminGroups }}
 - name: SERVER_GRPC_AUTH_OIDC_ADMINGROUPS
-  value: "{{ .Values.service.grpc.auth.oidc.adminGroups }}"
+  {{- if kindIs "slice" .Values.service.grpc.auth.oidc.adminGroups }}
+  value: {{ join "," .Values.service.grpc.auth.oidc.adminGroups | quote }}
+  {{- else }}
+  value: {{ .Values.service.grpc.auth.oidc.adminGroups | toString | quote }}
+  {{- end }}
 {{- end }}
 - name: SERVER_GRPC_AUTH_OIDC_AUTOPROVISION
   value: "{{ .Values.service.grpc.auth.oidc.autoProvision }}"
@@ -149,7 +156,11 @@ Environment variables helper
 {{- end }}
 {{- if .Values.service.http.auth.oidc.adminGroups }}
 - name: SERVER_HTTP_AUTH_OIDC_ADMINGROUPS
-  value: "{{ .Values.service.http.auth.oidc.adminGroups }}"
+  {{- if kindIs "slice" .Values.service.http.auth.oidc.adminGroups }}
+  value: {{ join "," .Values.service.http.auth.oidc.adminGroups | quote }}
+  {{- else }}
+  value: {{ .Values.service.http.auth.oidc.adminGroups | toString | quote }}
+  {{- end }}
 {{- end }}
 - name: SERVER_HTTP_AUTH_OIDC_AUTOPROVISION
   value: "{{ .Values.service.http.auth.oidc.autoProvision }}"
@@ -190,4 +201,21 @@ Volume mounts
   readOnly: true
   subPath: server-key.pem
 {{- end }}
+{{- end }}
+
+{{/*
+Database migrations initContainer shared by server and background workers
+*/}}
+{{- define "pbuf-registry.migrationsInitContainer" -}}
+- name: migrations
+  securityContext:
+    {{- toYaml .Values.securityContext | nindent 4 }}
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command:
+    - /app/pbuf-migrations
+  env:
+    {{- include "pbuf-registry.env" . | nindent 4 }}
+  volumeMounts:
+    {{- include "pbuf-registry.volumeMounts" . | nindent 4 }}
 {{- end }}

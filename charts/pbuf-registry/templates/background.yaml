@@ -51,6 +51,8 @@ spec:
       serviceAccountName: {{ include "pbuf-registry.serviceAccountName" $ }}
       securityContext:
         {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "pbuf-registry.migrationsInitContainer" $ | nindent 8 }}
       containers:
         - name: {{ $.Chart.Name }}
           securityContext:

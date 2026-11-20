@@ -584,6 +584,62 @@ test.describe('pbuf-registry Web UI', () => {
     await expect(page.getByText('ORDER_STATUS_PAID = 1')).toBeVisible()
   })
 
+  test('reloads ModuleDetailView on in-place module route changes and caps parallel drift summary fetches at 10', async ({ page }) => {
+    const driftTagsRequested = []
+    const fourteenTags = Array.from({ length: 14 }, (_, idx) => `v${14 - idx}.0.0`)
+
+    await page.route('**/api/v1/modules/get', async (route) => {
+      const body = route.request().postDataJSON()
+      if (body.name === 'acme/alpha') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'mod-alpha',
+            name: 'acme/alpha',
+            tags: fourteenTags,
+            draftTags: []
+          })
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'mod-beta',
+          name: 'acme/beta',
+          tags: ['v2.0.0'],
+          draftTags: []
+        })
+      })
+    })
+
+    await page.route('**/api/v1/drift/modules/dependencies/status', async (route) => {
+      const body = route.request().postDataJSON()
+      driftTagsRequested.push(`${body.moduleName}@${body.tagName}`)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ statuses: [] })
+      })
+    })
+
+    await page.goto('/modules/acme/alpha')
+    await expect(page.getByRole('heading', { name: 'acme/alpha' })).toBeVisible()
+    await expect(page.getByText('acme/alpha@v1.0.0')).toBeVisible()
+    expect(driftTagsRequested.filter((item) => item.startsWith('acme/alpha@'))).toHaveLength(10)
+
+    // In-place Vue Router navigation between /modules/:name+ routes reuses ModuleDetailView
+    await page.evaluate(() => {
+      document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/modules/acme/beta')
+    })
+    await expect(page).toHaveURL(/\/modules\/acme\/beta$/)
+    await expect(page.getByRole('heading', { name: 'acme/beta' })).toBeVisible()
+    await expect(page.getByText('acme/beta@v2.0.0')).toBeVisible()
+    expect(driftTagsRequested).toContain('acme/beta@v2.0.0')
+  })
+
   test('live Docker Compose stack serves CLI-pushed modules and enforces Nginx proxy restrictions', async ({ page, request }) => {
     test.skip(process.env.PLAYWRIGHT_LIVE_BACKEND !== '1', 'Requires live Docker Compose stack')
 
@@ -605,5 +661,9 @@ test.describe('pbuf-registry Web UI', () => {
 
     const usersResp = await request.get('/api/v1/users')
     expect(usersResp.status()).toBe(401)
+
+    // Verify location ^~ /api/ proxies .js-ending API paths instead of matching static asset regex
+    const jsApiResp = await request.get('/api/v1/users/bot.js')
+    expect(jsApiResp.status()).toBe(401)
   })
 })

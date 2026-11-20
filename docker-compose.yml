@@ -112,8 +112,8 @@ services:
       - "80:80"
     environment:
       API_BASE_URL: http://pbuf-registry:8080
-      API_TOKEN: ${SERVER_STATIC_TOKEN}
-      PUBLIC_ENABLED: "true"
+      API_TOKEN: "${UI_API_TOKEN:-}"
+      PUBLIC_ENABLED: "${UI_PUBLIC_ENABLED:-false}"
 
 networks:
   internal:
