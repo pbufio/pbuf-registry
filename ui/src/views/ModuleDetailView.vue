@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PCard from '@/components/PCard.vue'
 import PBadge from '@/components/PBadge.vue'
@@ -17,19 +17,20 @@ const error = ref(null)
 const tagDriftSummaryByTag = ref({})
 const tagDriftError = ref(null)
 
+const MAX_TAG_DRIFT_SUMMARIES = 10
+let activeLoadId = 0
+
 const moduleName = computed(() => {
   const name = route.params.name
   return Array.isArray(name) ? name.join('/') : name
 })
 
-const loadTagDriftSummary = async (tags = []) => {
-  tagDriftSummaryByTag.value = {}
-  tagDriftError.value = null
+const loadTagDriftSummary = async (targetModule, tags = [], loadId = activeLoadId) => {
   if (!tags.length) return
 
   const results = await Promise.allSettled(
     tags.map(async (tag) => {
-      const response = await driftApi.getModuleDependencyDriftStatus(moduleName.value, tag)
+      const response = await driftApi.getModuleDependencyDriftStatus(targetModule, tag)
       const statuses = response?.statuses || []
       let hasAlerts = false
       let hasRecommendations = false
@@ -57,6 +58,8 @@ const loadTagDriftSummary = async (tags = []) => {
       return { hasAlerts, hasRecommendations, unknown: false }
     })
   )
+
+  if (loadId !== activeLoadId) return
 
   const summary = {}
   let hasFailures = false
@@ -113,17 +116,26 @@ const tagRecommendationsBadgeLabel = (tag) => {
 }
 
 const loadModule = async () => {
+  const loadId = ++activeLoadId
+  const targetModule = moduleName.value
   loading.value = true
   error.value = null
+  module.value = null
+  tagDriftSummaryByTag.value = {}
+  tagDriftError.value = null
   try {
-    const response = await registryApi.getModule(moduleName.value, true)
+    const response = await registryApi.getModule(targetModule, true)
+    if (loadId !== activeLoadId) return
     module.value = response
-    await loadTagDriftSummary(response.tags || [])
+    await loadTagDriftSummary(targetModule, (response.tags || []).slice(0, MAX_TAG_DRIFT_SUMMARIES), loadId)
   } catch (err) {
+    if (loadId !== activeLoadId) return
     console.error('Failed to load module:', err)
     error.value = err.response?.data?.message || err.message || 'Failed to load module'
   } finally {
-    loading.value = false
+    if (loadId === activeLoadId) {
+      loading.value = false
+    }
   }
 }
 
@@ -139,8 +151,18 @@ const vendorConfig = (tag, genOut = '') => {
   return buildVendorSnippet({ moduleName: moduleName.value, tag, genOut })
 }
 
+watch(moduleName, (nextName, prevName) => {
+  if (route.name === 'module-detail' && nextName && nextName !== prevName) {
+    loadModule()
+  }
+})
+
 onMounted(() => {
   loadModule()
+})
+
+onBeforeUnmount(() => {
+  activeLoadId++
 })
 </script>
 

@@ -807,7 +807,7 @@ The Web UI is included in `docker-compose.yml` and the Helm chart (`ui.enabled=t
 docker run -d \
   -p 8080:80 \
   -e API_BASE_URL=http://your-registry:8080 \
-  -e API_TOKEN=${SERVER_STATIC_TOKEN} \
+  -e API_TOKEN=${UI_API_TOKEN} \
   -e PUBLIC_ENABLED=true \
   --name pbuf-ui \
   ghcr.io/pbufio/pbuf-registry-ui:latest

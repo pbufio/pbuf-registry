@@ -2,7 +2,9 @@ package charts
 
 import (
 	"bytes"
+	"encoding/base64"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,4 +134,140 @@ func TestPodDisruptionBudget(t *testing.T) {
 			assert.Equal(t, 1, selected, "PDB must select only the registry server")
 		})
 	}
+}
+
+func TestHelmChartPostgreSQLWorkersAndOIDC(t *testing.T) {
+	helm, err := exec.LookPath("helm")
+	if err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatal("Helm is required in CI for chart rendering tests")
+		}
+		t.Skip("Helm is required for chart rendering tests")
+	}
+
+	rawValues := `postgresql:
+  auth:
+    username: "pbuf:admin@org"
+    password: "s3cr3t@p@ss:w/rd?a+b c#1%2"
+    database: "pbuf_db"
+service:
+  grpc:
+    auth:
+      enabled: true
+      type: oidc
+      oidc:
+        issuerUrl: "https://idp.example.com"
+        clientId: "pbuf-grpc"
+        adminGroups:
+          - platform-admins
+          - sre
+  http:
+    auth:
+      enabled: true
+      type: oidc
+      oidc:
+        issuerUrl: "https://idp.example.com"
+        clientId: "pbuf-http"
+        adminGroups: "ops,sec"
+`
+	valuesFile := filepath.Join(t.TempDir(), "values.yaml")
+	require.NoError(t, os.WriteFile(valuesFile, []byte(rawValues), 0o600))
+
+	output, err := exec.Command(helm, "template", "chart-test", "./pbuf-registry", "--values", valuesFile).CombinedOutput()
+	require.NoError(t, err, "%s", output)
+
+	type envVar struct {
+		Name  string `yaml:"name"`
+		Value string `yaml:"value"`
+	}
+	type containerSpec struct {
+		Name            string   `yaml:"name"`
+		Image           string   `yaml:"image"`
+		Command         []string `yaml:"command"`
+		Env             []envVar `yaml:"env"`
+		SecurityContext struct {
+			RunAsUser    int  `yaml:"runAsUser"`
+			RunAsNonRoot bool `yaml:"runAsNonRoot"`
+		} `yaml:"securityContext"`
+		LivenessProbe struct {
+			Exec struct {
+				Command []string `yaml:"command"`
+			} `yaml:"exec"`
+		} `yaml:"livenessProbe"`
+	}
+	type doc struct {
+		Kind     string        `yaml:"kind"`
+		Metadata chartMetadata `yaml:"metadata"`
+		Data     map[string]string
+		Spec     struct {
+			Template struct {
+				Spec struct {
+					SecurityContext struct {
+						FSGroup int `yaml:"fsGroup"`
+					} `yaml:"securityContext"`
+					InitContainers []containerSpec `yaml:"initContainers"`
+					Containers     []containerSpec `yaml:"containers"`
+				} `yaml:"spec"`
+			} `yaml:"template"`
+		} `yaml:"spec"`
+	}
+
+	decoder := yaml.NewDecoder(bytes.NewReader(output))
+	var (
+		foundPostgres bool
+		foundSecret   bool
+		workerInits   = map[string]bool{}
+		serverEnv     = map[string]string{}
+	)
+	for {
+		var d doc
+		decodeErr := decoder.Decode(&d)
+		if decodeErr == io.EOF {
+			break
+		}
+		require.NoError(t, decodeErr)
+
+		switch {
+		case d.Kind == "StatefulSet" && d.Metadata.Name == "chart-test-pbuf-registry-postgresql":
+			foundPostgres = true
+			assert.Equal(t, 70, d.Spec.Template.Spec.SecurityContext.FSGroup)
+			require.Len(t, d.Spec.Template.Spec.Containers, 1)
+			pg := d.Spec.Template.Spec.Containers[0]
+			assert.Equal(t, "postgres:18.1-alpine3.23", pg.Image)
+			assert.Equal(t, 70, pg.SecurityContext.RunAsUser)
+			assert.True(t, pg.SecurityContext.RunAsNonRoot)
+			assert.Equal(t, []string{"pg_isready", "-U", "pbuf:admin@org", "-d", "pbuf_db"}, pg.LivenessProbe.Exec.Command)
+
+		case d.Kind == "Secret" && d.Metadata.Name == "chart-test-pbuf-registry":
+			foundSecret = true
+			dsnBytes, b64Err := base64.StdEncoding.DecodeString(d.Data["DATA_DATABASE_DSN"])
+			require.NoError(t, b64Err)
+			parsedDSN, urlErr := url.Parse(string(dsnBytes))
+			require.NoError(t, urlErr)
+			assert.Equal(t, "pbuf:admin@org", parsedDSN.User.Username())
+			pw, hasPW := parsedDSN.User.Password()
+			require.True(t, hasPW)
+			assert.Equal(t, "s3cr3t@p@ss:w/rd?a+b c#1%2", pw)
+			assert.Equal(t, "/pbuf_db", parsedDSN.Path)
+
+		case d.Kind == "Deployment" && (d.Metadata.Name == "chart-test-pbuf-registry-compaction" || d.Metadata.Name == "chart-test-pbuf-registry-protoparser"):
+			require.Len(t, d.Spec.Template.Spec.InitContainers, 1)
+			assert.Equal(t, "migrations", d.Spec.Template.Spec.InitContainers[0].Name)
+			assert.Equal(t, []string{"/app/pbuf-migrations"}, d.Spec.Template.Spec.InitContainers[0].Command)
+			workerInits[d.Metadata.Name] = true
+
+		case d.Kind == "Deployment" && d.Metadata.Name == "chart-test-pbuf-registry":
+			require.Len(t, d.Spec.Template.Spec.Containers, 1)
+			for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+				serverEnv[e.Name] = e.Value
+			}
+		}
+	}
+
+	assert.True(t, foundPostgres, "expected postgresql StatefulSet")
+	assert.True(t, foundSecret, "expected registry Secret")
+	assert.True(t, workerInits["chart-test-pbuf-registry-compaction"], "compaction must run migrations initContainer")
+	assert.True(t, workerInits["chart-test-pbuf-registry-protoparser"], "protoparser must run migrations initContainer")
+	assert.Equal(t, "platform-admins,sre", serverEnv["SERVER_GRPC_AUTH_OIDC_ADMINGROUPS"])
+	assert.Equal(t, "ops,sec", serverEnv["SERVER_HTTP_AUTH_OIDC_ADMINGROUPS"])
 }
