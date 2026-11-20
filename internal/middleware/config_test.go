@@ -69,6 +69,14 @@ func Test_CreateAuthMiddleware(t *testing.T) {
 		assert.True(t, ok)
 	})
 
+	t.Run("token -> alias for ACL auth", func(t *testing.T) {
+		t.Setenv("SERVER_STATIC_TOKEN", "secret")
+		mw, err := CreateAuthMiddleware(&config.Auth{Enabled: true, Type: "token"}, &noopUserRepo{}, log.DefaultLogger)
+		require.NoError(t, err)
+		_, ok := mw.(*aclAuth)
+		assert.True(t, ok)
+	})
+
 	t.Run("oidc -> requires issuerUrl", func(t *testing.T) {
 		_, err := CreateAuthMiddleware(&config.Auth{Enabled: true, Type: "oidc"}, &noopUserRepo{}, log.DefaultLogger)
 		require.Error(t, err)

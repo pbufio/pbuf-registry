@@ -2,18 +2,36 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pbufio/pbuf-registry/internal/model"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+var (
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserAlreadyExists = errors.New("user already exists")
+)
+
+const (
+	tokenCacheTTL        = 5 * time.Second
+	maxTokenCacheEntries = 1024
+)
+
+type cachedTokenUser struct {
+	user      model.User
+	expiresAt time.Time
+}
 
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *model.User) error
@@ -28,12 +46,34 @@ type UserRepository interface {
 type userRepo struct {
 	pool   *pgxpool.Pool
 	logger *log.Helper
+
+	// shortcut: per-process 5s SHA-256 token cache to amortize bcrypt CPU under bursts, move to shared cache if instant cross-replica revocation is needed
+	cacheMu    sync.RWMutex
+	cacheGen   uint64
+	tokenCache map[[32]byte]cachedTokenUser
 }
 
 func NewUserRepository(pool *pgxpool.Pool, logger log.Logger) UserRepository {
 	return &userRepo{
-		pool:   pool,
-		logger: log.NewHelper(log.With(logger, "module", "data/UserRepository")),
+		pool:       pool,
+		logger:     log.NewHelper(log.With(logger, "module", "data/UserRepository")),
+		tokenCache: make(map[[32]byte]cachedTokenUser),
+	}
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func (r *userRepo) evictUserCache(userID uuid.UUID) {
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+	r.cacheGen++
+	for k, entry := range r.tokenCache {
+		if entry.user.ID == userID {
+			delete(r.tokenCache, k)
+		}
 	}
 }
 
@@ -45,6 +85,9 @@ func (r *userRepo) CreateUser(ctx context.Context, user *model.User) error {
 		user.Name, user.Token, user.Type, user.IsActive,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrUserAlreadyExists
+		}
 		return fmt.Errorf("could not insert user into database: %w", err)
 	}
 	return nil
@@ -83,21 +126,66 @@ func (r *userRepo) GetUserByName(ctx context.Context, name string) (*model.User,
 }
 
 func (r *userRepo) GetUserByToken(ctx context.Context, token string) (*model.User, error) {
-	var user model.User
+	tokenSum := sha256.Sum256([]byte(token))
+	now := time.Now()
+
+	r.cacheMu.RLock()
+	gen := r.cacheGen
+	if cached, ok := r.tokenCache[tokenSum]; ok && now.Before(cached.expiresAt) {
+		u := cached.user
+		r.cacheMu.RUnlock()
+		return &u, nil
+	}
+	r.cacheMu.RUnlock()
+
+	lookupHex := hex.EncodeToString(tokenSum[:])
+	var (
+		user        model.User
+		tokenLookup *string
+	)
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, name, token, type, is_active, created_at, updated_at
+		`SELECT id, name, token, token_lookup, type, is_active, created_at, updated_at
 		FROM users
-		WHERE (token_lookup = encode(digest($1, 'sha256'), 'hex') OR token_lookup IS NULL)
+		WHERE (token_lookup = $2 OR token_lookup IS NULL)
 		  AND (token = crypt($1, token)) = true
 		  AND is_active = true`,
-		token,
-	).Scan(&user.ID, &user.Name, &user.Token, &user.Type, &user.IsActive, &user.CreatedAt, &user.UpdatedAt)
+		token, lookupHex,
+	).Scan(&user.ID, &user.Name, &user.Token, &tokenLookup, &user.Type, &user.IsActive, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("could not select user from database: %w", err)
 	}
+
+	if tokenLookup == nil {
+		if _, backfillErr := r.pool.Exec(ctx,
+			`UPDATE users SET token_lookup = $1 WHERE id = $2 AND token_lookup IS NULL`,
+			lookupHex, user.ID,
+		); backfillErr != nil {
+			r.logger.Warnf("failed to backfill token_lookup for user %s: %v", user.ID, backfillErr)
+		}
+	}
+
+	r.cacheMu.Lock()
+	if r.cacheGen == gen {
+		if len(r.tokenCache) >= maxTokenCacheEntries {
+			for k, entry := range r.tokenCache {
+				if !now.Before(entry.expiresAt) {
+					delete(r.tokenCache, k)
+				}
+			}
+			if len(r.tokenCache) >= maxTokenCacheEntries {
+				clear(r.tokenCache)
+			}
+		}
+		r.tokenCache[tokenSum] = cachedTokenUser{
+			user:      user,
+			expiresAt: now.Add(tokenCacheTTL),
+		}
+	}
+	r.cacheMu.Unlock()
+
 	return &user, nil
 }
 
@@ -152,11 +240,15 @@ func (r *userRepo) UpdateUser(ctx context.Context, user *model.User) error {
 	}
 	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrUserAlreadyExists
+		}
 		return fmt.Errorf("could not update user in database: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return ErrUserNotFound
 	}
+	r.evictUserCache(user.ID)
 	return nil
 }
 
@@ -171,5 +263,6 @@ func (r *userRepo) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	if result.RowsAffected() == 0 {
 		return ErrUserNotFound
 	}
+	r.evictUserCache(id)
 	return nil
 }

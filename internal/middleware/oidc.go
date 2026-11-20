@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -300,6 +301,9 @@ func (v *OIDCVerifier) discoverJWKSURL(ctx context.Context) (string, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxOIDCResponseBytes)).Decode(&doc); err != nil {
 		return "", fmt.Errorf("failed to decode OIDC discovery document: %w", err)
 	}
+	if normalizeIssuer(doc.Issuer) != normalizeIssuer(v.cfg.IssuerURL) {
+		return "", errors.New("oidc discovery issuer mismatch")
+	}
 	if doc.JWKSURI == "" {
 		return "", errors.New("oidc discovery document missing jwks_uri")
 	}
@@ -335,12 +339,20 @@ func parseJWK(k jwkKey) (crypto.PublicKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		eInt := new(big.Int).SetBytes(eBytes).Int64()
-		if eInt <= 0 {
+		nBig := new(big.Int).SetBytes(nBytes)
+		if nBig.Sign() <= 0 || nBig.BitLen() < 2048 || nBig.Bit(0) == 0 {
+			return nil, errors.New("invalid RSA modulus")
+		}
+		eBig := new(big.Int).SetBytes(eBytes)
+		if !eBig.IsInt64() {
+			return nil, errors.New("invalid RSA exponent")
+		}
+		eInt := eBig.Int64()
+		if eInt < 3 || eInt > math.MaxInt32 || eInt%2 == 0 {
 			return nil, errors.New("invalid RSA exponent")
 		}
 		return &rsa.PublicKey{
-			N: new(big.Int).SetBytes(nBytes),
+			N: nBig,
 			E: int(eInt),
 		}, nil
 	case "EC":

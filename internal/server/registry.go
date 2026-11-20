@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
@@ -32,11 +33,10 @@ func NewRegistryServer(registryRepository data.RegistryRepository, metadataRepos
 }
 
 func (r *RegistryServer) RegisterModule(ctx context.Context, request *v1.RegisterModuleRequest) (*v1.Module, error) {
-	name := request.Name
-
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.Name
 
 	err := r.registryRepository.RegisterModule(ctx, name)
 	if err != nil {
@@ -87,6 +87,9 @@ func (r *RegistryServer) GetModule(ctx context.Context, request *v1.GetModuleReq
 }
 
 func (r *RegistryServer) ListModules(ctx context.Context, request *v1.ListModulesRequest) (*v1.ListModulesResponse, error) {
+	if request == nil {
+		request = &v1.ListModulesRequest{}
+	}
 	pageSize := int(request.PageSize)
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -111,11 +114,10 @@ func (r *RegistryServer) ListModules(ctx context.Context, request *v1.ListModule
 }
 
 func (r *RegistryServer) DeleteModule(ctx context.Context, request *v1.DeleteModuleRequest) (*v1.DeleteModuleResponse, error) {
-	name := request.Name
-
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.Name
 
 	err := r.registryRepository.DeleteModule(ctx, name)
 	if err != nil {
@@ -132,14 +134,20 @@ func (r *RegistryServer) DeleteModule(ctx context.Context, request *v1.DeleteMod
 }
 
 func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleRequest) (*v1.Module, error) {
-	name := request.ModuleName
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.ModuleName == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.ModuleName
 
 	tag := request.Tag
 	if tag == "" {
-		return nil, errors.New("tag cannot be empty")
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag cannot be empty")
+	}
+
+	for _, dep := range request.Dependencies {
+		if dep == nil || dep.Name == "" || dep.Tag == "" || strings.TrimSpace(dep.Name) != dep.Name || strings.TrimSpace(dep.Tag) != dep.Tag {
+			return nil, kerrors.BadRequest("INVALID_ARGUMENT", "dependency name and tag must be non-empty and trimmed")
+		}
 	}
 
 	err := utils.ValidateProtoFiles(request.Protofiles)
@@ -165,6 +173,9 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 		if errors.Is(err, data.ErrModuleNotFound) {
 			return nil, kerrors.NotFound("MODULE_NOT_FOUND", fmt.Sprintf("module %s not found", name))
 		}
+		if errors.Is(err, data.ErrDependencyTagNotFound) {
+			return nil, kerrors.NotFound("DEPENDENCY_NOT_FOUND", err.Error())
+		}
 		if errors.Is(err, data.ErrTagAlreadyExists) {
 			return nil, kerrors.Conflict("TAG_ALREADY_EXISTS", fmt.Sprintf("tag %s already exists for module %s", tag, name))
 		}
@@ -176,14 +187,14 @@ func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleR
 }
 
 func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleRequest) (*v1.PullModuleResponse, error) {
-	name := request.Name
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.Name
 
 	tag := request.Tag
 	if tag == "" {
-		return nil, errors.New("tag cannot be empty")
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag cannot be empty")
 	}
 
 	tagNotFound := false
@@ -221,14 +232,14 @@ func (r *RegistryServer) PullModule(ctx context.Context, request *v1.PullModuleR
 }
 
 func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.DeleteModuleTagRequest) (*v1.DeleteModuleTagResponse, error) {
-	name := request.Name
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.Name
 
 	tag := request.Tag
 	if tag == "" {
-		return nil, errors.New("tag cannot be empty")
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag cannot be empty")
 	}
 
 	err := r.registryRepository.DeleteModuleTag(ctx, name, tag)
@@ -247,10 +258,10 @@ func (r *RegistryServer) DeleteModuleTag(ctx context.Context, request *v1.Delete
 }
 
 func (r *RegistryServer) GetModuleDependencies(ctx context.Context, request *v1.GetModuleDependenciesRequest) (*v1.GetModuleDependenciesResponse, error) {
-	name := request.Name
-	if name == "" {
-		return nil, errors.New("name cannot be empty")
+	if request == nil || request.Name == "" {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
 	}
+	name := request.Name
 
 	var dependencies []*v1.Dependency
 	var err error

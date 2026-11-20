@@ -410,4 +410,31 @@ func TestOIDCVerifier_BoundsAndSchemeDowngradeProtection(t *testing.T) {
 	downgradeVerifier.httpClient.Transport = handlerRoundTripper{handler: downgradeMux}
 	_, err = downgradeVerifier.VerifyToken(context.Background(), rawJWT)
 	require.ErrorContains(t, err, "refusing OIDC redirect from https to non-https")
+
+	// Discovery document issuer mismatch must be rejected
+	mismatchMux := http.NewServeMux()
+	mismatchMux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(oidcDiscoveryDoc{
+			Issuer:  "https://other-idp.example.com",
+			JWKSURI: "https://idp.example.com/jwks.json",
+		})
+	})
+	mismatchVerifier, err := NewOIDCVerifier(config.OIDCConfig{
+		IssuerURL: "https://idp.example.com",
+		ClientID:  "pbuf",
+	})
+	require.NoError(t, err)
+	mismatchVerifier.httpClient.Transport = handlerRoundTripper{handler: mismatchMux}
+	_, err = mismatchVerifier.VerifyToken(context.Background(), rawJWT)
+	require.ErrorContains(t, err, "oidc discovery issuer mismatch")
+
+	// RSA JWK validation: small/even modulus and out-of-range/even exponents must be rejected
+	validN := base64.RawURLEncoding.EncodeToString(privKey.N.Bytes())
+	validE := base64.RawURLEncoding.EncodeToString(big.NewInt(65537).Bytes())
+	_, err = parseJWK(jwkKey{Kty: "RSA", N: base64.RawURLEncoding.EncodeToString([]byte{0x03}), E: validE})
+	require.ErrorContains(t, err, "invalid RSA modulus")
+	_, err = parseJWK(jwkKey{Kty: "RSA", N: validN, E: base64.RawURLEncoding.EncodeToString([]byte{0x02})})
+	require.ErrorContains(t, err, "invalid RSA exponent")
+	_, err = parseJWK(jwkKey{Kty: "RSA", N: validN, E: base64.RawURLEncoding.EncodeToString(new(big.Int).Lsh(big.NewInt(1), 65).Bytes())})
+	require.ErrorContains(t, err, "invalid RSA exponent")
 }

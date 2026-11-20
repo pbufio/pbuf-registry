@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,11 +11,18 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
+	"github.com/pbufio/pbuf-registry/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestServersDoNotExposeDefaultServeMux(t *testing.T) {
@@ -91,5 +99,67 @@ func TestServersDoNotExposeDefaultServeMux(t *testing.T) {
 		starReq.Header.Set("Authorization", "bearer super-secret-admin-token")
 		authedHTTP.ServeHTTP(starRec, starReq)
 		assert.Equal(t, http.StatusOK, starRec.Code)
+	})
+
+	t.Run("http and grpc servers recover handler panics and enforce RBAC when auth.type is token", func(t *testing.T) {
+		panicRepo := mocks.NewRegistryRepository(t)
+		panicRepo.On("GetModuleWithDrafts", mock.Anything, "boom/mod", false).Run(func(mock.Arguments) {
+			panic("simulated handler panic")
+		}).Return(nil, nil).Times(2)
+
+		regSrv := NewRegistryServer(panicRepo, nil, logger)
+		panicSrv := NewHTTPServer(cfg, regSrv, &MetadataServer{}, &UsersServer{}, &DriftServer{}, nil, nil, logger)
+		panicRec := httptest.NewRecorder()
+		panicReq := httptest.NewRequest(http.MethodPost, "/v1/modules/get", bytes.NewBufferString(`{"name":"boom/mod"}`))
+		panicReq.Header.Set("Content-Type", "application/json")
+		panicReq.Header.Set("Authorization", "Bearer super-secret-admin-token")
+		panicSrv.ServeHTTP(panicRec, panicReq)
+		assert.Equal(t, http.StatusInternalServerError, panicRec.Code)
+
+		userID := uuid.New()
+		userRepo := mocks.NewUserRepository(t)
+		userRepo.On("GetUserByToken", mock.Anything, "pbuf_user_limited").
+			Return(&model.User{ID: userID, Name: "limited", Type: model.UserTypeUser, IsActive: true}, nil).Times(2)
+		aclRepo := mocks.NewACLRepository(t)
+		aclRepo.On("CheckPermission", mock.Anything, userID, "forbidden/mod", model.PermissionRead).
+			Return(false, nil).Times(2)
+
+		tokenCfg := *cfg
+		tokenCfg.HTTP.Auth.Type = "token"
+		tokenCfg.GRPC.Addr = "127.0.0.1:0"
+		tokenCfg.GRPC.Timeout = time.Second
+		tokenCfg.GRPC.Auth.Enabled = true
+		tokenCfg.GRPC.Auth.Type = "token"
+
+		tokenHTTP := NewHTTPServer(&tokenCfg, regSrv, &MetadataServer{}, &UsersServer{}, &DriftServer{}, userRepo, aclRepo, logger)
+		forbidRec := httptest.NewRecorder()
+		forbidReq := httptest.NewRequest(http.MethodPost, "/v1/modules/get", bytes.NewBufferString(`{"name":"forbidden/mod"}`))
+		forbidReq.Header.Set("Content-Type", "application/json")
+		forbidReq.Header.Set("Authorization", "Bearer pbuf_user_limited")
+		tokenHTTP.ServeHTTP(forbidRec, forbidReq)
+		assert.Equal(t, http.StatusForbidden, forbidRec.Code)
+
+		tokenGRPC := NewGRPCServer(&tokenCfg, regSrv, &MetadataServer{}, &UsersServer{}, &DriftServer{}, userRepo, aclRepo, logger)
+		ep, err := tokenGRPC.Endpoint()
+		require.NoError(t, err)
+		go func() {
+			_ = tokenGRPC.Start(context.Background())
+		}()
+		t.Cleanup(func() {
+			_ = tokenGRPC.Stop(context.Background())
+		})
+
+		conn, err := grpc.NewClient(ep.Host, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		grpcClient := v1.NewRegistryClient(conn)
+
+		userCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer pbuf_user_limited"))
+		_, err = grpcClient.GetModule(userCtx, &v1.GetModuleRequest{Name: "forbidden/mod"})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+		adminCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer super-secret-admin-token"))
+		_, err = grpcClient.GetModule(adminCtx, &v1.GetModuleRequest{Name: "boom/mod"})
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }

@@ -624,3 +624,95 @@ func TestDriftRepository_GetDriftEventsForModule(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, noEvents)
 }
+
+func TestDependencyACLFilteringAndModuleTagLimits(t *testing.T) {
+	bg := context.Background()
+	suffix := time.Now().Format("150405.000")
+	pubDep := "acl-pub-dep-" + suffix
+	secretDep := "acl-secret-dep-" + suffix
+	appMod := "acl-app-mod-" + suffix
+
+	for _, mod := range []string{pubDep, secretDep, appMod} {
+		require.NoError(t, suite.registryRepository.RegisterModule(bg, mod))
+	}
+
+	protoFiles := []*v1.ProtoFile{{Filename: "a.proto", Content: `syntax = "proto3"; message A { string id = 1; }`}}
+	_, err := suite.registryRepository.PushModule(bg, pubDep, "v1.0.0", protoFiles)
+	require.NoError(t, err)
+	_, err = suite.registryRepository.PushModule(bg, secretDep, "v1.0.0", protoFiles)
+	require.NoError(t, err)
+
+	// Missing dependency tag returns ErrDependencyTagNotFound
+	_, err = suite.registryRepository.PushModule(bg, appMod, "v0.1.0", protoFiles, &v1.Dependency{
+		Name: pubDep,
+		Tag:  "v9.9.9",
+	})
+	assert.ErrorIs(t, err, ErrDependencyTagNotFound)
+
+	// Push appMod depending on both pubDep and secretDep
+	_, err = suite.registryRepository.PushModule(bg, appMod, "v1.0.0", protoFiles,
+		&v1.Dependency{Name: pubDep, Tag: "v1.0.0"},
+		&v1.Dependency{Name: secretDep, Tag: "v1.0.0"},
+	)
+	require.NoError(t, err)
+
+	time.Sleep(20 * time.Millisecond)
+	for _, depMod := range []string{pubDep, secretDep} {
+		_, err = suite.registryRepository.PushModule(bg, depMod, "v2.0.0", protoFiles)
+		require.NoError(t, err)
+		depTagID, err := suite.registryRepository.GetModuleTagId(bg, depMod, "v2.0.0")
+		require.NoError(t, err)
+		depModID, _, err := suite.driftRepository.GetTagInfo(bg, depTagID)
+		require.NoError(t, err)
+		_, err = suite.driftRepository.SaveDriftEvents(bg, []model.DriftEvent{{
+			ModuleID:    depModID,
+			TagID:       depTagID,
+			Filename:    "a.proto",
+			EventType:   model.DriftEventTypeModified,
+			CurrentHash: "h2",
+			Severity:    model.DriftSeverityCritical,
+			DetectedAt:  time.Now(),
+		}})
+		require.NoError(t, err)
+	}
+
+	// Scoped user with read on appMod + pubDep ONLY must not see secretDep in dependencies or drift statuses
+	scopedUser := &model.User{
+		Name:     "dep-scoped-user-" + suffix,
+		Token:    "pbuf_user_dep-scoped-" + suffix,
+		Type:     model.UserTypeUser,
+		IsActive: true,
+	}
+	require.NoError(t, suite.userRepository.CreateUser(bg, scopedUser))
+	require.NoError(t, suite.aclRepository.GrantPermission(bg, &model.ACLEntry{
+		UserID: scopedUser.ID, ModuleName: appMod, Permission: model.PermissionRead,
+	}))
+	require.NoError(t, suite.aclRepository.GrantPermission(bg, &model.ACLEntry{
+		UserID: scopedUser.ID, ModuleName: pubDep, Permission: model.PermissionRead,
+	}))
+
+	userCtx := model.ContextWithAdmin(model.ContextWithUser(bg, scopedUser), false)
+	deps, err := suite.registryRepository.GetModuleDependencies(userCtx, appMod, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, deps, 1)
+	assert.Equal(t, pubDep, deps[0].Name)
+
+	transDeps, err := suite.registryRepository.GetTransitiveDependencies(userCtx, appMod, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, transDeps, 1)
+	assert.Equal(t, pubDep, transDeps[0].Name)
+
+	driftStatuses, err := suite.driftRepository.GetModuleDependencyDriftStatuses(userCtx, appMod, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, driftStatuses, 1)
+	assert.Equal(t, pubDep, driftStatuses[0].DependencyName)
+
+	// Verify GetModuleWithDrafts returns >10 tags (up to 500)
+	for i := 2; i <= 15; i++ {
+		_, err = suite.registryRepository.PushModule(bg, pubDep, time.Now().Format("150405")+"-t"+string(rune('a'+i)), protoFiles)
+		require.NoError(t, err)
+	}
+	fullMod, err := suite.registryRepository.GetModuleWithDrafts(bg, pubDep, false)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(fullMod.Tags), 16)
+}

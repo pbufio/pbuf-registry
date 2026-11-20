@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/mocks"
 	"github.com/stretchr/testify/assert"
@@ -71,5 +72,6 @@ func TestGetModuleDependencies_EmptyName(t *testing.T) {
 	})
 
 	assert.Error(t, err)
-	assert.Equal(t, "name cannot be empty", err.Error())
+	assert.True(t, kerrors.IsBadRequest(err))
+	assert.Contains(t, err.Error(), "name cannot be empty")
 }

@@ -73,6 +73,10 @@ func (s *registryTestServer) DeleteModule(_ context.Context, request *v1.DeleteM
 	return &v1.DeleteModuleResponse{Name: request.GetName()}, nil
 }
 
+func (s *registryTestServer) PushModule(_ context.Context, request *v1.PushModuleRequest) (*v1.Module, error) {
+	return &v1.Module{Name: request.GetModuleName(), Tags: []string{request.GetTag()}}, nil
+}
+
 func startAuthzGRPCServer(t *testing.T, adminToken string) (v1.RegistryClient, v1.MetadataServiceClient, v1.DriftServiceClient, func()) {
 	t.Helper()
 
@@ -441,6 +445,31 @@ func Test_authorization_GRPC_RealRequests_PermissionsPerRequest(t *testing.T) {
 
 		_, err = driftClient.AcknowledgeDriftEvent(ctx, &v1.AcknowledgeDriftEventRequest{EventId: savedB[0].ID})
 		requirePermissionDenied(t, err)
+
+		// PushModule requires PermissionRead on every cross-module dependency
+		_, err = registryClient.PushModule(ctx, &v1.PushModuleRequest{
+			ModuleName: modA,
+			Tag:        "v1.1.0",
+			Dependencies: []*v1.Dependency{
+				{Name: modB, Tag: "v1.0.0"},
+			},
+		})
+		requirePermissionDenied(t, err)
+
+		require.NoError(t, integrationSuite.aclRepository.GrantPermission(bg, &model.ACLEntry{
+			UserID:     user.ID,
+			ModuleName: modB,
+			Permission: model.PermissionRead,
+		}))
+		pushed, err := registryClient.PushModule(ctx, &v1.PushModuleRequest{
+			ModuleName: modA,
+			Tag:        "v1.1.0",
+			Dependencies: []*v1.Dependency{
+				{Name: modB, Tag: "v1.0.0"},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, modA, pushed.GetName())
 	})
 }
 
@@ -459,6 +488,19 @@ func TestAuthorizationMiddleware_Unit_ListModulesAndAcknowledgeScope(t *testing.
 	perm, mod := getRequiredPermission("/pbufregistry.v1.Registry/ListModules", &v1.ListModulesRequest{})
 	assert.Empty(t, perm)
 	assert.Empty(t, mod)
+
+	perm, mod = getRequiredPermission("/pbufregistry.v1.MCP/Handle", nil)
+	assert.Empty(t, perm)
+	assert.Empty(t, mod)
+
+	perm, mod = getRequiredPermission("/grpc.health.v1.Health/Check", nil)
+	assert.Empty(t, perm)
+	assert.Empty(t, mod)
+
+	// Unlisted operations must default-deny to global admin
+	perm, mod = getRequiredPermission("/pbufregistry.v1.UnknownService/SecretMethod", nil)
+	assert.Equal(t, model.PermissionAdmin, perm)
+	assert.Equal(t, "*", mod)
 
 	eventAllowed := uuid.New().String()
 	eventDenied := uuid.New().String()

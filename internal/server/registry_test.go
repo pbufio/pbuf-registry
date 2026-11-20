@@ -214,6 +214,46 @@ func TestRegistryServer_ErrorCodesAndDraftFallback(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, kerrors.IsNotFound(err))
 
+	// Empty arguments return 400 BadRequest instead of 500
+	_, err = srv.RegisterModule(ctx, &v1.RegisterModuleRequest{})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.DeleteModule(ctx, &v1.DeleteModuleRequest{})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{ModuleName: "org/svc"})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{
+		ModuleName:   "org/svc",
+		Tag:          "v1.0.0",
+		Protofiles:   []*v1.ProtoFile{{Filename: "a.proto", Content: `syntax = "proto3";`}},
+		Dependencies: []*v1.Dependency{{Name: "dep/mod", Tag: ""}},
+	})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{
+		ModuleName:   "org/svc",
+		Tag:          "v1.0.0",
+		Protofiles:   []*v1.ProtoFile{{Filename: "a.proto", Content: `syntax = "proto3";`}},
+		Dependencies: []*v1.Dependency{{Name: "dep/mod ", Tag: "v1.0.0"}},
+	})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PullModule(ctx, &v1.PullModuleRequest{Name: "org/svc"})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.DeleteModuleTag(ctx, &v1.DeleteModuleTagRequest{Name: "org/svc"})
+	assert.True(t, kerrors.IsBadRequest(err))
+
+	// Missing dependency tag returns 404 NotFound
+	validFiles := []*v1.ProtoFile{{Filename: "a.proto", Content: `syntax = "proto3";`}}
+	missingDep := &v1.Dependency{Name: "dep/missing", Tag: "v1.0.0"}
+	registryRepository.On("PushModule", mock.Anything, "org/svc", "v1.0.0", validFiles, missingDep).
+		Return(nil, data.ErrDependencyTagNotFound).Once()
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{
+		ModuleName:   "org/svc",
+		Tag:          "v1.0.0",
+		Protofiles:   validFiles,
+		Dependencies: []*v1.Dependency{missingDep},
+	})
+	require.Error(t, err)
+	assert.True(t, kerrors.IsNotFound(err))
+
 	registryRepository.AssertExpectations(t)
 }
 
