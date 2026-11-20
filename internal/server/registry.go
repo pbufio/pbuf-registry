@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
@@ -33,8 +32,11 @@ func NewRegistryServer(registryRepository data.RegistryRepository, metadataRepos
 }
 
 func (r *RegistryServer) RegisterModule(ctx context.Context, request *v1.RegisterModuleRequest) (*v1.Module, error) {
-	if request == nil || request.Name == "" {
+	if request == nil {
 		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
+	}
+	if err := utils.ValidateModuleName(request.Name); err != nil {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", err.Error())
 	}
 	name := request.Name
 
@@ -134,19 +136,28 @@ func (r *RegistryServer) DeleteModule(ctx context.Context, request *v1.DeleteMod
 }
 
 func (r *RegistryServer) PushModule(ctx context.Context, request *v1.PushModuleRequest) (*v1.Module, error) {
-	if request == nil || request.ModuleName == "" {
+	if request == nil {
 		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "name cannot be empty")
+	}
+	if err := utils.ValidateModuleName(request.ModuleName); err != nil {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", err.Error())
 	}
 	name := request.ModuleName
 
 	tag := request.Tag
-	if tag == "" {
-		return nil, kerrors.BadRequest("INVALID_ARGUMENT", "tag cannot be empty")
+	if err := utils.ValidateTagName(tag); err != nil {
+		return nil, kerrors.BadRequest("INVALID_ARGUMENT", err.Error())
 	}
 
 	for _, dep := range request.Dependencies {
-		if dep == nil || dep.Name == "" || dep.Tag == "" || strings.TrimSpace(dep.Name) != dep.Name || strings.TrimSpace(dep.Tag) != dep.Tag {
-			return nil, kerrors.BadRequest("INVALID_ARGUMENT", "dependency name and tag must be non-empty and trimmed")
+		if dep == nil {
+			return nil, kerrors.BadRequest("INVALID_ARGUMENT", "dependency cannot be nil")
+		}
+		if err := utils.ValidateModuleName(dep.Name); err != nil {
+			return nil, kerrors.BadRequest("INVALID_ARGUMENT", fmt.Sprintf("invalid dependency name: %v", err))
+		}
+		if err := utils.ValidateTagName(dep.Tag); err != nil {
+			return nil, kerrors.BadRequest("INVALID_ARGUMENT", fmt.Sprintf("invalid dependency tag: %v", err))
 		}
 	}
 

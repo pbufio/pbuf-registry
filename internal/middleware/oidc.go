@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -26,16 +27,24 @@ import (
 const (
 	defaultJWKSCacheTTL    = 15 * time.Minute
 	minJWKSRefreshInterval = 5 * time.Second
+	oidcVerifyCacheTTL     = 5 * time.Second
+	maxOIDCVerifyCache     = 1024
 	oidcHTTPTimeout        = 10 * time.Second
 	maxOIDCResponseBytes   = 1 << 20 // 1 MiB
 )
 
 // OIDCClaims holds the verified identity extracted from an OIDC JWT.
 type OIDCClaims struct {
-	Subject  string
-	Username string
-	Groups   []string
-	IsAdmin  bool
+	Subject   string
+	Username  string
+	Groups    []string
+	IsAdmin   bool
+	ExpiresAt time.Time
+}
+
+type cachedOIDCClaims struct {
+	claims     OIDCClaims
+	cacheUntil time.Time
 }
 
 type oidcDiscoveryDoc struct {
@@ -70,6 +79,9 @@ type OIDCVerifier struct {
 	defaultKey  crypto.PublicKey
 	jwksURL     string
 	lastFetched time.Time
+
+	verifyMu    sync.RWMutex
+	verifyCache map[[32]byte]cachedOIDCClaims
 }
 
 // NewOIDCVerifier creates a new OIDCVerifier for the given OIDC configuration.
@@ -115,13 +127,25 @@ func NewOIDCVerifier(cfg config.OIDCConfig) (*OIDCVerifier, error) {
 				return nil
 			},
 		},
-		keys:    make(map[string]crypto.PublicKey),
-		jwksURL: cfg.JWKSURL,
+		keys:        make(map[string]crypto.PublicKey),
+		jwksURL:     cfg.JWKSURL,
+		verifyCache: make(map[[32]byte]cachedOIDCClaims),
 	}, nil
 }
 
 // VerifyToken parses and validates a raw JWT string against the configured OIDC provider.
 func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCClaims, error) {
+	tokenSum := sha256.Sum256([]byte(rawToken))
+	now := time.Now()
+
+	v.verifyMu.RLock()
+	if cached, ok := v.verifyCache[tokenSum]; ok && now.Before(cached.cacheUntil) {
+		out := cached.claims
+		v.verifyMu.RUnlock()
+		return &out, nil
+	}
+	v.verifyMu.RUnlock()
+
 	claims := jwtv5.MapClaims{}
 
 	token, err := jwtv5.ParseWithClaims(rawToken, claims, func(token *jwtv5.Token) (interface{}, error) {
@@ -150,6 +174,11 @@ func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCC
 		return nil, errors.New("oidc token audience mismatch")
 	}
 
+	expTime, err := claims.GetExpirationTime()
+	if err != nil || expTime == nil {
+		return nil, errors.New("oidc token missing expiration")
+	}
+
 	sub, _ := claims.GetSubject()
 	username, err := extractVerifiedUsernameClaim(claims, v.cfg.UsernameClaim)
 	if err != nil {
@@ -159,12 +188,38 @@ func (v *OIDCVerifier) VerifyToken(ctx context.Context, rawToken string) (*OIDCC
 	groups := extractStringSliceClaim(claims, v.cfg.GroupsClaim)
 	isAdmin := hasMatchingGroup(groups, v.cfg.AdminGroups)
 
-	return &OIDCClaims{
-		Subject:  sub,
-		Username: username,
-		Groups:   groups,
-		IsAdmin:  isAdmin,
-	}, nil
+	out := OIDCClaims{
+		Subject:   sub,
+		Username:  username,
+		Groups:    groups,
+		IsAdmin:   isAdmin,
+		ExpiresAt: expTime.Time,
+	}
+
+	cacheUntil := now.Add(oidcVerifyCacheTTL)
+	if expTime.Before(cacheUntil) {
+		cacheUntil = expTime.Time
+	}
+	if now.Before(cacheUntil) {
+		v.verifyMu.Lock()
+		if len(v.verifyCache) >= maxOIDCVerifyCache {
+			for k, entry := range v.verifyCache {
+				if !now.Before(entry.cacheUntil) {
+					delete(v.verifyCache, k)
+				}
+			}
+			if len(v.verifyCache) >= maxOIDCVerifyCache {
+				clear(v.verifyCache)
+			}
+		}
+		v.verifyCache[tokenSum] = cachedOIDCClaims{
+			claims:     out,
+			cacheUntil: cacheUntil,
+		}
+		v.verifyMu.Unlock()
+	}
+
+	return &out, nil
 }
 
 func (v *OIDCVerifier) getPublicKey(ctx context.Context, kid string) (crypto.PublicKey, error) {
@@ -277,6 +332,10 @@ func (v *OIDCVerifier) refreshKeys(ctx context.Context, kid string) error {
 	v.defaultKey = firstKey
 	v.lastFetched = time.Now()
 	v.mu.Unlock()
+
+	v.verifyMu.Lock()
+	clear(v.verifyCache)
+	v.verifyMu.Unlock()
 	return nil
 }
 

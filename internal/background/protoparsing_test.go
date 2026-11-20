@@ -47,9 +47,12 @@ func TestProtoParsingDaemon_Run_PoisonPillDoesNotBlockValidTagsOrDriftDetection(
 		Return(nil).
 		Once()
 
-	// tag-bad-syntax fails ParseProtoFilesContents
+	// tag-bad-syntax fails ParseProtoFilesContents and is marked processed so it does not spin forever
 	metaRepo.On("GetProtoFilesForTagId", mock.Anything, "tag-bad-syntax").
 		Return([]*v1.ProtoFile{{Filename: "broken.proto", Content: "not valid proto syntax {{{{"}}, nil).
+		Once()
+	metaRepo.On("MarkTagProcessed", mock.Anything, "tag-bad-syntax").
+		Return(nil).
 		Once()
 
 	// tag-save-err fails SaveParsedProtoFiles
@@ -151,7 +154,7 @@ func TestProtoParsingDaemon_Run_PoisonPillDoesNotBlockValidTagsOrDriftDetection(
 		Return(nil).
 		Once()
 
-	err := daemon.Run()
+	err := daemon.Run(context.Background())
 	require.NoError(t, err)
 	require.Len(t, notifiedEvents, 1)
 	assert.Equal(t, "acme/users", notifiedEvents[0].ModuleName)
@@ -183,7 +186,7 @@ func TestProtoParsingDaemon_Run_DoesNotMarkTagProcessedWhenSaveDriftEventsFails(
 	driftRepo.On("SaveDriftEvents", mock.Anything, mock.Anything).
 		Return(nil, errors.New("transient db blip")).Once()
 
-	require.NoError(t, daemon.Run())
+	require.NoError(t, daemon.Run(context.Background()))
 }
 
 func TestProtoParsingDaemon_Run_RetriesWhenHashesOrPreviousTagParseFail(t *testing.T) {
@@ -201,7 +204,7 @@ func TestProtoParsingDaemon_Run_RetriesWhenHashesOrPreviousTagParseFail(t *testi
 		driftRepo.On("GetTagsWithoutHashes", mock.Anything).Return([]string{"tag-1"}, nil).Once()
 		driftRepo.On("ComputeAndStoreHashes", mock.Anything, "tag-1").Return(errors.New("db hash error")).Once()
 
-		require.NoError(t, daemon.Run())
+		require.NoError(t, daemon.Run(context.Background()))
 	})
 
 	t.Run("previous tag SaveParsedProtoFiles failure skips MarkTagProcessed on newer tag", func(t *testing.T) {
@@ -227,7 +230,7 @@ func TestProtoParsingDaemon_Run_RetriesWhenHashesOrPreviousTagParseFail(t *testi
 		driftRepo.On("GetTagInfo", mock.Anything, "tag-2").Return("mod-1", "v2.0.0", nil).Once()
 		driftRepo.On("GetPreviousTagID", mock.Anything, "mod-1", "tag-2").Return("tag-1", nil).Once()
 
-		require.NoError(t, daemon.Run())
+		require.NoError(t, daemon.Run(context.Background()))
 	})
 }
 
@@ -247,6 +250,6 @@ func TestProtoParsingDaemon_Run_GetUnprocessedTagIdsError(t *testing.T) {
 		Return(nil, errors.New("db connection error")).
 		Once()
 
-	err := daemon.Run()
+	err := daemon.Run(context.Background())
 	require.EqualError(t, err, "db connection error")
 }

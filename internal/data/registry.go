@@ -407,7 +407,7 @@ func (r *registryRepo) DeleteModule(ctx context.Context, name string) error {
 		return ErrModuleNotFound
 	}
 
-	if _, err = tx.Exec(ctx, "DELETE FROM acl WHERE module_name = $1", name); err != nil {
+	if _, err = tx.Exec(ctx, "DELETE FROM acl WHERE module_name = $1 AND module_name <> '*'", name); err != nil {
 		return fmt.Errorf("could not delete module acl entries from database: %w", err)
 	}
 
@@ -669,7 +669,7 @@ func (r *registryRepo) insertDependenciesTx(ctx context.Context, tx pgx.Tx, tagI
 		}
 
 		_, err = tx.Exec(ctx,
-			"INSERT INTO dependencies (tag_id, dependency_tag_id) VALUES ($1, $2)",
+			"INSERT INTO dependencies (tag_id, dependency_tag_id) VALUES ($1, $2) ON CONFLICT (tag_id, dependency_tag_id) DO NOTHING",
 			tagId, dependencyTagId)
 		if err != nil {
 			return fmt.Errorf("could not insert dependency into database: %w", err)

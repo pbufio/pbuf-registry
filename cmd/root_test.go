@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -16,17 +17,17 @@ import (
 type fakeDaemon struct {
 	name  string
 	runs  atomic.Int32
-	runFn func() error
+	runFn func(context.Context) error
 }
 
 func (f *fakeDaemon) Name() string {
 	return f.name
 }
 
-func (f *fakeDaemon) Run() error {
+func (f *fakeDaemon) Run(ctx context.Context) error {
 	f.runs.Add(1)
 	if f.runFn != nil {
-		return f.runFn()
+		return f.runFn(ctx)
 	}
 	return nil
 }
@@ -107,7 +108,7 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 
 		daemon := &fakeDaemon{
 			name: "proto parsing",
-			runFn: func() error {
+			runFn: func(context.Context) error {
 				defer func() { doneCh <- struct{}{} }()
 				if failNext.Swap(false) {
 					return errors.New("transient postgres timeout")
@@ -116,7 +117,7 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 			},
 		}
 
-		job, err := registerDaemonJob(s, "0 * * * *", daemon)
+		job, err := registerDaemonJob(context.Background(), s, "0 * * * *", daemon)
 		require.NoError(t, err)
 		s.Start()
 
@@ -158,7 +159,7 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 
 		daemon := &fakeDaemon{
 			name: "compaction",
-			runFn: func() error {
+			runFn: func(context.Context) error {
 				cur := inFlight.Add(1)
 				for {
 					prev := maxInFlight.Load()
@@ -173,7 +174,7 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 			},
 		}
 
-		job, err := registerDaemonJob(s, "0 * * * *", daemon)
+		job, err := registerDaemonJob(context.Background(), s, "0 * * * *", daemon)
 		require.NoError(t, err)
 		s.Start()
 
@@ -199,6 +200,6 @@ func TestRegisterDaemonJob_TransientErrorAndSingleton(t *testing.T) {
 }
 
 func TestRunBackgroundDaemon_InvalidCronReturnsError(t *testing.T) {
-	err := runBackgroundDaemon("not-a-cron", &fakeDaemon{name: "compaction"}, &fakeApp{})
+	err := runBackgroundDaemon(context.Background(), "not-a-cron", &fakeDaemon{name: "compaction"}, &fakeApp{})
 	require.ErrorContains(t, err, "failed to create cron job")
 }

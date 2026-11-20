@@ -437,4 +437,26 @@ func TestOIDCVerifier_BoundsAndSchemeDowngradeProtection(t *testing.T) {
 	require.ErrorContains(t, err, "invalid RSA exponent")
 	_, err = parseJWK(jwkKey{Kty: "RSA", N: validN, E: base64.RawURLEncoding.EncodeToString(new(big.Int).Lsh(big.NewInt(1), 65).Bytes())})
 	require.ErrorContains(t, err, "invalid RSA exponent")
+
+	// Short-lived JWT verification cache honors token expiration boundary
+	shortVerifier, err := NewOIDCVerifier(config.OIDCConfig{
+		IssuerURL: "https://idp.example.com",
+		ClientID:  "pbuf",
+	})
+	require.NoError(t, err)
+	shortVerifier.httpClient = newFakeOIDCHTTPClient(t, "https://idp.example.com", privKey, "k1")
+	shortJWT := signTestJWT(t, privKey, "k1", jwtv5.MapClaims{
+		"iss":   "https://idp.example.com",
+		"sub":   "sub-short",
+		"aud":   "pbuf",
+		"email": "short@example.com",
+		"exp":   time.Now().Add(1 * time.Second).Unix(),
+	})
+	claims1, err := shortVerifier.VerifyToken(context.Background(), shortJWT)
+	require.NoError(t, err)
+	assert.Equal(t, "short@example.com", claims1.Username)
+	// Cached hit returns identical claims without mutating caller state
+	claims2, err := shortVerifier.VerifyToken(context.Background(), shortJWT)
+	require.NoError(t, err)
+	assert.Equal(t, claims1.ExpiresAt, claims2.ExpiresAt)
 }

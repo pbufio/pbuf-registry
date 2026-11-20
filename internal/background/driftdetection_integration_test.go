@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -229,7 +230,7 @@ message NewFeature {
 	daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
 
 	// Run the daemon (it will detect drift for tags that were processed)
-	err = daemon.Run()
+	err = daemon.Run(ctx)
 	require.NoError(t, err)
 
 	// === VALIDATE RESULTS ===
@@ -621,7 +622,7 @@ service FooService {
 
 			// Run drift detection (daemon will parse proto files and detect drift)
 			daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
-			err = daemon.Run()
+			err = daemon.Run(ctx)
 			require.NoError(t, err)
 
 			// Get events for the module
@@ -682,7 +683,7 @@ func TestDriftDetection_MultipleFilesScenario(t *testing.T) {
 
 	// Run drift detection (daemon will parse proto files and detect drift)
 	daemon := NewProtoParsingDaemon(suite.metadataRepository, suite.driftRepository, log.DefaultLogger)
-	err = daemon.Run()
+	err = daemon.Run(ctx)
 	require.NoError(t, err)
 
 	// Get events
@@ -775,4 +776,66 @@ func parseProtoFile(t *testing.T, filename string) *unordered.Proto {
 	content, err := os.ReadFile(filepath.Join("testdata", filename))
 	require.NoError(t, err, "failed to read proto fixture")
 	return parseProtoString(t, string(content))
+}
+
+type funcDaemon struct {
+	name string
+	fn   func(context.Context) error
+}
+
+func (f funcDaemon) Name() string                  { return f.name }
+func (f funcDaemon) Run(ctx context.Context) error { return f.fn(ctx) }
+
+func TestWithAdvisoryLock_ContentionAndSingleConnGuard(t *testing.T) {
+	suite := setupSuite(t)
+	defer suite.tearDown(t)
+
+	ctx := context.Background()
+
+	// Single-connection pool must fail fast rather than deadlocking inner DB queries
+	singleCfg, err := pgxpool.ParseConfig(suite.psqlContainer.GetDSN())
+	require.NoError(t, err)
+	singleCfg.MaxConns = 1
+	singlePool, err := pgxpool.NewWithConfig(ctx, singleCfg)
+	require.NoError(t, err)
+	defer singlePool.Close()
+
+	singleLocked := WithAdvisoryLock(singlePool, CompactionLockID, funcDaemon{
+		name: "compaction",
+		fn:   func(context.Context) error { return nil },
+	}, log.DefaultLogger)
+	require.ErrorContains(t, singleLocked.Run(ctx), "max_conns")
+
+	// Overlapping run skips cleanly while lock is held, then third run acquires after unlock
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var runs atomic.Int32
+
+	lockedA := WithAdvisoryLock(suite.pool, CompactionLockID, funcDaemon{
+		name: "compaction",
+		fn: func(context.Context) error {
+			if runs.Add(1) == 1 {
+				close(entered)
+				<-release
+			}
+			return nil
+		},
+	}, log.DefaultLogger)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- lockedA.Run(ctx)
+	}()
+
+	<-entered
+	// Concurrent second invocation must skip immediately without running inner fn
+	require.NoError(t, lockedA.Run(ctx))
+	assert.Equal(t, int32(1), runs.Load())
+
+	close(release)
+	require.NoError(t, <-errCh)
+
+	// Subsequent invocation must acquire released advisory lock and run inner fn
+	require.NoError(t, lockedA.Run(ctx))
+	assert.Equal(t, int32(2), runs.Load())
 }

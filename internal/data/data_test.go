@@ -1364,7 +1364,30 @@ func Test_registryRepository_ScopedListAndDraftLifecycleAndACLCleanup(t *testing
 	assert.ErrorIs(t, err, ErrTagNotFound)
 	assert.ErrorIs(t, r.DeleteModuleTag(ctx, modA, "v0.1.0-draft"), ErrTagNotFound)
 
-	// DeleteModule removes orphaned module ACL entries
+	// Duplicate dependency entries in PushModule are deduplicated cleanly via ON CONFLICT DO NOTHING
+	_, err = r.PushModule(ctx, modC, "v1.0.0", protos)
+	require.NoError(t, err)
+	dupDep := &v1.Dependency{Name: modC, Tag: "v1.0.0"}
+	_, err = r.PushModule(ctx, modA, "v1.0.0", protos, dupDep, dupDep)
+	require.NoError(t, err)
+	resolvedDeps, err := r.GetModuleDependencies(ctx, modA, "v1.0.0")
+	require.NoError(t, err)
+	require.Len(t, resolvedDeps, 1)
+	assert.Equal(t, modC, resolvedDeps[0].Name)
+
+	// DeleteModule removes orphaned module ACL entries while never deleting global '*' ACLs
+	require.NoError(t, aclRepo.GrantPermission(ctx, &model.ACLEntry{
+		UserID:     noACLUser.ID,
+		ModuleName: "*",
+		Permission: model.PermissionRead,
+	}))
+	_, err = suite.pool.Exec(ctx, "INSERT INTO modules (name) VALUES ('*') ON CONFLICT (name) DO NOTHING")
+	require.NoError(t, err)
+	require.NoError(t, r.DeleteModule(ctx, "*"))
+	hasWildcardRead, err := aclRepo.CheckPermission(ctx, noACLUser.ID, modC, model.PermissionRead)
+	require.NoError(t, err)
+	assert.True(t, hasWildcardRead, "deleting a legacy '*' module row must never wipe global '*' ACL entries")
+
 	require.NoError(t, r.DeleteModule(ctx, modA))
 	perms, err := aclRepo.ListUserPermissions(ctx, user.ID)
 	require.NoError(t, err)
