@@ -371,6 +371,30 @@ func TestInitAndModuleCommands(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(rawDomain), "addr: pbuf.io")
 
+	// Interactive mode: EOF / Ctrl+D before completion aborts without overwriting pbuf.yaml
+	require.NoError(t, os.Remove("pbuf.yaml"))
+	abortInitCmd := CreateInitCmd()
+	abortInitCmd.SetIn(strings.NewReader("https://pbuf.io\n"))
+	abortInitCmd.SetOut(&bytes.Buffer{})
+	abortInitCmd.SetErr(&bytes.Buffer{})
+	require.ErrorContains(t, abortInitCmd.Execute(), "init aborted")
+	_, err = os.Stat("pbuf.yaml")
+	assert.True(t, os.IsNotExist(err))
+
+	// Interactive mode: scanner reads defaults and multi-line inputs cleanly
+	interactiveCmd := CreateInitCmd()
+	interactiveCmd.SetIn(strings.NewReader("\nacme/orders\norg/common, org/auth\n\nproto\n\n"))
+	var promptOut bytes.Buffer
+	interactiveCmd.SetOut(&promptOut)
+	require.NoError(t, interactiveCmd.Execute())
+	rawInteractive, err := os.ReadFile("pbuf.yaml")
+	require.NoError(t, err)
+	assert.Contains(t, string(rawInteractive), "addr: pbuf.cloud")
+	assert.Contains(t, string(rawInteractive), "name: acme/orders")
+	assert.Contains(t, string(rawInteractive), "org/common")
+	assert.Contains(t, string(rawInteractive), "org/auth")
+	assert.Contains(t, string(rawInteractive), "- proto")
+
 	require.NoError(t, os.MkdirAll("api", 0o755))
 	require.NoError(t, os.WriteFile("api/hello.proto", []byte("syntax = \"proto3\";"), 0o644))
 

@@ -1,32 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
-	"log"
+	"io"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pbufio/pbuf-registry/internal/cli/model"
 	"github.com/spf13/cobra"
 )
-
-type (
-	errMsg error
-)
-
-type textModel struct {
-	question  string
-	textInput textinput.Model
-	err       error
-}
-
-type textAreaModel struct {
-	question string
-	textArea textarea.Model
-	err      error
-}
 
 func CreateInitCmd() *cobra.Command {
 	var domainFlag string
@@ -36,7 +18,7 @@ func CreateInitCmd() *cobra.Command {
 		Short: "Init",
 		Long:  "Init is a command to initialize pbuf.yaml",
 		Args:  cobra.RangeArgs(0, 2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			var moduleName string
 			var registryURL string
 			var modules []string
@@ -52,14 +34,29 @@ func CreateInitCmd() *cobra.Command {
 					registryURL = "pbuf.cloud"
 				}
 			} else {
+				scanner := bufio.NewScanner(cmd.InOrStdin())
+				out := cmd.OutOrStdout()
+				var err error
 				if domainFlag != "" {
 					registryURL = domainFlag
 				} else {
-					registryURL = askQuestionAndGetAnswer("Please provide registry URL", "pbuf.cloud")
+					registryURL, err = promptLine(scanner, out, "Please provide registry URL", "pbuf.cloud")
+					if err != nil {
+						return fmt.Errorf("init aborted: %w", err)
+					}
 				}
-				moduleName = askQuestionAndGetAnswer("Please provide module name", "domain/module-name")
-				modules = askMultiQuestionAndGetAnswer("Please provide modules", "domain/module-name")
-				paths = askMultiQuestionAndGetAnswer("Please provide paths", "api")
+				moduleName, err = promptLine(scanner, out, "Please provide module name", "domain/module-name")
+				if err != nil {
+					return fmt.Errorf("init aborted: %w", err)
+				}
+				modules, err = promptMultiLine(scanner, out, "Please provide modules", "")
+				if err != nil {
+					return fmt.Errorf("init aborted: %w", err)
+				}
+				paths, err = promptMultiLine(scanner, out, "Please provide paths", "api")
+				if err != nil {
+					return fmt.Errorf("init aborted: %w", err)
+				}
 			}
 
 			registryURL = sanitizeRegistryURL(registryURL)
@@ -75,12 +72,10 @@ func CreateInitCmd() *cobra.Command {
 
 			var pbufPaths []string
 			for _, path := range paths {
-				if path != "" {
-					pbufPaths = append(pbufPaths, path)
+				if trimmed := strings.TrimSpace(path); trimmed != "" {
+					pbufPaths = append(pbufPaths, trimmed)
 				}
 			}
-
-			// backward compatibility
 			if len(pbufPaths) == 0 {
 				pbufPaths = append(pbufPaths, "api")
 			}
@@ -97,10 +92,10 @@ func CreateInitCmd() *cobra.Command {
 				Modules: pbufModules,
 			}
 
-			err := pbufYaml.Save()
-			if err != nil {
-				log.Fatalf("failed to save pbuf.yaml: %v", err)
+			if err := pbufYaml.Save(); err != nil {
+				return fmt.Errorf("failed to save pbuf.yaml: %w", err)
 			}
+			return nil
 		},
 	}
 
@@ -118,132 +113,45 @@ func sanitizeRegistryURL(raw string) string {
 	return s
 }
 
-func askQuestionAndGetAnswer(question, placeholder string) string {
-	initInfo := createTextModel(question, placeholder)
-	m, err := tea.NewProgram(initInfo).Run()
-	if err != nil {
-		log.Fatal(err)
+func promptLine(scanner *bufio.Scanner, out io.Writer, question, placeholder string) (string, error) {
+	if _, err := fmt.Fprintf(out, "%s [%s]: ", question, placeholder); err != nil {
+		return "", err
 	}
-	return m.(textModel).textInput.Value()
-}
-
-// text model section
-
-func createTextModel(question, placeholder string) textModel {
-	ti := textinput.New()
-	ti.Placeholder = placeholder
-	ti.Focus()
-	ti.CharLimit = 156
-	ti.Width = 20
-
-	return textModel{
-		question:  question,
-		textInput: ti,
-		err:       nil,
-	}
-}
-
-func (m textModel) Init() tea.Cmd {
-	return textinput.Blink
-}
-
-func (m textModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
-			if m.textInput.Value() == "" {
-				m.textInput.SetValue(m.textInput.Placeholder)
-				return m, tea.Quit
-			}
-			return m, tea.Quit
-		case tea.KeyCtrlC, tea.KeyEsc:
-			return m, tea.Quit
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", err
 		}
-
-	// We handle errors just like any other message
-	case errMsg:
-		m.err = msg
-		return m, nil
+		return "", io.ErrUnexpectedEOF
 	}
-
-	m.textInput, cmd = m.textInput.Update(msg)
-	return m, cmd
-}
-
-func (m textModel) View() string {
-	return fmt.Sprintf(
-		"%s\n%s\n",
-		m.question,
-		m.textInput.View(),
-	) + "\n"
-}
-
-// text area model section
-
-func askMultiQuestionAndGetAnswer(question, placeholder string) []string {
-	initInfo := createTextAreaModel(question, placeholder)
-	m, err := tea.NewProgram(initInfo).Run()
-	if err != nil {
-		log.Fatal(err)
+	val := strings.TrimSpace(scanner.Text())
+	if val == "" {
+		return placeholder, nil
 	}
-	return strings.Split(m.(textAreaModel).textArea.Value(), "\n")
+	return val, nil
 }
 
-func createTextAreaModel(question, placeholder string) textAreaModel {
-	ti := textarea.New()
-	ti.Placeholder = placeholder
-	ti.Focus()
-
-	return textAreaModel{
-		question: question,
-		textArea: ti,
-		err:      nil,
+func promptMultiLine(scanner *bufio.Scanner, out io.Writer, question, placeholder string) ([]string, error) {
+	prompt := fmt.Sprintf("%s (one per line, empty line to finish): ", question)
+	if placeholder != "" {
+		prompt = fmt.Sprintf("%s (one per line, empty line to finish) [%s]: ", question, placeholder)
 	}
-}
-
-func (m textAreaModel) Init() tea.Cmd {
-	return textarea.Blink
-}
-
-func (m textAreaModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEsc:
-			if m.textArea.Focused() {
-				m.textArea.Blur()
-			}
-		case tea.KeyCtrlC:
-			return m, tea.Quit
-		default:
-			if !m.textArea.Focused() {
-				cmd = m.textArea.Focus()
-				cmds = append(cmds, cmd)
+	if _, err := fmt.Fprint(out, prompt); err != nil {
+		return nil, err
+	}
+	var values []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			return values, nil
+		}
+		for _, item := range strings.Split(line, ",") {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				values = append(values, trimmed)
 			}
 		}
-
-	// We handle errors just like any other message
-	case errMsg:
-		m.err = msg
-		return m, nil
 	}
-
-	m.textArea, cmd = m.textArea.Update(msg)
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
-}
-
-func (m textAreaModel) View() string {
-	return fmt.Sprintf(
-		"%s\n\n%s\n\n%s",
-		m.question,
-		m.textArea.View(),
-		"(ctrl+c to quit)",
-	) + "\n\n"
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return nil, io.ErrUnexpectedEOF
 }

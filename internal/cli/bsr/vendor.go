@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -134,6 +133,18 @@ func VendorBSRModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		return err
 	}
 
+	outputRoot, err := patcher.NormalizeRelativeDir(module.OutputFolder)
+	if err != nil {
+		return err
+	}
+	if outputRoot == "" {
+		outputRoot = "third_party"
+	}
+	moduleSubpath, err := patcher.NormalizeModuleSubpath(module.Path)
+	if err != nil {
+		return err
+	}
+
 	log.Printf("start vendoring .proto files from BSR: buf.build/%s/%s@%s", owner, repo, ref)
 
 	ctx, cancel := context.WithTimeout(context.Background(), bsrTimeout)
@@ -145,47 +156,14 @@ func VendorBSRModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		return fmt.Errorf("failed to download BSR module buf.build/%s/%s@%s: %w", owner, repo, ref, err)
 	}
 
-	outputRoot := module.OutputFolder
-	if outputRoot == "" {
-		outputRoot = "third_party"
-	}
-
 	for _, f := range files {
-		if !strings.HasSuffix(f.Path, ".proto") {
-			continue
-		}
-
-		targetRelPath, include := filterAndMapPath(f.Path, module.Path, outputRoot)
+		targetRelPath, include := patcher.MapVendoredProtoPath(f.Path, moduleSubpath, outputRoot)
 		if !include {
 			continue
 		}
 
-		content := string(f.Content)
-		outputDir := filepath.Dir(targetRelPath)
-
-		if module.GenerateOutputFolder != "" {
-			genDir := filepath.Join(module.GenerateOutputFolder, outputDir)
-			if rel, relErr := filepath.Rel(outputRoot, outputDir); relErr == nil {
-				genDir = filepath.Join(module.GenerateOutputFolder, rel)
-			}
-			patched, patchErr := patcher.ApplyPatchers(
-				patchers,
-				genDir,
-				content,
-			)
-			if patchErr != nil {
-				log.Printf("warning: failed to patch file %s: %v", targetRelPath, patchErr)
-			} else {
-				content = patched
-			}
-		}
-
-		if err := os.MkdirAll(outputDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", outputDir, err)
-		}
-
-		if err := os.WriteFile(targetRelPath, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", targetRelPath, err)
+		if err := patcher.WriteVendoredProto(targetRelPath, outputRoot, module.GenerateOutputFolder, string(f.Content), patchers); err != nil {
+			return err
 		}
 	}
 
@@ -281,32 +259,6 @@ func downloadBSRFiles(ctx context.Context, baseURL, owner, repo, ref, token stri
 		return nil, lastErr
 	}
 	return nil, errors.New("failed to download from BSR")
-}
-
-func filterAndMapPath(filePath, filterPath, outputRoot string) (string, bool) {
-	filePath = filepath.ToSlash(filepath.Clean(filePath))
-	if filePath == "." || strings.HasPrefix(filePath, "..") || strings.HasPrefix(filePath, "/") {
-		return "", false
-	}
-	filterPath = strings.Trim(filepath.ToSlash(strings.TrimSpace(filterPath)), "/")
-
-	if filterPath == "" {
-		return filepath.Join(outputRoot, filePath), true
-	}
-
-	if strings.HasSuffix(filterPath, ".proto") {
-		if filePath != filterPath {
-			return "", false
-		}
-		return filepath.Join(outputRoot, filepath.Base(filePath)), true
-	}
-
-	if filePath != filterPath && !strings.HasPrefix(filePath, filterPath+"/") {
-		return "", false
-	}
-
-	mapped := strings.TrimPrefix(strings.TrimPrefix(filePath, filterPath), "/")
-	return filepath.Join(outputRoot, mapped), true
 }
 
 func resolveBSRToken(baseURL string, netrcAuth *netrc.Netrc) string {

@@ -763,11 +763,6 @@ func NewModuleUpdateCmd(config *model.Config, client v1.RegistryClient) *cobra.C
 	return moduleUpdateCmd
 }
 
-// NewVendorCmd creates cobra command for vendor
-func NewVendorCmd(modulesConfig *model.Config, netrcAuth *netrc.Netrc, client v1.RegistryClient) *cobra.Command {
-	return newVendorCmd(modulesConfig, func() *netrc.Netrc { return netrcAuth }, client)
-}
-
 func newVendorCmd(modulesConfig *model.Config, getNetrc func() *netrc.Netrc, client v1.RegistryClient) *cobra.Command {
 	// create vendor command
 	vendorCmd := &cobra.Command{
