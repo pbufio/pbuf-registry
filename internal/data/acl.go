@@ -19,7 +19,6 @@ type ACLRepository interface {
 	RevokePermission(ctx context.Context, userID uuid.UUID, moduleName string) error
 	ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]*model.ACLEntry, error)
 	CheckPermission(ctx context.Context, userID uuid.UUID, moduleName string, permission model.Permission) (bool, error)
-	DeleteUserPermissions(ctx context.Context, userID uuid.UUID) error
 }
 
 type aclRepo struct {
@@ -87,53 +86,39 @@ func (r *aclRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]
 }
 
 func (r *aclRepo) CheckPermission(ctx context.Context, userID uuid.UUID, moduleName string, permission model.Permission) (bool, error) {
-	// Check for specific module permission
 	var foundPermission model.Permission
 	err := r.pool.QueryRow(ctx,
-		`SELECT permission FROM acl WHERE user_id = $1 AND module_name = $2`,
+		`SELECT permission FROM acl
+		 WHERE user_id = $1 AND module_name IN ($2, '*')
+		 ORDER BY (module_name = $2) DESC
+		 LIMIT 1`,
 		userID, moduleName,
-	).Scan(&foundPermission)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, fmt.Errorf("could not check permission in database: %w", err)
-	}
-	if err == nil {
-		// Found exact module permission, check if it meets required level
-		return hasRequiredPermission(foundPermission, permission), nil
-	}
-
-	// Check for wildcard permission
-	err = r.pool.QueryRow(ctx,
-		`SELECT permission FROM acl WHERE user_id = $1 AND module_name = '*'`,
-		userID,
 	).Scan(&foundPermission)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
-		return false, fmt.Errorf("could not check wildcard permission in database: %w", err)
+		return false, fmt.Errorf("could not check permission in database: %w", err)
 	}
 
 	return hasRequiredPermission(foundPermission, permission), nil
 }
 
-func (r *aclRepo) DeleteUserPermissions(ctx context.Context, userID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM acl WHERE user_id = $1`,
-		userID,
-	)
-	if err != nil {
-		return fmt.Errorf("could not delete user permissions from database: %w", err)
-	}
-	return nil
-}
-
 // hasRequiredPermission checks if the granted permission meets the required permission level
 // admin > write > read
 func hasRequiredPermission(granted, required model.Permission) bool {
-	permissionLevel := map[model.Permission]int{
-		model.PermissionRead:  1,
-		model.PermissionWrite: 2,
-		model.PermissionAdmin: 3,
+	return permissionRank(granted) >= permissionRank(required) && permissionRank(required) > 0
+}
+
+func permissionRank(p model.Permission) int {
+	switch p {
+	case model.PermissionRead:
+		return 1
+	case model.PermissionWrite:
+		return 2
+	case model.PermissionAdmin:
+		return 3
+	default:
+		return 0
 	}
-	return permissionLevel[granted] >= permissionLevel[required]
 }

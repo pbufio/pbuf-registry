@@ -5,11 +5,13 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	kratosmiddleware "github.com/go-kratos/kratos/v2/middleware"
+	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/middleware"
+	stdgrpc "google.golang.org/grpc"
 )
 
 // NewGRPCServer new a gRPC server.
@@ -34,8 +36,8 @@ func NewGRPCServer(cfg *config.Server,
 		logHelper.Fatalf("failed to create auth middleware: %v", err)
 	}
 
-	serverMiddlewares := []kratosmiddleware.Middleware{authMiddleware.NewAuthMiddleware()}
-	if cfg.GRPC.Auth.Enabled && (cfg.GRPC.Auth.Type == "acl" || cfg.GRPC.Auth.Type == "oidc") {
+	serverMiddlewares := []kratosmiddleware.Middleware{recovery.Recovery(), authMiddleware.NewAuthMiddleware()}
+	if cfg.GRPC.Auth.Enabled && isRBACAuthType(cfg.GRPC.Auth.Type) {
 		if aclRepo == nil {
 			logHelper.Fatalf("ACL repository is required when auth type is '%s'", cfg.GRPC.Auth.Type)
 		}
@@ -50,6 +52,7 @@ func NewGRPCServer(cfg *config.Server,
 		grpc.Address(cfg.GRPC.Addr),
 		grpc.Timeout(cfg.GRPC.Timeout),
 		grpc.TLSConfig(tlsConfig),
+		grpc.Options(stdgrpc.MaxRecvMsgSize(int(maxHTTPRequestBytes))),
 		grpc.Middleware(serverMiddlewares...),
 	}
 

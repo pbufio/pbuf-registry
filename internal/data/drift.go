@@ -583,6 +583,12 @@ func (d *driftRepo) GetModuleDependencyDriftStatuses(ctx context.Context, module
 		JOIN tags nt ON nt.module_id = dm.id AND nt.updated_at > dt.updated_at
 		JOIN drift_events de ON de.module_id = dm.id AND de.tag_id = nt.id
 		WHERE dep.tag_id = $1
+			AND ($2::uuid IS NULL OR EXISTS (
+				SELECT 1 FROM acl a
+				WHERE a.user_id = $2
+					AND a.permission IN ('read', 'write', 'admin')
+					AND (a.module_name = '*' OR a.module_name = dm.name)
+			))
 		GROUP BY dm.id, dm.name, dt.id, dt.tag, nt.id, nt.tag, nt.updated_at
 		HAVING MAX(
 			CASE de.severity
@@ -593,7 +599,7 @@ func (d *driftRepo) GetModuleDependencyDriftStatuses(ctx context.Context, module
 			END
 		) > 0
 		ORDER BY dm.name ASC, nt.updated_at ASC, nt.tag ASC
-	`, moduleTagID)
+	`, moduleTagID, scopedUserIDFromContext(ctx))
 	if err != nil {
 		d.logger.Errorf("error getting dependency drift statuses for module %s tag %s: %v", moduleName, resolvedTagName, err)
 		return nil, err

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-kratos/kratos/v2/log"
 	kratosmiddleware "github.com/go-kratos/kratos/v2/middleware"
+	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	kratosHttp "github.com/go-kratos/kratos/v2/transport/http"
 	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/config"
@@ -26,6 +27,10 @@ func maxRequestBodyFilter(maxBytes int64) kratosHttp.FilterFunc {
 	}
 }
 
+func isRBACAuthType(authType string) bool {
+	return authType == "acl" || authType == "token" || authType == "oidc"
+}
+
 // NewHTTPServer new a HTTP server.
 func NewHTTPServer(cfg *config.Server,
 	registryServer *RegistryServer,
@@ -43,8 +48,8 @@ func NewHTTPServer(cfg *config.Server,
 		logHelper.Fatalf("failed to create auth middleware: %v", err)
 	}
 
-	serverMiddlewares := []kratosmiddleware.Middleware{authMiddleware.NewAuthMiddleware()}
-	if cfg.HTTP.Auth.Enabled && (cfg.HTTP.Auth.Type == "acl" || cfg.HTTP.Auth.Type == "oidc") {
+	serverMiddlewares := []kratosmiddleware.Middleware{recovery.Recovery(), authMiddleware.NewAuthMiddleware()}
+	if cfg.HTTP.Auth.Enabled && isRBACAuthType(cfg.HTTP.Auth.Type) {
 		if aclRepo == nil {
 			logHelper.Fatalf("ACL repository is required when auth type is '%s'", cfg.HTTP.Auth.Type)
 		}

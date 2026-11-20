@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	ErrInvalidRequest = kerrors.BadRequest("INVALID_REQUEST", "invalid request")
-	ErrUserNotFound   = kerrors.NotFound("USER_NOT_FOUND", "user not found")
-	ErrUnauthorized   = kerrors.Unauthorized("UNAUTHORIZED", "unauthorized")
+	ErrInvalidRequest    = kerrors.BadRequest("INVALID_REQUEST", "invalid request")
+	ErrUserNotFound      = kerrors.NotFound("USER_NOT_FOUND", "user not found")
+	ErrUserAlreadyExists = kerrors.Conflict("USER_ALREADY_EXISTS", "user already exists")
 )
 
 // generateToken generates a secure random token with type prefix
@@ -84,6 +84,9 @@ func (s *UsersServer) CreateUser(ctx context.Context, request *v1.CreateUserRequ
 
 	err = s.userRepo.CreateUser(ctx, user)
 	if err != nil {
+		if stdErrors.Is(err, data.ErrUserAlreadyExists) {
+			return nil, ErrUserAlreadyExists
+		}
 		s.logger.Errorf("failed to create user: %v", err)
 		return nil, kerrors.InternalServer("USER_CREATION_FAILED", "failed to create user")
 	}
@@ -178,6 +181,12 @@ func (s *UsersServer) UpdateUser(ctx context.Context, request *v1.UpdateUserRequ
 
 	err = s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
+		if stdErrors.Is(err, data.ErrUserAlreadyExists) {
+			return nil, ErrUserAlreadyExists
+		}
+		if stdErrors.Is(err, data.ErrUserNotFound) {
+			return nil, ErrUserNotFound
+		}
 		s.logger.Errorf("failed to update user: %v", err)
 		return nil, kerrors.InternalServer("USER_UPDATE_FAILED", "failed to update user")
 	}
@@ -195,12 +204,6 @@ func (s *UsersServer) DeleteUser(ctx context.Context, request *v1.DeleteUserRequ
 	id, err := parseUUID(request.Id)
 	if err != nil {
 		return nil, err
-	}
-
-	err = s.aclRepo.DeleteUserPermissions(ctx, id)
-	if err != nil {
-		s.logger.Errorf("failed to delete user permissions: %v", err)
-		return nil, kerrors.InternalServer("PERMISSION_DELETE_FAILED", "failed to delete user permissions")
 	}
 
 	err = s.userRepo.DeleteUser(ctx, id)

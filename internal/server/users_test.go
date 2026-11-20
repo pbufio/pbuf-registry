@@ -197,6 +197,18 @@ func TestUsersServer_CreateUser_GRPC(t *testing.T) {
 		requireStatusCode(t, err, codes.InvalidArgument)
 	})
 
+	t.Run("duplicate user conflict", func(t *testing.T) {
+		userRepo := mocks.NewUserRepository(t)
+		aclRepo := mocks.NewACLRepository(t)
+		client, closer := setupUsersClient(t, userRepo, aclRepo)
+		defer closer()
+
+		userRepo.On("CreateUser", mock.Anything, mock.Anything).Return(data.ErrUserAlreadyExists).Once()
+
+		_, err := client.CreateUser(ctx, &v1.CreateUserRequest{Name: "alice", Type: v1.UserType_USER_TYPE_USER})
+		requireStatusCode(t, err, codes.Aborted)
+	})
+
 	t.Run("repo error", func(t *testing.T) {
 		userRepo := mocks.NewUserRepository(t)
 		aclRepo := mocks.NewACLRepository(t)
@@ -428,6 +440,21 @@ func TestUsersServer_UpdateUser_GRPC(t *testing.T) {
 		requireStatusCode(t, err, codes.Internal)
 	})
 
+	t.Run("duplicate name conflict", func(t *testing.T) {
+		userRepo := mocks.NewUserRepository(t)
+		aclRepo := mocks.NewACLRepository(t)
+		client, closer := setupUsersClient(t, userRepo, aclRepo)
+		defer closer()
+
+		id := uuid.New()
+		user := &model.User{ID: id, Name: "old", Type: model.UserTypeUser, IsActive: true}
+		userRepo.On("GetUser", mock.Anything, id).Return(user, nil).Once()
+		userRepo.On("UpdateUser", mock.Anything, mock.Anything).Return(data.ErrUserAlreadyExists).Once()
+
+		_, err := client.UpdateUser(ctx, &v1.UpdateUserRequest{Id: id.String(), Name: "taken", IsActive: true})
+		requireStatusCode(t, err, codes.Aborted)
+	})
+
 	t.Run("update error", func(t *testing.T) {
 		userRepo := mocks.NewUserRepository(t)
 		aclRepo := mocks.NewACLRepository(t)
@@ -464,7 +491,6 @@ func TestUsersServer_DeleteUser_GRPC(t *testing.T) {
 		defer closer()
 
 		id := uuid.New()
-		aclRepo.On("DeleteUserPermissions", mock.Anything, id).Return(nil).Once()
 		userRepo.On("DeleteUser", mock.Anything, id).Return(nil).Once()
 
 		resp, err := client.DeleteUser(ctx, &v1.DeleteUserRequest{Id: id.String()})
@@ -476,20 +502,6 @@ func TestUsersServer_DeleteUser_GRPC(t *testing.T) {
 		}
 	})
 
-	t.Run("permission delete error", func(t *testing.T) {
-		userRepo := mocks.NewUserRepository(t)
-		aclRepo := mocks.NewACLRepository(t)
-		client, closer := setupUsersClient(t, userRepo, aclRepo)
-		defer closer()
-
-		id := uuid.New()
-		aclRepo.On("DeleteUserPermissions", mock.Anything, id).Return(errors.New("db")).Once()
-
-		_, err := client.DeleteUser(ctx, &v1.DeleteUserRequest{Id: id.String()})
-		requireStatusCode(t, err, codes.Internal)
-		userRepo.AssertNotCalled(t, "DeleteUser", mock.Anything, mock.Anything)
-	})
-
 	t.Run("not found", func(t *testing.T) {
 		userRepo := mocks.NewUserRepository(t)
 		aclRepo := mocks.NewACLRepository(t)
@@ -497,7 +509,6 @@ func TestUsersServer_DeleteUser_GRPC(t *testing.T) {
 		defer closer()
 
 		id := uuid.New()
-		aclRepo.On("DeleteUserPermissions", mock.Anything, id).Return(nil).Once()
 		userRepo.On("DeleteUser", mock.Anything, id).Return(data.ErrUserNotFound).Once()
 
 		_, err := client.DeleteUser(ctx, &v1.DeleteUserRequest{Id: id.String()})
@@ -511,7 +522,6 @@ func TestUsersServer_DeleteUser_GRPC(t *testing.T) {
 		defer closer()
 
 		id := uuid.New()
-		aclRepo.On("DeleteUserPermissions", mock.Anything, id).Return(nil).Once()
 		userRepo.On("DeleteUser", mock.Anything, id).Return(errors.New("db")).Once()
 
 		_, err := client.DeleteUser(ctx, &v1.DeleteUserRequest{Id: id.String()})

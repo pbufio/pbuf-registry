@@ -382,47 +382,6 @@ func Test_aclRepository_RevokePermission(t *testing.T) {
 	}
 }
 
-func Test_aclRepository_DeleteUserPermissions(t *testing.T) {
-	testUser := createTestUserForACL(t, "acl-delete-all-user")
-
-	// Grant multiple permissions
-	modules := []string{"delete-module-1", "delete-module-2", "delete-module-3"}
-	for _, m := range modules {
-		entry := &model.ACLEntry{
-			UserID:     testUser.ID,
-			ModuleName: m,
-			Permission: model.PermissionRead,
-		}
-		err := suite.aclRepository.GrantPermission(context.Background(), entry)
-		require.NoError(t, err)
-	}
-
-	// Verify permissions exist
-	entries, err := suite.aclRepository.ListUserPermissions(context.Background(), testUser.ID)
-	require.NoError(t, err)
-	assert.Len(t, entries, 3)
-
-	t.Run("Delete all user permissions", func(t *testing.T) {
-		r := suite.aclRepository
-
-		err := r.DeleteUserPermissions(context.Background(), testUser.ID)
-		require.NoError(t, err)
-
-		// Verify all permissions are deleted
-		entries, err := r.ListUserPermissions(context.Background(), testUser.ID)
-		require.NoError(t, err)
-		assert.Empty(t, entries)
-	})
-
-	t.Run("Delete permissions for user with no permissions", func(t *testing.T) {
-		r := suite.aclRepository
-
-		// Should not error even if user has no permissions
-		err := r.DeleteUserPermissions(context.Background(), uuid.New())
-		require.NoError(t, err)
-	})
-}
-
 func Test_aclRepository_CascadeDeleteOnUserDelete(t *testing.T) {
 	testUser := createTestUserForACL(t, "acl-cascade-user")
 

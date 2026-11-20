@@ -24,7 +24,7 @@ func CreateAuthMiddleware(cfg *config.Auth, userRepo data.UserRepository, logger
 			return nil, fmt.Errorf("SERVER_STATIC_TOKEN is not set")
 		}
 		return NewStaticTokenAuth(staticToken), nil
-	case "acl":
+	case "acl", "token":
 		if userRepo == nil {
 			return nil, fmt.Errorf("user repository is required for auth type: %s", cfg.Type)
 		}

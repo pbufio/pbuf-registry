@@ -18,11 +18,23 @@ import (
 )
 
 var (
-	ErrInvalidPageToken = errors.New("invalid page token")
-	ErrModuleNotFound   = errors.New("module not found")
-	ErrTagAlreadyExists = errors.New("tag already exists")
-	ErrTagNotFound      = errors.New("tag not found")
+	ErrInvalidPageToken      = errors.New("invalid page token")
+	ErrModuleNotFound        = errors.New("module not found")
+	ErrTagAlreadyExists      = errors.New("tag already exists")
+	ErrTagNotFound           = errors.New("tag not found")
+	ErrDependencyTagNotFound = errors.New("dependency tag not found")
 )
+
+const maxModuleTags = 500
+
+func scopedUserIDFromContext(ctx context.Context) *uuid.UUID {
+	if !model.IsAdmin(ctx) {
+		if user, ok := model.GetUserFromContext(ctx); ok && user != nil {
+			return &user.ID
+		}
+	}
+	return nil
+}
 
 type RegistryRepository interface {
 	RegisterModule(ctx context.Context, moduleName string) error
@@ -84,8 +96,8 @@ func (r *registryRepo) GetModuleWithDrafts(ctx context.Context, name string, inc
 
 	// fetch tags
 	tags, err := r.pool.Query(ctx,
-		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
-		module.Id)
+		"SELECT tag FROM tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT $2",
+		module.Id, maxModuleTags)
 	if err != nil {
 		// tags not found
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -115,8 +127,8 @@ func (r *registryRepo) GetModuleWithDrafts(ctx context.Context, name string, inc
 
 	// fetch draft tags
 	draftTags, err := r.pool.Query(ctx,
-		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT 10",
-		module.Id)
+		"SELECT tag FROM draft_tags WHERE module_id = $1 ORDER BY updated_at DESC, tag DESC LIMIT $2",
+		module.Id, maxModuleTags)
 	if err != nil {
 		// tags not found
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -157,13 +169,8 @@ func (r *registryRepo) ListModules(ctx context.Context, pageSize int, token stri
 		modules      []*v1.Module
 		rows         pgx.Rows
 		err          error
-		scopedUserID *uuid.UUID
+		scopedUserID = scopedUserIDFromContext(ctx)
 	)
-	if !model.IsAdmin(ctx) {
-		if user, ok := model.GetUserFromContext(ctx); ok && user != nil {
-			scopedUserID = &user.ID
-		}
-	}
 
 	var startAfter string
 	if token != "" {
@@ -469,8 +476,8 @@ func (r *registryRepo) PushModule(ctx context.Context, name string, tag string, 
 	}
 
 	module.Tags = append([]string{tag}, module.Tags...)
-	if len(module.Tags) > 10 {
-		module.Tags = module.Tags[:10]
+	if len(module.Tags) > maxModuleTags {
+		module.Tags = module.Tags[:maxModuleTags]
 	}
 
 	return module, nil
@@ -655,6 +662,9 @@ func (r *registryRepo) insertDependenciesTx(ctx context.Context, tx pgx.Tx, tagI
 			"SELECT id FROM tags WHERE module_id = (SELECT id FROM modules WHERE name = $1) AND tag = $2",
 			dependency.Name, dependency.Tag).Scan(&dependencyTagId)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("dependency %s:%s not found: %w", dependency.Name, dependency.Tag, ErrDependencyTagNotFound)
+			}
 			return fmt.Errorf("could not find tag %s for module %s: %w", dependency.Tag, dependency.Name, err)
 		}
 
@@ -700,7 +710,14 @@ func (r *registryRepo) GetModuleDependencies(ctx context.Context, name string, t
 		JOIN tags t ON d.dependency_tag_id = t.id
 		JOIN modules m ON t.module_id = m.id
 		WHERE d.tag_id = $1
-	`, tagId)
+			AND ($2::uuid IS NULL OR EXISTS (
+				SELECT 1 FROM acl a
+				WHERE a.user_id = $2
+					AND a.permission IN ('read', 'write', 'admin')
+					AND (a.module_name = '*' OR a.module_name = m.name)
+			))
+		ORDER BY m.name ASC, t.tag ASC
+	`, tagId, scopedUserIDFromContext(ctx))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*v1.Dependency{}, nil

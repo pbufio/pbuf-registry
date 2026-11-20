@@ -54,7 +54,7 @@ func Test_userRepository_CreateUser(t *testing.T) {
 
 			err := r.CreateUser(context.Background(), tt.user)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.ErrorIs(t, err, ErrUserAlreadyExists)
 				return
 			}
 
@@ -455,4 +455,64 @@ func Test_userRepository_DeleteUser(t *testing.T) {
 			assert.ErrorIs(t, err, ErrUserNotFound)
 		})
 	}
+}
+
+func Test_userRepository_TokenBackfillCacheAndEviction(t *testing.T) {
+	ctx := context.Background()
+	r := suite.userRepository
+
+	plainToken := "pbuf_user_legacy-null-lookup-token"
+	u := &model.User{
+		Name:     "legacy-null-lookup-user",
+		Token:    plainToken,
+		Type:     model.UserTypeUser,
+		IsActive: true,
+	}
+	require.NoError(t, r.CreateUser(ctx, u))
+
+	// Simulate pre-migration user with NULL token_lookup
+	_, err := suite.pool.Exec(ctx, `UPDATE users SET token_lookup = NULL WHERE id = $1`, u.ID)
+	require.NoError(t, err)
+
+	// First GetUserByToken should verify via bcrypt, backfill token_lookup, and populate cache
+	got, err := r.GetUserByToken(ctx, plainToken)
+	require.NoError(t, err)
+	assert.Equal(t, u.ID, got.ID)
+
+	var storedLookup *string
+	require.NoError(t, suite.pool.QueryRow(ctx, `SELECT token_lookup FROM users WHERE id = $1`, u.ID).Scan(&storedLookup))
+	require.NotNil(t, storedLookup)
+	assert.Len(t, *storedLookup, 64)
+
+	// Mutating returned pointer must not corrupt cached entry
+	got.Name = "mutated-by-caller"
+	cachedHit, err := r.GetUserByToken(ctx, plainToken)
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-null-lookup-user", cachedHit.Name)
+
+	// Duplicate rename must return ErrUserAlreadyExists
+	other := &model.User{
+		Name:     "collision-target-user",
+		Token:    "pbuf_user_collision-tok",
+		Type:     model.UserTypeUser,
+		IsActive: true,
+	}
+	require.NoError(t, r.CreateUser(ctx, other))
+	other.Name = "legacy-null-lookup-user"
+	assert.ErrorIs(t, r.UpdateUser(ctx, other), ErrUserAlreadyExists)
+
+	// Deactivating user via UpdateUser must evict cached token immediately
+	u.IsActive = false
+	require.NoError(t, r.UpdateUser(ctx, u))
+	_, err = r.GetUserByToken(ctx, plainToken)
+	assert.ErrorIs(t, err, ErrUserNotFound)
+
+	// Reactivate, warm cache, then DeleteUser must evict cached token immediately
+	u.IsActive = true
+	require.NoError(t, r.UpdateUser(ctx, u))
+	_, err = r.GetUserByToken(ctx, plainToken)
+	require.NoError(t, err)
+	require.NoError(t, r.DeleteUser(ctx, u.ID))
+	_, err = r.GetUserByToken(ctx, plainToken)
+	assert.ErrorIs(t, err, ErrUserNotFound)
 }

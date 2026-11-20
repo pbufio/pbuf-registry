@@ -10,6 +10,7 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
 	"github.com/google/uuid"
+	v1 "github.com/pbufio/pbuf-registry/gen/pbuf-registry/v1"
 	"github.com/pbufio/pbuf-registry/internal/data"
 	"github.com/pbufio/pbuf-registry/internal/model"
 )
@@ -60,7 +61,7 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 
 		operation := serverContext.Operation()
 
-		if strings.Contains(operation, "/AcknowledgeDriftEvent") && a.driftRepo != nil {
+		if operation == v1.OperationDriftServiceAcknowledgeDriftEvent && a.driftRepo != nil {
 			allowed, err := a.authorizeAcknowledgeDriftEvent(ctx, user, req)
 			if err != nil {
 				a.logger.Errorf("failed to authorize drift event acknowledgement for user %s: %v", user.ID, err)
@@ -92,6 +93,12 @@ func (a *authzMiddleware) handle(handler middleware.Handler) middleware.Handler 
 			return nil, ErrPermissionDenied
 		}
 
+		if operation == v1.OperationRegistryPushModule {
+			if err := a.authorizePushDependencies(ctx, user, moduleName, req); err != nil {
+				return nil, err
+			}
+		}
+
 		return handler(ctx, req)
 	}
 }
@@ -120,67 +127,77 @@ func (a *authzMiddleware) authorizeAcknowledgeDriftEvent(ctx context.Context, us
 	return false, nil
 }
 
-// getRequiredPermission determines the required permission level based on the gRPC method
-func getRequiredPermission(operation string, req interface{}) (model.Permission, string) {
-	// UserService operations - only admin can access
-	if strings.Contains(operation, "UserService/") {
-		return model.PermissionAdmin, "*"
+func (a *authzMiddleware) authorizePushDependencies(ctx context.Context, user *model.User, moduleName string, req interface{}) error {
+	type dependenciesGetter interface {
+		GetDependencies() []*v1.Dependency
 	}
-
-	// Metadata service operations
-	if strings.Contains(operation, "MetadataService/") {
-		// Read operations
-		moduleName := extractModuleName(req)
-		return model.PermissionRead, moduleName
+	r, ok := req.(dependenciesGetter)
+	if !ok {
+		return nil
 	}
-
-	// DriftService operations
-	if strings.Contains(operation, "DriftService/") {
-		switch {
-		case strings.Contains(operation, "/ListDriftEvents"):
-			// Global read operation
-			return model.PermissionRead, "*"
-		case strings.Contains(operation, "/GetModuleDriftEvents"),
-			strings.Contains(operation, "/GetModuleDependencyDriftStatus"):
-			// Module-scoped read operations
-			moduleName := extractModuleName(req)
-			return model.PermissionRead, moduleName
-		case strings.Contains(operation, "/AcknowledgeDriftEvent"):
-			// Write operation - acknowledging drift events
-			return model.PermissionWrite, "*"
-		default:
-			return model.PermissionRead, "*"
+	checked := make(map[string]struct{}, len(r.GetDependencies()))
+	for _, dep := range r.GetDependencies() {
+		if dep == nil {
+			continue
+		}
+		depName := dep.GetName()
+		if depName == "" || depName == moduleName {
+			continue
+		}
+		if _, seen := checked[depName]; seen {
+			continue
+		}
+		checked[depName] = struct{}{}
+		allowed, err := a.aclRepo.CheckPermission(ctx, user.ID, depName, model.PermissionRead)
+		if err != nil {
+			a.logger.Errorf("failed to check read permission for user %s on dependency %s: %v", user.ID, depName, err)
+			return ErrPermissionDenied
+		}
+		if !allowed {
+			a.logger.Warnf("user %s does not have read permission on dependency %s", user.Name, depName)
+			return ErrPermissionDenied
 		}
 	}
+	return nil
+}
 
-	// Registry service operations
-	switch {
-	case strings.Contains(operation, "/ListModules"):
-		// ListModules filters results to permitted modules in the repository layer
+// getRequiredPermission determines the required permission level based on the gRPC method
+func getRequiredPermission(operation string, req interface{}) (model.Permission, string) {
+	if strings.HasPrefix(operation, "/grpc.health.v1.Health/") {
+		return "", ""
+	}
+
+	switch operation {
+	case v1.OperationRegistryListModules, "/pbufregistry.v1.MCP/Handle":
+		// ListModules filters results per-module in the repository layer;
+		// MCP/Handle authenticates discovery/session calls and re-invokes middleware per tool call.
 		return "", ""
 
-	case strings.Contains(operation, "/GetModule"),
-		strings.Contains(operation, "/PullModule"),
-		strings.Contains(operation, "/GetModuleDependencies"):
-		// Read operations
-		moduleName := extractModuleName(req)
-		return model.PermissionRead, moduleName
+	case v1.OperationRegistryGetModule,
+		v1.OperationRegistryPullModule,
+		v1.OperationRegistryGetModuleDependencies,
+		v1.OperationMetadataServiceGetMetadata,
+		v1.OperationDriftServiceGetModuleDriftEvents,
+		v1.OperationDriftServiceGetModuleDependencyDriftStatus:
+		return model.PermissionRead, extractModuleName(req)
 
-	case strings.Contains(operation, "/RegisterModule"),
-		strings.Contains(operation, "/PushModule"):
-		// Write operations
-		moduleName := extractModuleName(req)
-		return model.PermissionWrite, moduleName
+	case v1.OperationDriftServiceListDriftEvents:
+		return model.PermissionRead, "*"
 
-	case strings.Contains(operation, "/DeleteModule"),
-		strings.Contains(operation, "/DeleteModuleTag"):
-		// Admin operations
-		moduleName := extractModuleName(req)
-		return model.PermissionAdmin, moduleName
+	case v1.OperationRegistryRegisterModule,
+		v1.OperationRegistryPushModule:
+		return model.PermissionWrite, extractModuleName(req)
+
+	case v1.OperationDriftServiceAcknowledgeDriftEvent:
+		return model.PermissionWrite, "*"
+
+	case v1.OperationRegistryDeleteModule,
+		v1.OperationRegistryDeleteModuleTag:
+		return model.PermissionAdmin, extractModuleName(req)
 
 	default:
-		// No permission check required (e.g., health checks)
-		return "", ""
+		// UserService and any unlisted operations default-deny to global admin.
+		return model.PermissionAdmin, "*"
 	}
 }
 
