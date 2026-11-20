@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
@@ -66,13 +69,20 @@ func newDaemonCommand(
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: short,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			daemon, err := buildDaemon()
 			if err != nil {
 				return err
 			}
+			baseCtx := cmd.Context()
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			ctx, stop := signal.NotifyContext(baseCtx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+
 			if once {
-				return daemon.Run()
+				return daemon.Run(ctx)
 			}
 			if launcher.buildDebugApp == nil {
 				return fmt.Errorf("debug server is not configured")
@@ -85,18 +95,18 @@ func newDaemonCommand(
 			if cfg := launcher.getConfig(); cfg != nil {
 				cronSchedule = scheduleOf(cfg)
 			}
-			return runBackgroundDaemon(cronSchedule, daemon, debugApp)
+			return runBackgroundDaemon(ctx, cronSchedule, daemon, debugApp)
 		},
 	}
 	cmd.Flags().BoolVar(&once, "once", false, fmt.Sprintf("Run %s once and exit", use))
 	return cmd
 }
 
-func registerDaemonJob(s gocron.Scheduler, cronSchedule string, daemon background.Daemon) (gocron.Job, error) {
+func registerDaemonJob(ctx context.Context, s gocron.Scheduler, cronSchedule string, daemon background.Daemon) (gocron.Job, error) {
 	return s.NewJob(
 		gocron.CronJob(cronSchedule, false),
 		gocron.NewTask(func() {
-			if err := daemon.Run(); err != nil {
+			if err := daemon.Run(ctx); err != nil {
 				log.Errorf("failed to run %s daemon: %v", daemon.Name(), err)
 			}
 		}),
@@ -104,13 +114,16 @@ func registerDaemonJob(s gocron.Scheduler, cronSchedule string, daemon backgroun
 	)
 }
 
-func runBackgroundDaemon(cronSchedule string, daemon background.Daemon, debugApp appRunner) error {
+func runBackgroundDaemon(parentCtx context.Context, cronSchedule string, daemon background.Daemon, debugApp appRunner) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
 	if err != nil {
 		return fmt.Errorf("failed to create scheduler: %w", err)
 	}
 
-	if _, err := registerDaemonJob(s, cronSchedule, daemon); err != nil {
+	if _, err := registerDaemonJob(ctx, s, cronSchedule, daemon); err != nil {
 		_ = s.Shutdown()
 		return fmt.Errorf("failed to create cron job: %w", err)
 	}
@@ -118,6 +131,7 @@ func runBackgroundDaemon(cronSchedule string, daemon background.Daemon, debugApp
 	s.Start()
 
 	runErr := debugApp.Run()
+	cancel()
 	if shutdownErr := s.Shutdown(); shutdownErr != nil {
 		log.Errorf("failed to shutdown scheduler: %v", shutdownErr)
 	}

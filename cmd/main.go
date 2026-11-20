@@ -116,12 +116,16 @@ func run() int {
 				kratos.Server(
 					server.NewGRPCServer(&cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
 					server.NewHTTPServer(&cfg.Server, registryServer, metadataServer, usersServer, driftServer, userRepository, aclRepository, logger),
-					server.NewDebugServer(&cfg.Server, logger),
+					server.NewDebugServer(&cfg.Server, logger, p.Ping),
 				),
 			), nil
 		},
 		buildDebugApp: func() (appRunner, error) {
 			cfg := loadCfg()
+			p, err := getPool()
+			if err != nil {
+				return nil, err
+			}
 			return kratos.New(
 				kratos.ID(id),
 				kratos.Name(Name),
@@ -129,7 +133,7 @@ func run() int {
 				kratos.Metadata(map[string]string{}),
 				kratos.Logger(logger),
 				kratos.Server(
-					server.NewDebugServer(&cfg.Server, logger),
+					server.NewDebugServer(&cfg.Server, logger, p.Ping),
 				),
 			), nil
 		},
@@ -139,7 +143,7 @@ func run() int {
 				return nil, err
 			}
 			registryRepository := data.NewRegistryRepository(p, logger)
-			return background.NewCompactionDaemon(registryRepository, logger), nil
+			return background.WithAdvisoryLock(p, background.CompactionLockID, background.NewCompactionDaemon(registryRepository, logger), logger), nil
 		},
 		buildProtoParsingDaemon: func() (background.Daemon, error) {
 			cfg := loadCfg()
@@ -153,7 +157,7 @@ func run() int {
 			}
 			metadataRepository := data.NewMetadataRepository(p, logger)
 			driftRepository := data.NewDriftRepository(p, logger)
-			return background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger, driftNotifier), nil
+			return background.WithAdvisoryLock(p, background.ProtoParsingLockID, background.NewProtoParsingDaemon(metadataRepository, driftRepository, logger, driftNotifier), logger), nil
 		},
 	}
 

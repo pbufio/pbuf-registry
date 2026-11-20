@@ -214,10 +214,20 @@ func TestRegistryServer_ErrorCodesAndDraftFallback(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, kerrors.IsNotFound(err))
 
-	// Empty arguments return 400 BadRequest instead of 500
+	// Empty or wildcard/malformed arguments return 400 BadRequest instead of hitting repo
 	_, err = srv.RegisterModule(ctx, &v1.RegisterModuleRequest{})
 	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.RegisterModule(ctx, &v1.RegisterModuleRequest{Name: "*"})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.RegisterModule(ctx, &v1.RegisterModuleRequest{Name: "../escape"})
+	assert.True(t, kerrors.IsBadRequest(err))
 	_, err = srv.DeleteModule(ctx, &v1.DeleteModuleRequest{})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{ModuleName: "*"})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{ModuleName: "org/svc", Tag: "*"})
+	assert.True(t, kerrors.IsBadRequest(err))
+	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{ModuleName: "org/svc", Tag: "feat/slash"})
 	assert.True(t, kerrors.IsBadRequest(err))
 	_, err = srv.PushModule(ctx, &v1.PushModuleRequest{ModuleName: "org/svc"})
 	assert.True(t, kerrors.IsBadRequest(err))

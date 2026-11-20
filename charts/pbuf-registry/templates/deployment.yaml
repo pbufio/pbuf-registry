@@ -62,8 +62,9 @@ spec:
               port: debug
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: debug
+            timeoutSeconds: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

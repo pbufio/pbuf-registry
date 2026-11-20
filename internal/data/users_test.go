@@ -501,18 +501,30 @@ func Test_userRepository_TokenBackfillCacheAndEviction(t *testing.T) {
 	other.Name = "legacy-null-lookup-user"
 	assert.ErrorIs(t, r.UpdateUser(ctx, other), ErrUserAlreadyExists)
 
-	// Deactivating user via UpdateUser must evict cached token immediately
+	// Warm GetUserByName cache as well
+	byName, err := r.GetUserByName(ctx, "legacy-null-lookup-user")
+	require.NoError(t, err)
+	assert.True(t, byName.IsActive)
+
+	// Deactivating user via UpdateUser must evict cached token and name immediately
 	u.IsActive = false
 	require.NoError(t, r.UpdateUser(ctx, u))
 	_, err = r.GetUserByToken(ctx, plainToken)
 	assert.ErrorIs(t, err, ErrUserNotFound)
+	byNameAfterDeactivate, err := r.GetUserByName(ctx, "legacy-null-lookup-user")
+	require.NoError(t, err)
+	assert.False(t, byNameAfterDeactivate.IsActive)
 
-	// Reactivate, warm cache, then DeleteUser must evict cached token immediately
+	// Reactivate, warm both caches, then DeleteUser must evict both immediately
 	u.IsActive = true
 	require.NoError(t, r.UpdateUser(ctx, u))
 	_, err = r.GetUserByToken(ctx, plainToken)
 	require.NoError(t, err)
+	_, err = r.GetUserByName(ctx, "legacy-null-lookup-user")
+	require.NoError(t, err)
 	require.NoError(t, r.DeleteUser(ctx, u.ID))
 	_, err = r.GetUserByToken(ctx, plainToken)
+	assert.ErrorIs(t, err, ErrUserNotFound)
+	_, err = r.GetUserByName(ctx, "legacy-null-lookup-user")
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }

@@ -193,7 +193,16 @@ service:
 			Exec struct {
 				Command []string `yaml:"command"`
 			} `yaml:"exec"`
+			HTTPGet struct {
+				Path string `yaml:"path"`
+			} `yaml:"httpGet"`
 		} `yaml:"livenessProbe"`
+		ReadinessProbe struct {
+			TimeoutSeconds int `yaml:"timeoutSeconds"`
+			HTTPGet        struct {
+				Path string `yaml:"path"`
+			} `yaml:"httpGet"`
+		} `yaml:"readinessProbe"`
 	}
 	type doc struct {
 		Kind     string        `yaml:"kind"`
@@ -254,10 +263,17 @@ service:
 			require.Len(t, d.Spec.Template.Spec.InitContainers, 1)
 			assert.Equal(t, "migrations", d.Spec.Template.Spec.InitContainers[0].Name)
 			assert.Equal(t, []string{"/app/pbuf-migrations"}, d.Spec.Template.Spec.InitContainers[0].Command)
+			require.Len(t, d.Spec.Template.Spec.Containers, 1)
+			assert.Equal(t, "/healthz", d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path)
+			assert.Equal(t, "/readyz", d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path)
+			assert.Equal(t, 3, d.Spec.Template.Spec.Containers[0].ReadinessProbe.TimeoutSeconds)
 			workerInits[d.Metadata.Name] = true
 
 		case d.Kind == "Deployment" && d.Metadata.Name == "chart-test-pbuf-registry":
 			require.Len(t, d.Spec.Template.Spec.Containers, 1)
+			assert.Equal(t, "/healthz", d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path)
+			assert.Equal(t, "/readyz", d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path)
+			assert.Equal(t, 3, d.Spec.Template.Spec.Containers[0].ReadinessProbe.TimeoutSeconds)
 			for _, e := range d.Spec.Template.Spec.Containers[0].Env {
 				serverEnv[e.Name] = e.Value
 			}

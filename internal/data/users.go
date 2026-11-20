@@ -51,6 +51,7 @@ type userRepo struct {
 	cacheMu    sync.RWMutex
 	cacheGen   uint64
 	tokenCache map[[32]byte]cachedTokenUser
+	nameCache  map[string]cachedTokenUser
 }
 
 func NewUserRepository(pool *pgxpool.Pool, logger log.Logger) UserRepository {
@@ -58,12 +59,30 @@ func NewUserRepository(pool *pgxpool.Pool, logger log.Logger) UserRepository {
 		pool:       pool,
 		logger:     log.NewHelper(log.With(logger, "module", "data/UserRepository")),
 		tokenCache: make(map[[32]byte]cachedTokenUser),
+		nameCache:  make(map[string]cachedTokenUser),
 	}
 }
 
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func putCachedUser[K comparable](m map[K]cachedTokenUser, key K, u model.User, now time.Time) {
+	if len(m) >= maxTokenCacheEntries {
+		for k, entry := range m {
+			if !now.Before(entry.expiresAt) {
+				delete(m, k)
+			}
+		}
+		if len(m) >= maxTokenCacheEntries {
+			clear(m)
+		}
+	}
+	m[key] = cachedTokenUser{
+		user:      u,
+		expiresAt: now.Add(tokenCacheTTL),
+	}
 }
 
 func (r *userRepo) evictUserCache(userID uuid.UUID) {
@@ -73,6 +92,11 @@ func (r *userRepo) evictUserCache(userID uuid.UUID) {
 	for k, entry := range r.tokenCache {
 		if entry.user.ID == userID {
 			delete(r.tokenCache, k)
+		}
+	}
+	for k, entry := range r.nameCache {
+		if entry.user.ID == userID {
+			delete(r.nameCache, k)
 		}
 	}
 }
@@ -110,6 +134,16 @@ func (r *userRepo) GetUser(ctx context.Context, id uuid.UUID) (*model.User, erro
 }
 
 func (r *userRepo) GetUserByName(ctx context.Context, name string) (*model.User, error) {
+	now := time.Now()
+	r.cacheMu.RLock()
+	gen := r.cacheGen
+	if cached, ok := r.nameCache[name]; ok && now.Before(cached.expiresAt) {
+		u := cached.user
+		r.cacheMu.RUnlock()
+		return &u, nil
+	}
+	r.cacheMu.RUnlock()
+
 	var user model.User
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, name, token, type, is_active, created_at, updated_at
@@ -122,6 +156,13 @@ func (r *userRepo) GetUserByName(ctx context.Context, name string) (*model.User,
 		}
 		return nil, fmt.Errorf("could not select user from database: %w", err)
 	}
+
+	r.cacheMu.Lock()
+	if r.cacheGen == gen {
+		putCachedUser(r.nameCache, name, user, now)
+	}
+	r.cacheMu.Unlock()
+
 	return &user, nil
 }
 
@@ -169,20 +210,7 @@ func (r *userRepo) GetUserByToken(ctx context.Context, token string) (*model.Use
 
 	r.cacheMu.Lock()
 	if r.cacheGen == gen {
-		if len(r.tokenCache) >= maxTokenCacheEntries {
-			for k, entry := range r.tokenCache {
-				if !now.Before(entry.expiresAt) {
-					delete(r.tokenCache, k)
-				}
-			}
-			if len(r.tokenCache) >= maxTokenCacheEntries {
-				clear(r.tokenCache)
-			}
-		}
-		r.tokenCache[tokenSum] = cachedTokenUser{
-			user:      user,
-			expiresAt: now.Add(tokenCacheTTL),
-		}
+		putCachedUser(r.tokenCache, tokenSum, user, now)
 	}
 	r.cacheMu.Unlock()
 

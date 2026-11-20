@@ -27,10 +27,10 @@ func (d *compactionDaemon) Name() string {
 	return compactionDaemonName
 }
 
-func (d *compactionDaemon) Run() error {
+func (d *compactionDaemon) Run(ctx context.Context) error {
 	d.log.Infof("Running compaction")
 
-	err := d.registryRepository.DeleteObsoleteDraftTags(context.Background())
+	err := d.registryRepository.DeleteObsoleteDraftTags(ctx)
 	if err != nil {
 		d.log.Errorf("DeleteObsoleteDraftTags error: %v", err)
 		return err

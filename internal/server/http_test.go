@@ -3,9 +3,11 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,9 +43,15 @@ func TestServersDoNotExposeDefaultServeMux(t *testing.T) {
 	cfg.Debug.Addr = "127.0.0.1:0"
 	cfg.Debug.Timeout = time.Second
 
+	var dbUnhealthy atomic.Bool
 	logger := log.NewStdLogger(io.Discard)
 	httpSrv := NewHTTPServer(cfg, &RegistryServer{}, &MetadataServer{}, &UsersServer{}, &DriftServer{}, nil, nil, logger)
-	debugSrv := NewDebugServer(cfg, logger)
+	debugSrv := NewDebugServer(cfg, logger, func(context.Context) error {
+		if dbUnhealthy.Load() {
+			return errors.New("postgres down")
+		}
+		return nil
+	})
 
 	t.Run("http server returns 404 and 405 without hitting DefaultServeMux", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -58,11 +66,34 @@ func TestServersDoNotExposeDefaultServeMux(t *testing.T) {
 		assert.Equal(t, http.StatusMethodNotAllowed, methodRec.Code)
 	})
 
-	t.Run("debug server serves healthz and blocks DefaultServeMux", func(t *testing.T) {
+	t.Run("debug server serves healthz, readyz with DB check, and blocks DefaultServeMux", func(t *testing.T) {
 		okRec := httptest.NewRecorder()
 		okReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 		debugSrv.ServeHTTP(okRec, okReq)
 		require.Equal(t, http.StatusOK, okRec.Code)
+
+		readyRec := httptest.NewRecorder()
+		readyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		debugSrv.ServeHTTP(readyRec, readyReq)
+		require.Equal(t, http.StatusOK, readyRec.Code)
+
+		dbUnhealthy.Store(true)
+		defer dbUnhealthy.Store(false)
+
+		unreadyRec := httptest.NewRecorder()
+		unreadyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		debugSrv.ServeHTTP(unreadyRec, unreadyReq)
+		require.Equal(t, http.StatusServiceUnavailable, unreadyRec.Code)
+		assert.Contains(t, unreadyRec.Body.String(), "unavailable")
+
+		// liveness /healthz stays 200 even while DB is down
+		liveRec := httptest.NewRecorder()
+		debugSrv.ServeHTTP(liveRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+		require.Equal(t, http.StatusOK, liveRec.Code)
+
+		postReadyRec := httptest.NewRecorder()
+		debugSrv.ServeHTTP(postReadyRec, httptest.NewRequest(http.MethodPost, "/readyz", nil))
+		assert.Equal(t, http.StatusMethodNotAllowed, postReadyRec.Code)
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, leakedRoute, nil)
