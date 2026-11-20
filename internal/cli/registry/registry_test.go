@@ -27,7 +27,8 @@ func (s *stubRegistryClient) PullModule(_ context.Context, _ *v1.PullModuleReque
 
 func TestVendorRegistryModule(t *testing.T) {
 	tmpDir := t.TempDir()
-	outDir := filepath.Join(tmpDir, "vendor")
+	t.Chdir(tmpDir)
+	outDir := "vendor"
 
 	client := &stubRegistryClient{
 		pullResp: &v1.PullModuleResponse{
@@ -96,6 +97,33 @@ func TestVendorRegistryModule(t *testing.T) {
 	require.NoError(t, VendorRegistryModule(unfilteredMod, client, nil))
 	_, err = os.Stat(filepath.Join(outDir, "go.mod"))
 	assert.True(t, os.IsNotExist(err))
+
+	// Reject absolute or traversal output folders and traversal module paths
+	require.ErrorContains(t, VendorRegistryModule(&model.Module{
+		Name:         "org/users",
+		Tag:          "v1.0.0",
+		OutputFolder: filepath.Join(t.TempDir(), "outside"),
+	}, client, nil), "must be relative to workspace")
+	require.ErrorContains(t, VendorRegistryModule(&model.Module{
+		Name:         "org/users",
+		Tag:          "v1.0.0",
+		OutputFolder: "../outside",
+	}, client, nil), "must stay within workspace")
+	require.ErrorContains(t, VendorRegistryModule(&model.Module{
+		Name: "org/users",
+		Tag:  "v1.0.0",
+		Path: "../outside",
+	}, client, nil), "must not traverse outside module root")
+
+	// Reject writing through symlinked output directory
+	outsideDir := t.TempDir()
+	require.NoError(t, os.Symlink(outsideDir, "symlink-vendor"))
+	require.ErrorContains(t, VendorRegistryModule(&model.Module{
+		Name:         "org/users",
+		Tag:          "v1.0.0",
+		Path:         "api/v1",
+		OutputFolder: "symlink-vendor",
+	}, client, nil), "refusing to write vendored proto through symlink")
 }
 
 func TestCollectProtoFilesInDirs(t *testing.T) {

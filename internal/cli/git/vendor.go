@@ -24,6 +24,15 @@ import (
 func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []patcher.Patcher) error {
 	log.Printf("start vendoring .proto files. repo: %s, path: %s", module.Repository, module.Path)
 
+	outputRoot, err := patcher.NormalizeRelativeDir(module.OutputFolder)
+	if err != nil {
+		return err
+	}
+	moduleSubpath, err := patcher.NormalizeModuleSubpath(module.Path)
+	if err != nil {
+		return err
+	}
+
 	var reference plumbing.ReferenceName
 	if module.Branch != "" {
 		reference = plumbing.NewBranchReferenceName(module.Branch)
@@ -59,17 +68,22 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 		return err
 	}
 
-	modulePath := filepath.Clean(module.Path)
-	if strings.HasSuffix(modulePath, ".proto") {
-		modulePath = filepath.Dir(modulePath)
+	walkRoot := "."
+	moduleDir := "."
+	if moduleSubpath != "" {
+		walkRoot = filepath.ToSlash(moduleSubpath)
+		moduleDir = moduleSubpath
+		if strings.HasSuffix(moduleDir, ".proto") {
+			moduleDir = filepath.Dir(moduleDir)
+		}
 	}
 
-	baseDir := modulePath
-	if module.OutputFolder != "" {
-		baseDir = module.OutputFolder
+	baseDir := moduleDir
+	if outputRoot != "" {
+		baseDir = outputRoot
 	}
 
-	err = util.Walk(fs, module.Path, func(path string, info os.FileInfo, walkErr error) error {
+	err = util.Walk(fs, walkRoot, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			log.Printf("failed to walk by path: %s", path)
 			return walkErr
@@ -78,8 +92,9 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 			return nil
 		}
 
-		outputPath := path
-		if relPath, relErr := filepath.Rel(modulePath, path); relErr == nil {
+		cleanWalkPath := filepath.Clean(filepath.FromSlash(path))
+		outputPath := cleanWalkPath
+		if relPath, relErr := filepath.Rel(moduleDir, cleanWalkPath); relErr == nil {
 			outputPath = filepath.Join(baseDir, relPath)
 		}
 
@@ -93,35 +108,7 @@ func VendorGitModule(module *model.Module, netrcAuth *netrc.Netrc, patchers []pa
 			return fmt.Errorf("failed to read file contents in repository %s: %w", path, err)
 		}
 
-		content := string(fileContents)
-		outputDir := filepath.Dir(outputPath)
-
-		if module.GenerateOutputFolder != "" {
-			genDir := filepath.Join(module.GenerateOutputFolder, outputDir)
-			if module.OutputFolder != "" {
-				if rel, relErr := filepath.Rel(module.OutputFolder, outputDir); relErr == nil {
-					genDir = filepath.Join(module.GenerateOutputFolder, rel)
-				}
-			}
-			patched, patchErr := patcher.ApplyPatchers(
-				patchers,
-				genDir,
-				content,
-			)
-			if patchErr != nil {
-				log.Printf("failed to patch file %s: %v", outputPath, patchErr)
-			} else {
-				content = patched
-			}
-		}
-
-		if err := os.MkdirAll(outputDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", outputDir, err)
-		}
-		if err := os.WriteFile(outputPath, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", outputPath, err)
-		}
-		return nil
+		return patcher.WriteVendoredProto(outputPath, outputRoot, module.GenerateOutputFolder, string(fileContents), patchers)
 	})
 	if err != nil {
 		return err

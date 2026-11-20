@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/yoheimuta/go-protoparser/v4"
-	"github.com/yoheimuta/go-protoparser/v4/interpret/unordered"
+	"github.com/yoheimuta/go-protoparser/v4/parser"
 )
 
 type GoPackagePatcher struct {
@@ -43,19 +43,31 @@ func sanitizeGoPackageIdent(raw string) string {
 	return ident
 }
 
+func hasUnsafeGoImportChars(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool {
+		return r <= ' ' || r == '"' || r == '\\' || r == ';' || r == '\'' || r == '`' || r == 0x7f
+	}) != -1
+}
+
 func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
+	if strings.TrimSpace(p.goModule) == "" || hasUnsafeGoImportChars(p.goModule) {
+		return "", fmt.Errorf("invalid Go module path %q", p.goModule)
+	}
+
 	parsed, err := protoparser.Parse(strings.NewReader(content))
 	if err != nil {
 		return "", err
 	}
 
-	proto, err := unordered.InterpretProto(parsed)
-	if err != nil {
-		return "", err
+	rawOut := strings.TrimSpace(outputPath)
+	cleaned := path.Clean(strings.ReplaceAll(rawOut, `\`, "/"))
+	normalizedPath := strings.Trim(cleaned, "/")
+	if normalizedPath != "" && normalizedPath != "." {
+		if normalizedPath == ".." || strings.HasPrefix(normalizedPath, "../") || hasUnsafeGoImportChars(normalizedPath) {
+			return "", fmt.Errorf("invalid go_package output path %q", outputPath)
+		}
 	}
 
-	cleaned := path.Clean(strings.ReplaceAll(outputPath, `\`, "/"))
-	normalizedPath := strings.Trim(cleaned, "/")
 	var goPackage string
 	if normalizedPath == "" || normalizedPath == "." {
 		pkgAlias := sanitizeGoPackageIdent(path.Base(p.goModule))
@@ -65,26 +77,67 @@ func (p *GoPackagePatcher) Patch(outputPath, content string) (string, error) {
 		goPackage = fmt.Sprintf(`option go_package = "%s/%s;%s";`, p.goModule, normalizedPath, pkgAlias)
 	}
 
-	for _, option := range proto.ProtoBody.Options {
-		if option.OptionName == "go_package" {
+	for _, elem := range parsed.ProtoBody {
+		option, ok := elem.(*parser.Option)
+		if !ok {
+			continue
+		}
+		if option.OptionName == "go_package" || option.OptionName == "(go_package)" {
 			start := option.Meta.Pos.Offset
 			end := option.Meta.LastPos.Offset
 			if start >= 0 && end >= start && end < len(content) {
 				return content[:start] + goPackage + content[end+1:], nil
 			}
-			splitted := strings.Split(content, "\n")
-			splitted[option.Meta.Pos.Line-1] = goPackage
-			return strings.Join(splitted, "\n"), nil
+			return "", fmt.Errorf("invalid go_package option byte offsets [%d:%d]", start, end)
 		}
 	}
 
-	// if no go_package option, add it
-	splitted := strings.Split(content, "\n")
-	line := 0
-	if proto.Syntax != nil {
-		line = proto.Syntax.Meta.LastPos.Line
+	eol := "\n"
+	if strings.Contains(content, "\r\n") {
+		eol = "\r\n"
 	}
-	splitted = append(splitted[:line], append([]string{goPackage}, splitted[line:]...)...)
 
-	return strings.Join(splitted, "\n"), nil
+	headerEnd := -1
+	if parsed.Syntax != nil {
+		headerEnd = parsed.Syntax.Meta.LastPos.Offset
+	} else if parsed.Edition != nil {
+		headerEnd = parsed.Edition.Meta.LastPos.Offset
+	}
+
+	if headerEnd < 0 {
+		const utf8BOM = "\uFEFF"
+		if strings.HasPrefix(content, utf8BOM) {
+			body := content[len(utf8BOM):]
+			if body == "" {
+				return utf8BOM + goPackage, nil
+			}
+			return utf8BOM + goPackage + eol + body, nil
+		}
+		if content == "" {
+			return goPackage, nil
+		}
+		return goPackage + eol + content, nil
+	}
+
+	insertAt := headerEnd + 1
+	if insertAt < 0 || insertAt > len(content) {
+		return "", fmt.Errorf("invalid header statement end offset %d", headerEnd)
+	}
+	rest := strings.TrimLeft(content[insertAt:], " \t")
+	if strings.HasPrefix(rest, "//") {
+		if nl := strings.IndexAny(content[insertAt:], "\r\n"); nl >= 0 {
+			insertAt += nl
+			rest = content[insertAt:]
+		} else {
+			insertAt = len(content)
+			rest = ""
+		}
+	}
+	if rest == "" {
+		return content[:insertAt] + eol + goPackage, nil
+	}
+	if rest[0] == '\n' || rest[0] == '\r' {
+		return content[:insertAt] + eol + goPackage + rest, nil
+	}
+	return content[:insertAt] + eol + goPackage + eol + rest, nil
 }

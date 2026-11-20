@@ -94,10 +94,52 @@ func NewLoginCmd(config *model.Config, usr *user.User, auth *netrc.Netrc) *cobra
 
 var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
-func runDeviceCodeFlow(ctx context.Context, issuer, clientID, scope string, out io.Writer) (string, error) {
-	httpClient := oidcHTTPClient
+const maxOIDCResponseBytes = 1 << 20 // 1 MiB
 
-	discoveryURL := strings.TrimSuffix(strings.TrimSpace(issuer), "/") + "/.well-known/openid-configuration"
+func validateOIDCEndpoint(rawEndpoint, issuerScheme string) error {
+	u, err := url.Parse(strings.TrimSpace(rawEndpoint))
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return fmt.Errorf("invalid OIDC endpoint URL %q", rawEndpoint)
+	}
+	if issuerScheme == "https" && u.Scheme != "https" {
+		return fmt.Errorf("OIDC endpoint %q must use https when issuer uses https", rawEndpoint)
+	}
+	return nil
+}
+
+func postFormWithContext(ctx context.Context, client *http.Client, endpoint string, form url.Values) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return client.Do(req)
+}
+
+var errOIDCRedirectBlocked = errors.New("OIDC redirect blocked")
+
+func runDeviceCodeFlow(ctx context.Context, issuer, clientID, scope string, out io.Writer) (string, error) {
+	trimmedIssuer := strings.TrimSuffix(strings.TrimSpace(issuer), "/")
+	issuerURL, err := url.Parse(trimmedIssuer)
+	if err != nil || issuerURL.Host == "" || (issuerURL.Scheme != "https" && issuerURL.Scheme != "http") {
+		return "", fmt.Errorf("invalid OIDC issuer URL %q", issuer)
+	}
+
+	clientCopy := *oidcHTTPClient
+	if clientCopy.CheckRedirect == nil {
+		clientCopy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("%w: stopped after 10 redirects", errOIDCRedirectBlocked)
+			}
+			if err := validateOIDCEndpoint(req.URL.String(), issuerURL.Scheme); err != nil {
+				return fmt.Errorf("%w: %w", errOIDCRedirectBlocked, err)
+			}
+			return nil
+		}
+	}
+	httpClient := &clientCopy
+
+	discoveryURL := trimmedIssuer + "/.well-known/openid-configuration"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
 	if err != nil {
 		return "", err
@@ -114,30 +156,36 @@ func runDeviceCodeFlow(ctx context.Context, issuer, clientID, scope string, out 
 	}
 
 	var meta oidcProviderMetadata
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxOIDCResponseBytes)).Decode(&meta); err != nil {
 		return "", fmt.Errorf("failed to decode OIDC discovery metadata: %w", err)
 	}
 	if meta.DeviceAuthorizationEndpoint == "" || meta.TokenEndpoint == "" {
 		return "", errors.New("OIDC provider does not advertise device_authorization_endpoint or token_endpoint")
+	}
+	if err := validateOIDCEndpoint(meta.DeviceAuthorizationEndpoint, issuerURL.Scheme); err != nil {
+		return "", err
+	}
+	if err := validateOIDCEndpoint(meta.TokenEndpoint, issuerURL.Scheme); err != nil {
+		return "", err
 	}
 
 	form := url.Values{
 		"client_id": {clientID},
 		"scope":     {scope},
 	}
-	devResp, err := httpClient.PostForm(meta.DeviceAuthorizationEndpoint, form)
+	devResp, err := postFormWithContext(ctx, httpClient, meta.DeviceAuthorizationEndpoint, form)
 	if err != nil {
 		return "", fmt.Errorf("failed to start device authorization: %w", err)
 	}
 	defer func() { _ = devResp.Body.Close() }()
 
 	if devResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(devResp.Body)
+		body, _ := io.ReadAll(io.LimitReader(devResp.Body, maxOIDCResponseBytes))
 		return "", fmt.Errorf("device authorization failed (status %d): %s", devResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var devAuth deviceAuthResponse
-	if err := json.NewDecoder(devResp.Body).Decode(&devAuth); err != nil {
+	if err := json.NewDecoder(io.LimitReader(devResp.Body, maxOIDCResponseBytes)).Decode(&devAuth); err != nil {
 		return "", fmt.Errorf("failed to decode device authorization response: %w", err)
 	}
 
@@ -149,7 +197,7 @@ func runDeviceCodeFlow(ctx context.Context, issuer, clientID, scope string, out 
 
 	interval := time.Duration(devAuth.Interval) * time.Second
 	if interval <= 0 {
-		interval = 2 * time.Second
+		interval = 5 * time.Second
 	}
 	deadline := time.Now().Add(time.Duration(devAuth.ExpiresIn) * time.Second)
 	if devAuth.ExpiresIn <= 0 {
@@ -168,27 +216,61 @@ func runDeviceCodeFlow(ctx context.Context, issuer, clientID, scope string, out 
 			"device_code": {devAuth.DeviceCode},
 			"client_id":   {clientID},
 		}
-		tokHTTPResp, err := httpClient.PostForm(meta.TokenEndpoint, tokForm)
+		tokHTTPResp, err := postFormWithContext(ctx, httpClient, meta.TokenEndpoint, tokForm)
 		if err != nil {
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			if errors.Is(err, errOIDCRedirectBlocked) {
+				return "", err
+			}
+			continue
+		}
+
+		tokBody, readErr := io.ReadAll(io.LimitReader(tokHTTPResp.Body, maxOIDCResponseBytes))
+		_ = tokHTTPResp.Body.Close()
+		if readErr != nil {
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			continue
+		}
+
+		if tokHTTPResp.StatusCode >= http.StatusInternalServerError || tokHTTPResp.StatusCode == http.StatusTooManyRequests {
+			if tokHTTPResp.StatusCode == http.StatusTooManyRequests {
+				interval += 5 * time.Second
+			}
 			continue
 		}
 
 		var tokResp deviceTokenResponse
-		_ = json.NewDecoder(tokHTTPResp.Body).Decode(&tokResp)
-		_ = tokHTTPResp.Body.Close()
+		decodeErr := json.Unmarshal(tokBody, &tokResp)
+		if tokHTTPResp.StatusCode != http.StatusOK && tokHTTPResp.StatusCode != http.StatusBadRequest {
+			if tokResp.Error != "" {
+				return "", fmt.Errorf("OIDC token exchange failed (status %d): %s", tokHTTPResp.StatusCode, tokResp.Error)
+			}
+			return "", fmt.Errorf("OIDC token endpoint returned status %d: %s", tokHTTPResp.StatusCode, strings.TrimSpace(string(tokBody)))
+		}
+		if decodeErr != nil {
+			return "", fmt.Errorf("failed to decode OIDC token response (status %d): %w", tokHTTPResp.StatusCode, decodeErr)
+		}
 
 		switch tokResp.Error {
 		case "":
+			if tokHTTPResp.StatusCode != http.StatusOK {
+				return "", fmt.Errorf("OIDC token endpoint returned status %d: %s", tokHTTPResp.StatusCode, strings.TrimSpace(string(tokBody)))
+			}
 			if tokResp.IDToken != "" {
 				return tokResp.IDToken, nil
 			}
 			if tokResp.AccessToken != "" {
 				return tokResp.AccessToken, nil
 			}
+			return "", errors.New("OIDC token response did not contain id_token or access_token")
 		case "authorization_pending":
 			continue
 		case "slow_down":
-			interval += 2 * time.Second
+			interval += 5 * time.Second
 			continue
 		default:
 			return "", fmt.Errorf("OIDC token exchange failed: %s", tokResp.Error)

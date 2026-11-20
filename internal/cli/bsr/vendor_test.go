@@ -98,7 +98,8 @@ message ValidateRules {
 	t.Setenv("BUF_TOKEN", "test-buf-token-xyz")
 
 	tmpDir := t.TempDir()
-	outDir := filepath.Join(tmpDir, "third_party")
+	t.Chdir(tmpDir)
+	outDir := "third_party"
 
 	mod := &model.Module{
 		Name:                 "buf.build/bufbuild/protovalidate",
@@ -130,6 +131,13 @@ message ValidateRules {
 	_, err = os.Stat(filepath.Join(outDir, "README.md"))
 	assert.True(t, os.IsNotExist(err))
 
+	// Reject traversal/absolute output folders before making network calls
+	require.ErrorContains(t, VendorBSRModule(&model.Module{
+		Name:         "buf.build/bufbuild/protovalidate",
+		Tag:          "v0.14.0",
+		OutputFolder: "../outside",
+	}, nil, nil), "must stay within workspace")
+
 	// Oversized BSR response is rejected via LimitReader
 	origMax := maxBSRResponseBytes
 	maxBSRResponseBytes = 64
@@ -139,17 +147,22 @@ message ValidateRules {
 	require.ErrorContains(t, err, "exceeds 64 bytes limit")
 }
 
-func TestFilterAndMapPath(t *testing.T) {
+func TestMapVendoredProtoPath(t *testing.T) {
 	// Reject path traversal
-	_, ok := filterAndMapPath("../../etc/passwd.proto", "", "third_party")
+	_, ok := patcher.MapVendoredProtoPath("../../etc/passwd.proto", "", "third_party")
 	assert.False(t, ok)
 
 	// Sibling directory prefix ("google/api" must not match "google/apiv2/a.proto")
-	_, ok = filterAndMapPath("google/apiv2/a.proto", "google/api", "third_party")
+	_, ok = patcher.MapVendoredProtoPath("google/apiv2/a.proto", "google/api", "third_party")
 	assert.False(t, ok)
 
 	// Exact directory prefix match
-	target, ok := filterAndMapPath("google/api/annotations.proto", "google/api", "third_party/google/api")
+	target, ok := patcher.MapVendoredProtoPath("google/api/annotations.proto", "google/api", "third_party/google/api")
 	assert.True(t, ok)
 	assert.Equal(t, filepath.Join("third_party/google/api", "annotations.proto"), target)
+
+	// Root-equivalent "./." module subpath matches all files
+	target, ok = patcher.MapVendoredProtoPath("google/api/annotations.proto", "./.", "third_party")
+	assert.True(t, ok)
+	assert.Equal(t, filepath.Join("third_party", "google/api/annotations.proto"), target)
 }

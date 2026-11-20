@@ -16,7 +16,9 @@ import (
 
 func TestVendorGitModule(t *testing.T) {
 	repoDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), "vendor")
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	outDir := "vendor"
 
 	repo, err := gogit.PlainInit(repoDir, false)
 	require.NoError(t, err)
@@ -76,4 +78,27 @@ func TestVendorGitModule(t *testing.T) {
 	require.NoError(t, VendorGitModule(rootMod, nil, nil))
 	_, err = os.Stat(filepath.Join(outDir, "root.proto"))
 	require.NoError(t, err)
+
+	// Leading-slash git.path without OutputFolder writes relative inside workspace (not host /api/v1)
+	slashMod := &model.Module{
+		Repository: repoDir,
+		Path:       "/api/v1/",
+		Tag:        "v1.0.0",
+	}
+	require.NoError(t, VendorGitModule(slashMod, nil, nil))
+	_, err = os.Stat(filepath.Join(workDir, "api", "v1", "hello.proto"))
+	require.NoError(t, err)
+
+	// Reject traversal or absolute paths
+	require.ErrorContains(t, VendorGitModule(&model.Module{
+		Repository: repoDir,
+		Path:       "../escape",
+		Tag:        "v1.0.0",
+	}, nil, nil), "must not traverse outside module root")
+	require.ErrorContains(t, VendorGitModule(&model.Module{
+		Repository:   repoDir,
+		Path:         "api/v1",
+		Tag:          "v1.0.0",
+		OutputFolder: "../escape",
+	}, nil, nil), "must stay within workspace")
 }
