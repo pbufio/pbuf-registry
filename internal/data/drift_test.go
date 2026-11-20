@@ -35,27 +35,36 @@ func TestDriftRepository_ComputeAndStoreHashes(t *testing.T) {
 	tagID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, tagName)
 	require.NoError(t, err)
 
-	// Verify tag is in "without hashes" list
+	expectedHash := sha256.Sum256([]byte(protoContent))
+	expectedHashStr := hex.EncodeToString(expectedHash[:])
+
+	// PushModule populates content_hash atomically on insert
 	tagsWithoutHashes, err := suite.driftRepository.GetTagsWithoutHashes(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, tagsWithoutHashes, tagID)
+
+	fileHashes, err := suite.driftRepository.GetFileHashesForTag(ctx, tagID)
+	require.NoError(t, err)
+	assert.Equal(t, expectedHashStr, fileHashes["test.proto"])
+
+	// Simulate a legacy pre-hash row and verify ComputeAndStoreHashes backfills it
+	_, err = suite.pool.Exec(ctx, `UPDATE protofiles SET content_hash = NULL WHERE tag_id = $1`, tagID)
+	require.NoError(t, err)
+
+	tagsWithoutHashes, err = suite.driftRepository.GetTagsWithoutHashes(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, tagsWithoutHashes, tagID)
 
-	// Compute and store hashes
 	err = suite.driftRepository.ComputeAndStoreHashes(ctx, tagID)
 	require.NoError(t, err)
 
-	// Verify tag is no longer in "without hashes" list
 	tagsWithoutHashes, err = suite.driftRepository.GetTagsWithoutHashes(ctx)
 	require.NoError(t, err)
 	assert.NotContains(t, tagsWithoutHashes, tagID)
 
-	// Verify hash was computed correctly
-	fileHashes, err := suite.driftRepository.GetFileHashesForTag(ctx, tagID)
+	fileHashes, err = suite.driftRepository.GetFileHashesForTag(ctx, tagID)
 	require.NoError(t, err)
 	assert.Len(t, fileHashes, 1)
-
-	expectedHash := sha256.Sum256([]byte(protoContent))
-	expectedHashStr := hex.EncodeToString(expectedHash[:])
 	assert.Equal(t, expectedHashStr, fileHashes["test.proto"])
 }
 
@@ -472,8 +481,16 @@ func TestDriftRepository_GetTagsWithoutHashes(t *testing.T) {
 	tagID, err := suite.registryRepository.GetModuleTagId(ctx, moduleName, "v1.0.0")
 	require.NoError(t, err)
 
-	// Tag should appear in the "without hashes" list
+	// Newly pushed tag already has hashes populated
 	tagsWithoutHashes, err := suite.driftRepository.GetTagsWithoutHashes(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, tagsWithoutHashes, tagID)
+
+	// Legacy tag with NULL content_hash appears until ComputeAndStoreHashes runs
+	_, err = suite.pool.Exec(ctx, `UPDATE protofiles SET content_hash = NULL WHERE tag_id = $1`, tagID)
+	require.NoError(t, err)
+
+	tagsWithoutHashes, err = suite.driftRepository.GetTagsWithoutHashes(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, tagsWithoutHashes, tagID)
 

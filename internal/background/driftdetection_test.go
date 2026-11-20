@@ -408,7 +408,7 @@ func TestHasBreakingChangesFromParsed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			previous := parseProtoString(t, tt.previousProto)
 			current := parseProtoString(t, tt.currentProto)
-			result := hasBreakingChangesFromParsed(previous, current)
+			result := determineSeverityFromParsed(previous, current) == model.DriftSeverityCritical
 			assert.Equal(t, tt.expectBreaking, result)
 		})
 	}
@@ -490,7 +490,7 @@ func TestHasPotentiallyBreakingChangesFromParsed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			previous := parseProtoString(t, tt.previousProto)
 			current := parseProtoString(t, tt.currentProto)
-			result := hasPotentiallyBreakingChangesFromParsed(previous, current)
+			result := determineSeverityFromParsed(previous, current) == model.DriftSeverityWarning
 			assert.Equal(t, tt.expectPotentiallyBreaking, result)
 		})
 	}
